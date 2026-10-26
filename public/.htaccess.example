@@ -1,0 +1,19 @@
+# Vorlage für public/.htaccess (HTTP Basic Auth, schützt die gesamte public/-Domain inkl.
+# der statischen index.html vor unautorisiertem Zugriff — zusätzlich zum App-eigenen API-Token,
+# das nur die Daten selbst schützt.
+#
+# Setup:
+# 1. Nach public/.htaccess kopieren.
+# 2. AuthUserFile unten auf den tatsächlichen absoluten Pfad zur .htpasswd-Datei auf diesem
+#    Server anpassen (Pfad ist je nach Betriebssystem/Server unterschiedlich, siehe unten).
+# 3. .htpasswd außerhalb des Document Root anlegen (Projekt-Root, neben config.php), z. B.:
+#      htpasswd -bcB .htpasswd frank <passwort>
+#    (-B = bcrypt; falls htpasswd nicht verfügbar ist, tut es auch -m für apr1-MD5)
+#
+# public/.htaccess und die .htpasswd-Datei sind beide gitignored (enthalten Zugangsdaten bzw.
+# einen maschinenspezifischen Pfad) — auf jedem Rechner/Server einmalig separat einrichten.
+
+AuthType Basic
+AuthName "Gitarrenbuch"
+AuthUserFile "/absoluter/pfad/zur/.htpasswd"
+Require valid-user

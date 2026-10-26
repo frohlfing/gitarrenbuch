@@ -1,0 +1,7 @@
+/.env
+/.idea
+/data
+.DS_Store
+config.php
+/.htpasswd
+public/.htaccess
