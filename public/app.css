@@ -1,0 +1,429 @@
+/* Farben angelehnt an guitar-pro.com: Blau als Hauptfarbe, Anthrazit für Kopf und Abspielleiste, Orange für Markierungen beim Abspielen. */
+:root{
+  --paper:#f6f7f8;
+  --paper-deep:#e5e5e5;
+  --ink:#272b34;
+  --ink-soft:#5e637a;
+  --rule:#dbdbdb;
+  --accent:#569fff;
+  --accent-dark:#3c82ef;
+  --accent-soft:rgba(86,159,255,.14);
+  --mark:#ff9a52;
+  --mark-soft:rgba(255,154,82,.2);
+  --danger:#ff4c4c;
+  --dark:#272b34;
+  --dark-soft:#363a42;
+  --card:#ffffff;
+  --bar-h:64px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family: "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+  min-height:100vh;
+}
+a{color:var(--accent-dark);}
+[hidden]{display:none !important;}
+header{
+  padding:2.4rem 1.5rem 1.3rem;
+  text-align:center;
+  background:var(--dark);
+  color:#fff;
+}
+header .eyebrow{
+  color:var(--accent);
+  font-size:.8rem;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:.18em;
+}
+header h1{
+  margin:.3rem 0 .3rem;
+  font-size:2.4rem;
+  font-weight:600;
+  letter-spacing:.01em;
+  color:#fff;
+}
+header p.sub{
+  margin:0;
+  color:#b8bccb;
+  font-size:.95rem;
+}
+.controls{
+  max-width:960px;
+  margin:1.4rem auto 0;
+  padding:0 1rem;
+  display:flex;
+  gap:.6rem;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:center;
+}
+.controls input[type=search]{
+  flex:1 1 260px;
+  max-width:420px;
+}
+.controls input[type=search], .controls select, .form-field input, .form-field select, .player-panel select, .player-panel input[type=number]{
+  padding:.6rem .8rem;
+  border:1px solid var(--rule);
+  border-radius:6px;
+  background:var(--card);
+  font-family:inherit;
+  font-size:1rem;
+  color:var(--ink);
+}
+.count{
+  text-align:center;
+  color:var(--ink-soft);
+  font-size:.85rem;
+  margin:.6rem 0 0;
+}
+
+/* Liederliste als Kachelraster (wie Kochbuch und Videothek) */
+.grid{
+  max-width:1180px;
+  margin:1.6rem auto 4rem;
+  padding:0 1.5rem;
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(180px,1fr));
+  gap:1.15rem;
+}
+.grid > .empty{grid-column:1 / -1;}
+.card{
+  background:var(--card);
+  border:1px solid var(--rule);
+  border-radius:6px;
+  overflow:hidden;
+  text-decoration:none;
+  color:inherit;
+  transition:transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  display:flex;
+  flex-direction:column;
+}
+.card:hover{
+  transform:translateY(-3px);
+  border-color:var(--accent);
+  box-shadow:0 10px 22px rgba(39,43,52,.14);
+}
+/* Quadratisch wie ein Albumcover */
+.card .thumb{
+  position:relative;
+  aspect-ratio:1;
+  background:var(--paper-deep);
+  overflow:hidden;
+}
+.card .thumb img{
+  position:absolute;
+  inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+  display:block;
+}
+/* Platzhalter ohne Cover: Farbton aus dem Slug (--h), darauf der Anfangsbuchstabe des Titels */
+.card .thumb.placeholder{
+  --h:210; /* Vorgabe, je Kachel per style-Attribut überschrieben */
+  background:linear-gradient(135deg, hsl(var(--h) 55% 58%), hsl(calc(var(--h) + 40) 45% 30%));
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.card .thumb .initial{
+  font-size:4.5rem;
+  font-weight:700;
+  color:rgba(255,255,255,.85);
+  text-shadow:0 2px 10px rgba(0,0,0,.25);
+}
+.card .thumb .badges{
+  position:absolute;
+  left:.45rem; bottom:.45rem;
+  display:flex;
+  gap:.25rem;
+}
+.card .thumb .badge{background:rgba(39,43,52,.8); color:#fff;}
+.card .body{padding:.65rem .8rem .8rem;}
+.card h3{
+  margin:0 0 .15rem;
+  font-size:1rem;
+  line-height:1.25;
+}
+.card .meta{color:var(--ink-soft); font-size:.85rem;}
+.card .tags{display:flex; gap:.3rem; flex-wrap:wrap; margin-top:.4rem;}
+.tag, .badge{
+  font-size:.7rem;
+  letter-spacing:.04em;
+  border-radius:10px;
+  padding:.12rem .55rem;
+  white-space:nowrap;
+}
+.tag{background:var(--paper-deep); color:var(--ink-soft);}
+.badge{background:var(--accent-soft); color:var(--accent-dark); font-weight:600; text-transform:uppercase;}
+.empty{
+  text-align:center;
+  color:var(--ink-soft);
+  padding:3rem 1rem;
+  font-style:italic;
+}
+
+/* Buttons */
+.btn{
+  font-family:inherit;
+  font-size:.95rem;
+  padding:.5rem .95rem;
+  border-radius:6px;
+  border:1px solid var(--rule);
+  background:var(--card);
+  color:var(--ink);
+  cursor:pointer;
+  min-height:43px;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent-dark);}
+.btn:disabled{opacity:.6; cursor:default;}
+.btn-primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+.btn-primary:hover{background:var(--accent-dark); border-color:var(--accent-dark); color:#fff;}
+.btn-danger{color:var(--danger);}
+.btn-danger:hover{border-color:var(--danger); color:var(--danger);}
+.btn-icon{min-width:43px; padding:.4rem; font-size:1.25rem; line-height:1;}
+.btn-row{display:flex; gap:.6rem; flex-wrap:wrap; margin:1rem 0;}
+
+/* Overlay mit Formular */
+.overlay{
+  position:fixed;inset:0;
+  background:rgba(39,43,52,0.6);
+  display:none;
+  align-items:flex-start;
+  justify-content:center;
+  padding:3vh 1rem;
+  overflow-y:auto;
+  z-index:50;
+}
+.overlay.open{display:flex;}
+.sheet{
+  background:var(--card);
+  max-width:640px;
+  width:100%;
+  border-radius:8px;
+  border:1px solid var(--rule);
+  padding:1.6rem 1.7rem 1.8rem;
+  position:relative;
+}
+.sheet h2{margin:.1rem 0 1rem; font-size:1.5rem;}
+.sheet .close{
+  position:absolute;
+  top:.8rem;right:1rem;
+  background:none;border:none;
+  font-size:1.6rem;
+  color:var(--ink-soft);
+  cursor:pointer;
+  line-height:1;
+}
+.sheet .close:hover{color:var(--accent-dark);}
+.form-field{margin-bottom:1rem;}
+.form-field label{
+  display:block;
+  font-size:.75rem;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+  color:var(--ink-soft);
+  margin-bottom:.3rem;
+}
+.form-field input[type=text], .form-field select{width:100%;}
+.form-field input[type=file]{width:100%; font-family:inherit;}
+.form-field .hint, .player-panel .hint{font-size:.75rem; color:var(--ink-soft); margin-top:.3rem;}
+.dropzone{
+  display:flex; align-items:center; justify-content:center;
+  position:relative;
+  min-height:7rem; padding:1rem;
+  border:2px dashed var(--rule); border-radius:8px;
+  background:var(--paper);
+  color:var(--ink-soft); text-align:center;
+  cursor:pointer;
+  transition:border-color .15s ease, background .15s ease;
+}
+/* Eigene Beschriftung statt des Browser-Dateifelds: Ganze Fläche ist klick- und ablegbar. */
+.form-field label.dropzone{text-transform:none; letter-spacing:normal; font-size:.95rem; margin:0;}
+.dropzone input{position:absolute; width:1px; height:1px; opacity:0;}
+.dropzone:hover, .dropzone.dragover{border-color:var(--accent); background:var(--accent-soft); color:var(--accent-dark);}
+.dropzone.has-file{border-style:solid; border-color:var(--accent); color:var(--ink); font-weight:600;}
+/* Cover im Formular „Song bearbeiten“: Klick öffnet den Cover-Dialog (wie das Poster in der Videothek) */
+.form-head{display:grid; grid-template-columns:118px 1fr; gap:0 1rem; align-items:start;}
+.cover-pick{
+  position:relative;
+  aspect-ratio:1;
+  margin-top:1.2rem;
+  padding:0;
+  border:1px solid var(--rule); border-radius:6px;
+  background:var(--paper-deep);
+  overflow:hidden;
+  cursor:pointer;
+  font-family:inherit;
+}
+.cover-pick:hover{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+.cover-pick img{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;}
+.cover-pick .cover-empty{
+  --h:210; /* Vorgabe, per style-Attribut überschrieben */
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+  background:linear-gradient(135deg, hsl(var(--h) 55% 58%), hsl(calc(var(--h) + 40) 45% 30%));
+  color:#fff; font-size:.8rem; font-weight:600;
+}
+
+/* Treffer der Cover-Suche */
+.cover-results{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));
+  gap:.6rem;
+  margin-bottom:1rem;
+}
+.cover-results .hint{grid-column:1 / -1; font-size:.85rem; color:var(--ink-soft); margin:0;}
+.cover-hit{
+  display:flex; flex-direction:column; gap:.2rem;
+  padding:0 0 .35rem;
+  border:1px solid var(--rule); border-radius:6px;
+  background:var(--card);
+  overflow:hidden;
+  font-family:inherit; text-align:left;
+  cursor:pointer;
+}
+.cover-hit:hover{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+.cover-hit img{width:100%; aspect-ratio:1; object-fit:cover; display:block;}
+.cover-hit span, .cover-hit small{padding:0 .4rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.cover-hit span{font-size:.75rem; color:var(--ink);}
+.cover-hit small{font-size:.65rem; color:var(--ink-soft);}
+/* Während eine Änderung gespeichert wird, ist der Dialog gesperrt. */
+.sheet.busy{opacity:.6; pointer-events:none;}
+.form-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:0 .8rem;}
+.error-box{
+  background:#fbeaea;
+  border:1px solid var(--danger);
+  color:var(--danger);
+  border-radius:6px;
+  padding:.6rem .8rem;
+  font-size:.85rem;
+  margin-bottom:1rem;
+}
+
+/* Liedansicht: Kopfzeile oben, Notenblatt, Transportleiste unten */
+#songView{padding-bottom:calc(var(--bar-h) + env(safe-area-inset-bottom) + 1rem);}
+.songbar{
+  position:sticky; top:0; z-index:20;
+  display:flex; align-items:center; gap:.6rem;
+  padding:.5rem .8rem;
+  background:var(--card);
+  border-bottom:1px solid var(--rule);
+}
+.songbar-titles{flex:1; min-width:0;}
+.songbar h2{margin:0; font-size:1.15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.songbar-meta{font-size:.82rem; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.songbar-menu{position:relative;}
+.menu{
+  position:absolute; right:0; top:calc(100% + .3rem);
+  min-width:200px;
+  background:var(--card);
+  border:1px solid var(--rule);
+  border-radius:8px;
+  box-shadow:0 10px 24px rgba(39,43,52,.16);
+  padding:.3rem 0;
+  display:flex; flex-direction:column;
+}
+.menu button{
+  font:inherit; text-align:left;
+  background:none; border:none;
+  padding:.7rem 1rem;
+  cursor:pointer; color:var(--ink);
+}
+.menu button:hover{background:var(--paper);}
+.menu .danger{color:var(--danger);}
+
+.score-status{text-align:center; color:var(--ink-soft); padding:1rem; font-size:.9rem;}
+/* Eigener Stacking-Kontext: alphaTab gibt Cursor und Auswahl hohe z-index-Werte, die sonst über Kopfzeile und Overlay lägen. */
+.score-wrap{position:relative; z-index:0; background:var(--card); margin:.6rem auto 0; max-width:1300px; border-radius:6px;}
+.score-wrap > div{min-height:40vh;}
+
+.transport{
+  position:fixed; left:0; right:0; bottom:0; z-index:30;
+  display:flex; align-items:center; gap:.45rem;
+  min-height:var(--bar-h);
+  padding:.5rem .7rem calc(.5rem + env(safe-area-inset-bottom));
+  background:var(--dark);
+  color:#fff;
+  box-shadow:0 -4px 16px rgba(39,43,52,.18);
+}
+.tbtn{
+  flex:0 0 auto;
+  min-width:44px; height:44px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,.35);
+  background:transparent;
+  color:#fff;
+  font-size:1.05rem;
+  cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.tbtn:disabled{opacity:.45; cursor:default;}
+.tbtn[aria-pressed="true"], .tbtn[aria-expanded="true"], .tbtn.on{background:var(--mark); border-color:var(--mark);}
+.tbtn-play{background:var(--accent); color:#fff; border-color:var(--accent); min-width:52px; height:52px; font-size:1.25rem;}
+.tbtn.small{min-width:34px; height:34px; border-radius:6px; font-size:.85rem; color:var(--ink); border-color:var(--rule);}
+.tprogress{flex:1; min-width:0; display:flex; flex-direction:column; gap:.1rem;}
+.tprogress input{width:100%; accent-color:var(--mark);}
+.ttime{font-size:.75rem; opacity:.85; font-variant-numeric:tabular-nums;}
+.tselect{
+  flex:0 0 auto;
+  height:44px;
+  border-radius:22px;
+  border:1px solid rgba(255,255,255,.35);
+  background:transparent;
+  color:#fff;
+  font:inherit; font-size:.85rem;
+  padding:0 .5rem;
+}
+.tselect option{color:var(--ink); background:var(--card);}
+
+.player-panel{
+  position:fixed; right:.6rem; z-index:30;
+  bottom:calc(var(--bar-h) + env(safe-area-inset-bottom) + .5rem);
+  width:min(360px, calc(100vw - 1.2rem));
+  max-height:calc(100vh - var(--bar-h) - 6rem);
+  overflow-y:auto;
+  background:var(--card);
+  border:1px solid var(--rule);
+  border-radius:10px;
+  box-shadow:0 10px 30px rgba(39,43,52,.22);
+  padding:.4rem 1rem 1rem;
+}
+.player-panel h4{
+  margin:.9rem 0 .45rem;
+  font-size:.72rem;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+  color:var(--ink-soft);
+}
+.player-panel .panel-row{display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;}
+.player-panel input[type=number]{width:5rem; padding:.4rem .5rem;}
+.player-panel select{padding:.4rem .5rem; font-size:.9rem;}
+.track-list{list-style:none; margin:0; padding:0;}
+.track-list li{display:flex; align-items:center; gap:.4rem; padding:.3rem 0; border-bottom:1px dotted var(--rule);}
+.track-list label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+/* alphaTab: Markierungen beim Abspielen und Auswahl */
+.at-cursor-bar{background:var(--mark-soft);}
+.at-cursor-beat{background:var(--mark); width:3px;}
+.at-selection div{background:var(--accent-soft);}
+.at-highlight *{fill:var(--accent); stroke:var(--accent);}
+
+@media (max-width:520px){
+  header{padding:1.6rem 1rem 1rem;}
+  header h1{font-size:1.9rem;}
+  .sheet{padding:1.3rem 1.1rem 1.5rem;}
+  .controls select{flex:1 1 40%;}
+  .controls .btn{flex:1 1 40%;}
+  .grid{grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:.8rem; padding:0 1rem;}
+  .card .thumb .initial{font-size:3.5rem;}
+  .score-wrap{margin-top:0; border-radius:0;}
+  .transport{gap:.3rem; padding-left:.4rem; padding-right:.4rem;}
+}

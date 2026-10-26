@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mixer-Test – Gitarrenbuch</title>
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../app.css">
+<style>
+  body{padding:1rem;}
+  main{max-width:1100px; margin:0 auto;}
+  h1{font-size:1.4rem; color:var(--accent); margin:.2rem 0 .3rem;}
+  .intro{color:var(--ink-soft); font-size:.9rem; margin:0 0 1rem;}
+  fieldset{border:1px solid var(--rule); border-radius:8px; background:var(--card); margin:0 0 1rem; padding:.6rem 1rem 1rem;}
+  legend{font-size:.75rem; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); padding:0 .4rem;}
+  .row{display:flex; flex-wrap:wrap; gap:.6rem 1.2rem; align-items:center;}
+  .row label{display:flex; align-items:center; gap:.4rem; font-size:.9rem;}
+  select, input[type=number]{padding:.4rem .5rem; border:1px solid var(--rule); border-radius:6px; font:inherit;}
+  input[type=number]{width:6rem;}
+  .stats{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:.5rem; margin-top:.6rem;}
+  .stat{background:var(--paper); border-radius:6px; padding:.5rem .7rem;}
+  .stat b{display:block; font-size:1.2rem; font-variant-numeric:tabular-nums;}
+  .stat span{font-size:.72rem; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em;}
+  #log{height:9rem; overflow:auto; background:#1b2629; color:#d5e8e6; font:12px/1.4 Consolas, monospace; padding:.5rem; border-radius:6px; margin:.6rem 0 0; white-space:pre-wrap;}
+  .score-wrap{margin:0;}
+</style>
+</head>
+<body>
+<main>
+  <h1>Mixer-Test: Synth + Audiospur parallel</h1>
+  <p class="intro">
+    Prüft, wie genau der alphaTab-Synthesizer und eine Audiospur in einem eigenen &lt;audio&gt;-Element gleich laufen.
+    Quelle ist die in der GP-Datei eingebettete Audiospur samt Sync-Punkten. Die Synth-Position (MIDI-Tick) wird über
+    die Sync-Punkte in Audio-Zeit umgerechnet, bei größerer Abweichung wird die Audiospur nachgeführt.
+  </p>
+
+  <fieldset>
+    <legend>Quelle</legend>
+    <div class="row">
+      <label>Lied <select id="songSel"><option value="">– wählen –</option></select></label>
+      <label>oder Datei <input type="file" id="fileInput" accept=".gp"></label>
+    </div>
+    <div class="hint" id="sourceInfo"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Wiedergabe</legend>
+    <div class="row">
+      <button class="btn btn-primary" id="playBtn" type="button" disabled>Abspielen</button>
+      <button class="btn" id="stopBtn" type="button" disabled>Stopp</button>
+      <label>Tempo
+        <select id="speedSel">
+          <option value="0.5">50 %</option><option value="0.75">75 %</option><option value="0.9">90 %</option>
+          <option value="1" selected>100 %</option><option value="1.1">110 %</option>
+        </select>
+      </label>
+      <label>Synth <input type="range" id="synthVol" min="0" max="1" step="0.05" value="0.8"></label>
+      <label>Audio <input type="range" id="audioVol" min="0" max="1" step="0.05" value="0.8"></label>
+    </div>
+    <div class="row" style="margin-top:.6rem">
+      <label>Rate anpassen ab <input type="number" id="threshold" value="30" min="5" max="500"> ms</label>
+      <label>Springen ab <input type="number" id="seekThreshold" value="300" min="50" max="5000"> ms</label>
+      <label>Audio-Offset <input type="number" id="offset" value="0" step="10"> ms</label>
+      <label><input type="checkbox" id="correct" checked> Nachführen aktiv</label>
+    </div>
+    <div class="hint">
+      Abweichung = Audio-Position minus erwartete Position (positiv: Audio läuft vor), geglättet als Median über 0,5 s.
+      Kleine Abweichungen gleicht eine um bis zu 5 % veränderte playbackRate aus, große ein Sprung (höchstens 1× pro Sekunde).
+      Eine gleichbleibende hörbare Verschiebung (z. B. Ausgabe-Latenz des Synths) über den Audio-Offset ausgleichen.
+    </div>
+    <div class="stats">
+      <div class="stat"><span>Abweichung (Median)</span><b id="stNow">–</b></div>
+      <div class="stat"><span>Mittel |Abw.|</span><b id="stAvg">–</b></div>
+      <div class="stat"><span>Max |Abw.|</span><b id="stMax">–</b></div>
+      <div class="stat"><span>Sprünge</span><b id="stCorr">0</b></div>
+      <div class="stat"><span>Audio-Rate</span><b id="stPlayRate">–</b></div>
+      <div class="stat"><span>Positions-Events/s</span><b id="stRate">–</b></div>
+    </div>
+    <div id="log"></div>
+  </fieldset>
+
+  <div class="score-wrap"><div id="at"></div></div>
+</main>
+
+<audio id="audio" preload="auto"></audio>
+
+<script type="module">
+import {escapeHtml, loadSongs, scoreUrl} from '../js/api.js';
+import {loadAlphaTab, formatTime} from '../js/player.js';
+
+/** alphaTab: MIDI-Ticks pro Viertelnote. */
+const QUARTER_TICKS = 960;
+
+/**
+ * Kurzform für document.getElementById().
+ * @param {string} id ID des Elements
+ * @returns {?HTMLElement}
+ */
+function byId(id){
+  return document.getElementById(id);
+}
+const audio = /** @type {HTMLAudioElement} */ (byId('audio'));
+audio.preservesPitch = true;
+
+const alphaTab = await loadAlphaTab();
+const vendor = new URL('../vendor/alphatab/', import.meta.url).href;
+const api = new alphaTab.AlphaTabApi(byId('at'), {
+  core: {fontDirectory: vendor + 'font/'},
+  display: {layoutMode: alphaTab.LayoutMode.Horizontal, scale: 0.8},
+  player: {playerMode: alphaTab.PlayerMode.EnabledSynthesizer, soundFont: vendor + 'soundfont/sonivox.sf2'},
+});
+
+/** @type {import('../../types/alphatab').synth.BackingTrackSyncPoint[]} */
+let syncPoints = [];
+let stats = resetStats();
+/** @type {{t: number, drift: number}[]} Abweichungen der letzten 0,5 s für den Median */
+let samples = [];
+// Nach Start oder Sprung braucht das <audio>-Element einen Moment, bis currentTime wieder gleichmäßig läuft.
+let settleUntil = 0;
+let lastSeek = 0;
+
+/**
+ * Neue, leere Statistik der Abweichungen.
+ * @returns {{n: number, sum: number, max: number, seeks: number, events: number, since: number}}
+ */
+function resetStats(){
+  return {n: 0, sum: 0, max: 0, seeks: 0, events: 0, since: performance.now()};
+}
+
+/**
+ * Gewähltes Abspieltempo.
+ * @returns {number} Faktor
+ */
+function speed(){
+  return Number(byId('speedSel').value);
+}
+
+/**
+ * Audio auf die erwartete Position setzen und Messung kurz aussetzen.
+ * @param {number} ms Position in der Audiospur
+ * @returns {void}
+ */
+function seekAudio(ms){
+  audio.currentTime = Math.max(0, ms / 1000);
+  audio.playbackRate = speed();
+  samples = [];
+  lastSeek = performance.now();
+  settleUntil = lastSeek + 500;
+}
+
+/**
+ * Median einer Zahlenliste.
+ * @param {number[]} values Werte (werden nicht verändert)
+ * @returns {number} oberer Median bei gerader Anzahl
+ */
+function median(values){
+  const v = values.slice().sort((a, b) => a - b);
+  return v[Math.floor(v.length / 2)];
+}
+
+/**
+ * Schreibt eine Zeile ins Protokoll, mit der aktuellen Audio-Position davor.
+ * @param {string} msg Meldung
+ * @returns {void}
+ */
+function log(msg){
+  const el = byId('log');
+  el.textContent += `[${formatTime(audio.currentTime * 1000)}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+/**
+ * MIDI-Tick des Synths -> erwartete Position in der Audiospur, linear zwischen den Sync-Punkten.
+ * @param {number} tick MIDI-Tick
+ * @returns {number} Position in ms, inklusive Audio-Offset aus dem Eingabefeld
+ */
+function tickToAudioMs(tick){
+  let sp = syncPoints[0];
+  for(const p of syncPoints){
+    if(p.synthTick <= tick) sp = p;
+    else break;
+  }
+  const ms = sp.syncTime + (tick - sp.synthTick) / QUARTER_TICKS * 60000 / sp.syncBpm;
+  return ms + Number(byId('offset').value);
+}
+
+/**
+ * Lädt eine GP-Datei mit eingebetteter Audiospur: Noten in alphaTab, Audio ins <audio>-Element, Sync-Punkte.
+ * @param {Uint8Array} bytes Inhalt der GP-Datei
+ * @param {string} label Name der Quelle für die Anzeige
+ * @returns {Promise<void>}
+ */
+async function loadSource(bytes, label){
+  audio.pause();
+  const score = alphaTab.importer.ScoreLoader.loadScoreFromBytes(bytes, api.settings);
+  const raw = score.backingTrack?.rawAudioFile;
+  if(!raw){
+    byId('sourceInfo').textContent = `${label}: keine eingebettete Audiospur gefunden.`;
+    byId('playBtn').disabled = true;
+    return;
+  }
+  syncPoints = alphaTab.midi.MidiFileGenerator.generateSyncPoints(score).sort((a, b) => a.synthTick - b.synthTick);
+  if(audio.src) URL.revokeObjectURL(audio.src);
+  audio.src = URL.createObjectURL(new Blob([raw], {type: 'audio/mpeg'}));
+  api.renderScore(score, [score.tracks.find(t => !t.isPercussion)?.index ?? 0]);
+  byId('sourceInfo').textContent = `${label}: ${score.title} – ${(raw.length / 1024 / 1024).toFixed(1)} MB Audio, ${syncPoints.length} Sync-Punkte.`;
+  log(`Geladen: ${syncPoints.length} Sync-Punkte, erster bei ${Math.round(syncPoints[0]?.syncTime ?? 0)} ms Audio.`);
+  stats = resetStats();
+}
+
+api.playerReady.on(() => { byId('playBtn').disabled = false; byId('stopBtn').disabled = false; });
+
+api.playerStateChanged.on(e => {
+  const playing = e.state === alphaTab.synth.PlayerState.Playing;
+  byId('playBtn').textContent = playing ? 'Pause' : 'Abspielen';
+  if(playing){
+    stats = resetStats();
+    settleUntil = performance.now() + 500;
+    // Gestartet wird die Audiospur im Positions-Event, sobald ihre Position erreicht ist.
+  } else {
+    audio.pause();
+  }
+});
+
+api.playerPositionChanged.on(e => {
+  if(!syncPoints.length) return;
+  const expected = tickToAudioMs(e.currentTick);
+  if(api.playerState !== alphaTab.synth.PlayerState.Playing || e.isSeek){
+    seekAudio(expected);
+    return;
+  }
+  // Negative Position: Die Audiospur setzt erst später ein (GP8 speichert dafür ein Padding vor dem Audio).
+  if(expected < 0){
+    if(!audio.paused) audio.pause();
+    audio.currentTime = 0;
+    return;
+  }
+  if(audio.paused){
+    seekAudio(expected);
+    audio.play();
+    return;
+  }
+  const now = performance.now();
+  stats.events++;
+  byId('stRate').textContent = (stats.events / ((now - stats.since) / 1000)).toFixed(1);
+  if(now < settleUntil) return;
+
+  samples.push({t: now, drift: audio.currentTime * 1000 - expected});
+  samples = samples.filter(x => x.t > now - 500);
+  if(samples.length < 5) return;
+  const drift = median(samples.map(x => x.drift));
+  const abs = Math.abs(drift);
+  stats.n++;
+  stats.sum += abs;
+  stats.max = Math.max(stats.max, abs);
+
+  if(byId('correct').checked){
+    if(abs > Number(byId('seekThreshold').value) && now - lastSeek > 1000){
+      log(`Sprung: Abweichung ${Math.round(drift)} ms`);
+      stats.seeks++;
+      seekAudio(expected);
+    } else if(abs > Number(byId('threshold').value)){
+      // Audio läuft vor (drift > 0) -> etwas langsamer, sonst schneller; höchstens ±5 %.
+      audio.playbackRate = speed() * (1 - Math.max(-0.05, Math.min(0.05, drift / 2000)));
+    } else {
+      audio.playbackRate = speed();
+    }
+  }
+  byId('stNow').textContent = `${Math.round(drift)} ms`;
+  byId('stAvg').textContent = `${Math.round(stats.sum / stats.n)} ms`;
+  byId('stMax').textContent = `${Math.round(stats.max)} ms`;
+  byId('stCorr').textContent = String(stats.seeks);
+  byId('stPlayRate').textContent = `${(audio.playbackRate / speed() * 100).toFixed(1)} %`;
+});
+
+byId('playBtn').addEventListener('click', () => api.playPause());
+byId('stopBtn').addEventListener('click', () => api.stop());
+byId('speedSel').addEventListener('change', e => {
+  api.playbackSpeed = audio.playbackRate = Number(e.target.value);
+  stats = resetStats();
+});
+byId('synthVol').addEventListener('input', e => { api.masterVolume = Number(e.target.value); });
+byId('audioVol').addEventListener('input', e => { audio.volume = Number(e.target.value); });
+api.masterVolume = audio.volume = 0.8;
+
+byId('songSel').addEventListener('change', async e => {
+  const slug = e.target.value;
+  if(!slug) return;
+  const res = await fetch(scoreUrl(slug));
+  await loadSource(new Uint8Array(await res.arrayBuffer()), slug);
+});
+byId('fileInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if(file) await loadSource(new Uint8Array(await file.arrayBuffer()), file.name);
+});
+
+for(const s of (await loadSongs()).filter(s => s.files.score)){
+  byId('songSel').insertAdjacentHTML('beforeend', `<option value="${escapeHtml(s.slug)}">${escapeHtml((s.artist ? s.artist + ' – ' : '') + s.title)}</option>`);
+}
+</script>
+</body>
+</html>

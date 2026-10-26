@@ -1,1 +1,45 @@
-Index
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#272b34">
+<title>Gitarrenbuch</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="libraryView">
+  <header>
+    <div class="eyebrow">Gitarre &amp; Gesang</div>
+    <h1>Das Gitarrenbuch</h1>
+    <p class="sub" id="subCount">wird geladen &hellip;</p>
+  </header>
+
+  <div class="controls">
+    <input type="search" id="search" placeholder="Titel, Interpret oder Tag &hellip;" aria-label="Titel, Interpret oder Tag suchen">
+    <select id="tagSel" aria-label="Nach Tag filtern"><option value="">Alle Tags</option></select>
+    <select id="sortSel" aria-label="Sortierung">
+      <option value="title">Titel</option>
+      <option value="artist">Interpret</option>
+      <option value="updated-desc">Zuletzt geändert</option>
+      <option value="created-desc">Zuletzt angelegt</option>
+    </select>
+    <button class="btn btn-primary" id="newSongBtn" type="button">+ Neues Lied</button>
+    <button class="btn" id="importBtn" type="button">Importieren</button>
+  </div>
+  <p class="count" id="resultCount"></p>
+
+  <div class="grid" id="songList"></div>
+</div>
+
+<main id="songView" hidden></main>
+
+<div class="overlay" id="overlay">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

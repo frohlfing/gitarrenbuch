@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <!-- Sunburst-Lackierung: hell in der Mitte, dunkel zum Rand -->
+    <radialGradient id="sunburst" cx="50%" cy="62%" r="60%">
+      <stop offset="0" stop-color="#ffc58f"/>
+      <stop offset="0.6" stop-color="#ff9a52"/>
+      <stop offset="1" stop-color="#a8441a"/>
+    </radialGradient>
+  </defs>
+  <g transform="rotate(35 50 50)">
+    <!-- Kopfplatte mit Mechaniken -->
+    <rect x="43" y="1" width="14" height="15" rx="3" fill="#569fff"/>
+    <circle cx="41" cy="5" r="2.2" fill="#272b34"/>
+    <circle cx="41" cy="12" r="2.2" fill="#272b34"/>
+    <circle cx="59" cy="5" r="2.2" fill="#272b34"/>
+    <circle cx="59" cy="12" r="2.2" fill="#272b34"/>
+    <!-- Hals mit Bünden -->
+    <rect x="46" y="15" width="8" height="38" fill="#3b2a1e"/>
+    <g stroke="#dbdbdb" stroke-width="1">
+      <line x1="46" y1="22" x2="54" y2="22"/>
+      <line x1="46" y1="29" x2="54" y2="29"/>
+      <line x1="46" y1="36" x2="54" y2="36"/>
+      <line x1="46" y1="43" x2="54" y2="43"/>
+    </g>
+    <!-- Korpus: zwei Rundungen mit Taille -->
+    <path d="M50 46 C37 46 33 53 35 61 C36 65 31 68 30 76 C29 90 40 99 50 99 C60 99 71 90 70 76 C69 68 64 65 65 61 C67 53 63 46 50 46 Z"
+          fill="url(#sunburst)" stroke="#272b34" stroke-width="2"/>
+    <!-- Schallloch und Steg -->
+    <circle cx="50" cy="66" r="6.5" fill="#272b34"/>
+    <rect x="42" y="84" width="16" height="4" rx="1.5" fill="#272b34"/>
+    <!-- Saiten -->
+    <g stroke="#f6f7f8" stroke-width="0.7">
+      <line x1="48" y1="9" x2="48" y2="85"/>
+      <line x1="50" y1="9" x2="50" y2="85"/>
+      <line x1="52" y1="9" x2="52" y2="85"/>
+    </g>
+  </g>
+</svg>

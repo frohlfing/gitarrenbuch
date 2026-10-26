@@ -60,16 +60,7 @@ HTTPS ist auch lokal nötig. Die Web-Audio-Funktionen und das Bookmarklet (Aufru
 
 ## Abgleich mit dem Server
 
-Wie bei der Videothek gibt es auf dem Hosting kein Terminal. Audio entsteht lokal (YouTube, Extraktion aus GP-Dateien), deshalb gleicht `bin/remote.php` den Ordner `data/` per MD5-Vergleich ab:
-
-```
-php bin/remote.php --download-data   # Server → lokal
-php bin/remote.php --upload-data     # lokal → Server (z. B. neue audio.mp3)
-```
-
-`orig/youtube.*` (unkomprimiertes Audio) wird nicht abgeglichen und bleibt nur lokal. Alle anderen Dateien in `orig/` sind klein und werden normal abgeglichen.
-
-Auf dem Server antwortet `public/dev/sync.php` und ist durch API-Token und Basic Auth geschützt.
+Es gibt keinen allgemeinen Datenabgleich (kein `bin/remote.php` wie in der Videothek). Alles außer YouTube-Audio entsteht direkt in der App auf dem Server, wie beim Kochbuch der Rezept-Import. Nur YouTube-Audio entsteht lokal, weil `yt-dlp` und `ffmpeg` auf dem Hosting fehlen. `bin/audio.php` lädt das Ergebnis deshalb selbst über die API hoch (siehe [Audio von YouTube holen](#audio-von-youtube-holen)). Muss doch einmal ein ganzer Liedordner übertragen werden, geht das per WinSCP.
 
 ---
 
@@ -78,7 +69,6 @@ Auf dem Server antwortet `public/dev/sync.php` und ist durch API-Token und Basic
 ```
 gitarrenbuch/                         # Projektroot
  ├── data/                            # Außerhalb des Document Root, kein direkter Browser-Zugriff möglich
- │    ├── cache/sync_md5.json         # MD5 je Datei für den Abgleich
  │    ├── chords.json                 # Akkordbibliothek: Griffe + Kennzeichen „gängig“ (kein Diagramm im Leadsheet)
  │    └── songs/                      # Ein Unterordner pro Lied
  │         └── <slug>/                # Slug aus Interpret + Titel, z. B. "cat-stevens-father-and-son"
@@ -88,6 +78,7 @@ gitarrenbuch/                         # Projektroot
  │              ├── audio.mp3         # Begleitspur, mono komprimiert (optional)
  │              ├── sync.json         # Sync-Punkte Noten ↔ Audio
  │              ├── leadsheet.json    # Druckinfos: Begleitmuster, Tab-Verweise, Layout
+ │              ├── cover.jpg         # Albumcover für die Kachel (Deezer/iTunes oder eigenes Bild, max. 500 px)
  │              └── orig/             # Rohmaterial: beliebig viele Quelldateien, werden nie verändert
  │                   ├── score.gp     # z. B. Original-GP-Datei (ggf. mit Audiospur)
  │                   ├── ug.json      # z. B. UG-Akkordblatt vom Bookmarklet
@@ -95,11 +86,11 @@ gitarrenbuch/                         # Projektroot
  │                   └── youtube.<ext> # Unkomprimiertes YouTube-Audio (bleibt lokal, wird nicht abgeglichen)
  ├── bin/                             # Skripte für die Kommandozeile (lokal, php bin/…)
  │    ├── build_audio_portable.cmd    # audio.php samt PHP, yt-dlp und ffmpeg als Paket für einen anderen Rechner (<Zielordner>)
- │    ├── audio.php                   # YouTube → audio.mp3; eingebettete GP-Audiospur → audio.mp3 + sync.json
- │    └── remote.php                  # Abgleich mit dem Server: --download-data, --upload-data
+ │    └── audio.php                   # YouTube → audio.mp3, lädt per API auf den Server hoch
  ├── public/                          # Document Root
  │    ├── api/                        # API-Endpunkte
  │    │    ├── lib/                   # Gemeinsam genutzte Hilfsfunktionen der API-Endpunkte
+ │    │    │    ├── cover.php         # Cover suchen (Deezer, iTunes), übernehmen, speichern
  │    │    │    ├── crud.php          # Read/Write/Rename/Delete-Logik + Validierung (create_song())
  │    │    │    ├── fetch.php         # http_get(): curl, sonst file_get_contents()-Fallback
  │    │    │    ├── file_store.php    # GP-/Audio-Dateien speichern und ausliefern (inkl. HTTP-Range)
@@ -107,7 +98,6 @@ gitarrenbuch/                         # Projektroot
  │    │    │    ├── http.php          # JSON-Response-Helper
  │    │    │    ├── jsonfile.php      # Kleine JSON-Dateien lesen und unter Sperre ändern
  │    │    │    ├── slug.php          # slugify() + Eindeutigkeits-Check
- │    │    │    ├── sync.php          # Abgleich von data/: Dateiliste mit MD5, Datei schreiben
  │    │    │    └── importers/        # Registry für Rohmaterial (Muster wie parsers/ im Kochbuch): ablegen + Metadaten
  │    │    │         ├── SongImporterInterface.php
  │    │    │         ├── GpFileImporter.php           # GP-Datei ablegen, Audiospur + Sync-Punkte herauslösen
@@ -115,18 +105,18 @@ gitarrenbuch/                         # Projektroot
  │    │    │         └── UltimateGuitarImporter.php   # Daten vom Bookmarklet als ug.json ablegen
  │    │    ├── audio.php              # Liefert audio.mp3 (mit Range-Support für Seeking)
  │    │    ├── chords.php             # Akkordbibliothek lesen und schreiben
- │    │    ├── import.php             # Import über die Registry (Upload oder Bookmarklet, CORS für UG)
+ │    │    ├── cover.php              # Cover ausliefern, suchen, übernehmen, hochladen, entfernen
+ │    │    ├── import.php             # GP-Datei als neues Lied importieren (später Registry: Bookmarklet, CORS für UG)
  │    │    ├── leadsheet.php          # leadsheet.json lesen und schreiben
  │    │    ├── lyrics.php             # song.cho lesen und schreiben (text/plain)
  │    │    ├── score.php              # GP-Datei lesen und schreiben (binär)
  │    │    ├── songs.php              # Lieder lesen, anlegen, bearbeiten, löschen
- │    │    ├── sync.php               # Sync-Punkte lesen und schreiben
- │    │    └── upload.php             # Rohmaterial-Upload nach orig/ (GP, ChordPro, Text, Audio)
+ │    │    └── sync.php               # Sync-Punkte lesen und schreiben
  │    ├── dev/                        # Admin-/Wartungsskripte – NICHT dauerhaft auf dem Produktivserver lassen
  │    │    ├── info.php               # phpinfo()
- │    │    ├── mixer-test.html        # PoC: Synth + Audiospur parallel, Gleichlauf messen
- │    │    └── sync.php               # Für bin/remote.php: data/ abgleichen
+ │    │    └── mixer-test.html        # PoC: Synth + Audiospur parallel, Gleichlauf messen
  │    ├── js/                         # ES-Module des Frontends (ohne Bundler, von app.js importiert)
+ │    │    ├── api.js                 # API-Zugriff, Token-Abfrage, gemeinsame Typen (Song)
  │    │    ├── editor/                # Editor für Text, Akkorde, Noten und Tabs
  │    │    │    ├── editor.js         # Rahmen: Ansichten, Laden, Speichern, Undo/Redo
  │    │    │    ├── model.js          # Gemeinsames Song-Modell (Score + Abschnitte, Zeilen, Silben, Akkorde, Muster)
@@ -169,7 +159,7 @@ gitarrenbuch/                         # Projektroot
 
 ### Admin-/Dev-Skripte (`public/dev/`)
 
-Diese Skripte dienen der Wartung, Diagnose und Machbarkeitsprüfung. Nach Gebrauch werden sie vom Produktivserver gelöscht. `sync.php` bleibt nur, solange `bin/remote.php` gebraucht wird.
+Diese Skripte dienen der Wartung, Diagnose und Machbarkeitsprüfung. Nach Gebrauch werden sie vom Produktivserver gelöscht.
 
 ---
 
@@ -181,13 +171,13 @@ Lesende Endpunkte sind offen und durch Basic Auth geschützt. Schreibende Endpun
 |---|---|---|
 | `api/songs.php` | GET, POST, PUT, DELETE | Lieder (Liste, einzeln, anlegen, ändern, löschen) |
 | `api/score.php?slug=` | GET, PUT | GP-Datei (binär) |
-| `api/audio.php?slug=` | GET | Audio mit Range-Support |
+| `api/audio.php?slug=` | GET, PUT | Audio mit Range-Support; PUT für den Upload durch `bin/audio.php` |
 | `api/sync.php?slug=` | GET, PUT | Sync-Punkte |
 | `api/lyrics.php?slug=` | GET, PUT | Text mit Akkorden (`song.cho`, `text/plain`) |
 | `api/leadsheet.php?slug=` | GET, PUT | Druckinfos (Muster, Tab-Verweise, Layout) |
 | `api/chords.php` | GET, PUT | Akkordbibliothek |
-| `api/upload.php` | POST | GP- oder Audio-Upload |
-| `api/import.php` | POST | Import über die Registry (Datei oder Bookmarklet-Daten) |
+| `api/import.php` | POST | GP-Datei (GP3–GP8) als neues Lied importieren: legt das Lied an, Datei nach `orig/` und als `score.gp`, holt das Cover (erster Treffer). Später auch Bookmarklet-Daten über die Registry |
+| `api/cover.php` | GET, PUT, POST, DELETE | Cover ausliefern (`?slug=`) bzw. suchen (`?artist=&title=`), Treffer übernehmen (PUT), eigenes Bild hochladen (POST, JPEG), entfernen |
 
 ### Schema `song.json` (Entwurf)
 
@@ -205,11 +195,13 @@ Lesende Endpunkte sind offen und durch Basic Auth geschützt. Schreibende Endpun
     "ultimateGuitar": "https://tabs.ultimate-guitar.com/tab/…",
     "youtube": "https://www.youtube.com/watch?v=…"
   },
-  "files": { "score": true, "audio": true, "sync": true, "leadsheet": true },
-  "created": "2026-10-25",
-  "updated": "2026-10-25"
+  "slug": "cat-stevens-father-and-son",
+  "created": "2026-10-25T20:15:00+02:00",
+  "updated": "2026-10-25T20:15:00+02:00"
 }
 ```
+
+Die API liefert zusätzlich `files` (z. B. `{ "score": true, "lyrics": false, "audio": true, "sync": true, "leadsheet": false }`). Das Feld wird bei jedem Lesen aus dem Dateisystem bestimmt und nicht gespeichert, damit es nicht veraltet, wenn Dateien auf anderem Weg (z. B. über `bin/audio.php` oder WinSCP) dazukommen oder verschwinden.
 
 ### Schema `sync.json` (Entwurf)
 
@@ -338,7 +330,11 @@ In Guitar Pro 8 lassen sich Synth und Audiospur gleichzeitig hören. **alphaTab 
 4. Lautstärke ist für Synth und Audio getrennt regelbar, jeder Weg lässt sich stummschalten.
 5. Langsamer üben: Das Audio läuft mit `playbackRate` und `preservesPitch` parallel zum alphaTab-Tempo.
 
-Die Gleichlaufgenauigkeit wird zuerst mit `dev/mixer-test.html` geprüft.
+Die Gleichlaufgenauigkeit wird zuerst mit `dev/mixer-test.html` geprüft. Erkenntnisse aus dem Prototyp (26.10.2026, Chrome Desktop, Testdatei Three Little Birds):
+- alphaTab meldet die Position etwa 350-mal pro Sekunde. Bei jeder Meldung hart per `currentTime` nachzuführen, führt zu einer Kette von Seeks. Deshalb wird die Abweichung als Median über 0,5 s geglättet: Kleine Abweichungen gleicht `playbackRate` (±5 %) aus, erst ab 300 ms folgt ein Sprung, höchstens einmal pro Sekunde.
+- Ergebnis: im Mittel etwa 30 ms Abweichung, höchstens rund 70 ms, ohne Sprünge, auch bei 75 % Tempo.
+- Die Umrechnung von Tick in Audio-Zeit über `MidiFileGenerator.generateSyncPoints()` funktioniert. Der erste Sync-Punkt kann negativ sein (GP8-`FramePadding`, hier −977 ms), die Audiospur setzt dann später ein.
+- Offen: Höreindruck, Ausgabe-Latenz des Synths (ggf. fester Offset) und das Verhalten auf dem Smartphone.
 
 ### Audio-Sync
 
@@ -377,7 +373,7 @@ Pro Lied können beliebig viele Quelldateien als **Rohmaterial** unter `orig/` l
 
 | Quelle | Liefert |
 |---|---|
-| GP-Datei (Upload, Drag & Drop, UG-GP-Tab) | Noten, Tabs, Tempo, Marker, ggf. Liedtext, Akkordsymbole, Griffbilder, Audiospur mit Sync-Punkten |
+| GP-Datei (Import, UG-GP-Tab) | Noten, Tabs, Tempo, Marker, ggf. Liedtext, Akkordsymbole, Griffbilder, Audiospur mit Sync-Punkten |
 | UG-Akkordblatt (Bookmarklet → `ug.json`) | Text, Akkorde, Abschnittsnamen, Capo, Tonart |
 | ChordPro- oder Textdatei, eingefügter Text | Text, ggf. Akkorde und Abschnitte |
 | YouTube (`bin/audio.php`) | Audio |
@@ -395,8 +391,10 @@ Pro Lied können beliebig viele Quelldateien als **Rohmaterial** unter `orig/` l
 
 **Material nachreichen:** Kommt später eine weitere Quelle dazu, läuft die Aufbereitung erneut. Der Editor zeigt die Ergebnisse dann als **Vorschläge** pro Abschnitt zum Übernehmen oder Verwerfen, statt bereits Bearbeitetes zu überschreiben.
 
-**Serverseitig** wird nur abgelegt. `api/upload.php` und `api/import.php` speichern das Rohmaterial über die Importer-Registry nach `orig/` und legen bzw. ergänzen `song.json` über `create_song()`. Die Registry ist nach dem Muster des Kochbuchs aufgebaut (dort `RecipeParserInterface`, hier `SongImporterInterface`).
-- **`GpFileImporter`** löst zusätzlich Audiospur und Sync-Punkte heraus (siehe Anhang). Die Audiospur wird lokal mit `bin/audio.php --from-gp` mono komprimiert.
+**Normaler Ablauf:** GP-Datei importieren („Importieren“ in der Liederliste, wie der Rezept-Import im Kochbuch), Audio mit dem portablen `bin/audio.php` ergänzen, danach bearbeiten und spielen. Die GP-Datei kommt nur beim Import hinein; ein späteres Hochladen über die Liedansicht gibt es nicht. Titel, Interpret usw. liest alphaTab im Browser aus der Datei und schickt sie mit, weil PHP die GP-Formate nicht auswerten kann.
+
+**Serverseitig** wird nur abgelegt. `api/import.php` speichert das Rohmaterial über die Importer-Registry nach `orig/` und legen bzw. ergänzen `song.json` über `create_song()`. Die Registry ist nach dem Muster des Kochbuchs aufgebaut (dort `RecipeParserInterface`, hier `SongImporterInterface`).
+- **`GpFileImporter`** löst zusätzlich Audiospur und Sync-Punkte heraus (siehe Anhang). Die Audiospur wird dabei unverändert übernommen (bei der Testdatei schon MP3), weil auf dem Server kein ffmpeg zur Verfügung steht.
 - **`UltimateGuitarImporter`:** Der Import läuft wie beim Chefkoch-Import über die Seite des Lieds, allerdings aus dem eingeloggten Browser statt vom Server:
   - Das **Bookmarklet** (`bookmarklet.js`) liest auf der geöffneten UG-Seite die eingebetteten Tab-Daten. Die genaue Struktur wird am Prototyp geprüft.
   - Es schickt die Daten per `POST` mit API-Token an `api/import.php`, abgelegt werden sie als `orig/ug.json`.
@@ -434,12 +432,12 @@ Das Leadsheet ist kein stumpfer Notenausdruck, sondern ein aufbereitetes Blatt f
 
 ## Audio von YouTube holen
 
-Das funktioniert analog zu „Videos für den Browser umwandeln“ in der Videothek. Das Skript `bin/audio.php` läuft lokal, alternativ als portables Paket auf einem beliebigen Windows-PC.
+Das funktioniert analog zu „Videos für den Browser umwandeln“ in der Videothek. Das Skript `bin/audio.php` läuft lokal, 
+alternativ als portables Paket auf einem beliebigen Windows-PC.
 
 ```
-php bin/audio.php --youtube=<url> --slug=<slug>    # YouTube → data/songs/<slug>/audio.mp3
+php bin/audio.php --youtube=<url> --slug=<slug>    # YouTube → audio.mp3, Upload auf den Server
 php bin/audio.php --queue=youtube-queue.txt        # mehrere: je Zeile "<slug> <url>"
-php bin/audio.php --from-gp --slug=<slug>          # eingebettete Audiospur aus orig/score.gp komprimieren
 php bin/audio.php --update                         # yt-dlp aktualisieren (yt-dlp -U)
 bin\build_audio_portable.cmd D:\gitarrenbuch-audio # portables Paket: PHP + yt-dlp + ffmpeg + audio.php
 ```
@@ -451,8 +449,7 @@ bin\build_audio_portable.cmd D:\gitarrenbuch-audio # portables Paket: PHP + yt-d
   ```
 - Das unkomprimierte Original bleibt als `orig/youtube.<ext>` erhalten. So lässt sich später mit anderen Einstellungen neu komprimieren, ohne erneut herunterzuladen.
 - `audio-log.jsonl` verhindert doppelte Downloads, wie `convert-log.jsonl` in der Videothek.
-- Die Quell-URL wird in `song.json` eingetragen.
-- Danach überträgt `php bin/remote.php --upload-data` die Dateien auf den Server.
+- **Upload:** `audio.php` prüft vorab per `GET api/songs.php?slug=`, ob das Lied auf dem Server existiert, und verweigert sonst den Dienst (vor dem Download). Danach lädt es `audio.mp3` mit API-Token hoch. Der Server trägt die Quell-URL in `song.json` ein und legt, falls noch keine vorhanden, Start- und Endpunkt in `sync.json` an. Server-URL, Basic-Auth-Zugang und Token stehen in der `config.php` des Pakets.
 - Nach Änderungen an `audio.php` muss das portable Paket neu gebaut werden.
 - yt-dlp braucht regelmäßige Updates, weil YouTube sich häufig ändert.
 
@@ -462,7 +459,7 @@ bin\build_audio_portable.cmd D:\gitarrenbuch-audio # portables Paket: PHP + yt-d
 
 - ✅ PLanuung
 - ❌ Grundgerüst und Mixer-Prototyp: Struktur, Konfiguration und Auth aus Kochbuch/Videothek, Liederliste, GP-Upload, Anzeigen und Abspielen, `dev/mixer-test.html`
-- ❌ Audio: `bin/audio.php` und portables Paket, Herauslösen der GP-Audiospur, `api/audio.php`, `mixer.js`, Sync-Editor, `bin/remote.php`
+- ❌ Audio: `bin/audio.php` und portables Paket, Herauslösen der GP-Audiospur, `api/audio.php`, `mixer.js`, Sync-Editor
 - ❌ Editor (Text & Akkorde) und Aufbereitung: `model.js`, `lyrics-view.js`, `import/*` für GP- und Textdateien, Speichern von `score.gp` und `song.cho`
 - ❌ Leadsheet: `chords.json`, Template, SVG-Bausteine, `patterns-view.js`, Fit-Loop
 - ❌ Import von Ultimate Guitar: Bookmarklet, `UltimateGuitarImporter`, `ug.js`, Vorschläge beim Nachreichen
@@ -483,13 +480,14 @@ GPL-3.0, siehe [LICENSE](LICENSE). Mitgelieferte Bibliothek: alphaTab (MPL-2.0).
 
 ## Entscheidungen
 
-| Datum      | Thema        | Entscheidung                                                                                                                                                                                                                                                                    |
-|------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 25.10.2026 | Audio        | Getrennt von der GP-Datei speichern (`audio.mp3` + `sync.json`)                                                                                                                                                                                                                 |
-| 25.10.2026 | Originale    | Unterordner `data/songs/<slug>/orig/`. Ein Ordner pro Lied bleibt erhalten, und es ist Platz für mehrere Rohquellen.                                                                                                                                                            |
-| 25.10.2026 | JSON-Dateien | Getrennt (`song.json`, `sync.json`, `leadsheet.json`), weil mehrere Editoren unabhängig schreiben und die Liederliste nur die kleinen `song.json` liest                                                                                                                         |
-| 25.10.2026 | Text         | Eigene Datei `song.cho` im ChordPro-Format. `leadsheet.json` enthält nur Muster, Tab-Verweise und Layout.                                                                                                                                                                       |
-| 25.10.2026 | Editor       | Ein gemeinsamer Editor für Text, Akkorde, Noten und Tabs auf einem Song-Modell. Rohmaterial (beliebige Quellen in `orig/`) wird bestmöglich aufbereitet. Beim Speichern werden `score.gp` (inkl. Liedtext und Akkordsymbolen), `song.cho` und `leadsheet.json` neu geschrieben. |
+| Datum      | Thema        | Entscheidung                                                                                                                                                                                                                                                                                                                                                            |
+|------------|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 25.10.2026 | Audio        | Getrennt von der GP-Datei speichern (`audio.mp3` + `sync.json`)                                                                                                                                                                                                                                                                                                         |
+| 25.10.2026 | Originale    | Unterordner `data/songs/<slug>/orig/`. Ein Ordner pro Lied bleibt erhalten, und es ist Platz für mehrere Rohquellen.                                                                                                                                                                                                                                                    |
+| 25.10.2026 | JSON-Dateien | Getrennt (`song.json`, `sync.json`, `leadsheet.json`), weil mehrere Editoren unabhängig schreiben und die Liederliste nur die kleinen `song.json` liest                                                                                                                                                                                                                 |
+| 25.10.2026 | Text         | Eigene Datei `song.cho` im ChordPro-Format. `leadsheet.json` enthält nur Muster, Tab-Verweise und Layout.                                                                                                                                                                                                                                                               |
+| 25.10.2026 | Editor       | Ein gemeinsamer Editor für Text, Akkorde, Noten und Tabs auf einem Song-Modell. Rohmaterial (beliebige Quellen in `orig/`) wird bestmöglich aufbereitet. Beim Speichern werden `score.gp` (inkl. Liedtext und Akkordsymbolen), `song.cho` und `leadsheet.json` neu geschrieben.                                                                                         |
+| 26.10.2026 | Cover        | Albumcover von Deezer, Ersatz iTunes (beide ohne API-Schlüssel), beim Import automatisch der erste Treffer, danach über „Cover ändern“ auswählbar oder eigenes Bild. Gespeichert als `cover.jpg` in 500 px; eigene Bilder verkleinert der Browser, der Server braucht kein GD. Später YouTube-Vorschaubild als weiterer Ersatz, sobald die Audiospur von YouTube kommt. |
 
 ## Kernentscheidung: alphaTab
 
@@ -527,7 +525,7 @@ Einen eigenen GP-Parser, Notenrenderer und Synthesizer zu schreiben, wären jewe
 
 ## Offene Punkte / zu prüfen
 
-- Gleichlaufgenauigkeit von Synth und Audiospur im Mixer-Prototyp
+- Gleichlaufgenauigkeit von Synth und Audiospur: Messung gut (siehe Mixer), Höreindruck und Smartphone noch offen
 - Schreibt der alphaTab-GP7-Exporter Audiospur und Sync-Punkte mit? (Durch getrennte Speicherung entschärft)
 - Herauslösen von Audiospur und Sync-Punkten aus GP8 in PHP (`gp_file.php`)
 - Aktuelle Datenstruktur auf UG-Seiten (Akkordblatt, GP-Download) am Bookmarklet-Prototyp

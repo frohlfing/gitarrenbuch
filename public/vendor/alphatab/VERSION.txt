@@ -1,0 +1,1 @@
+alphaTab 1.8.4 (@coderline/alphatab, npm). Minifizierte ES-Module aus dist/ unter den nicht-minifizierten Namen abgelegt, weil sich die Module gegenseitig als ./alphaTab.core.mjs usw. importieren.

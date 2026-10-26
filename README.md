@@ -2,7 +2,10 @@
 
 ## Voraussetzungen
 
-- PHP 8.5+ mit aktivierter **GD**-Extension (für Thumbnails)
+- PHP 8.5+ mit aktivierter **zip**-Extension (GP7/GP8-Dateien sind ZIP-Archive; gebraucht ab Phase 2 zum Herauslösen
+  der Audiospur)
+- Ausgehende HTTPS-Verbindungen für die Cover-Suche bei Deezer und iTunes (über die curl-Extension oder, falls die
+  fehlt, `allow_url_fopen`; beides ist bei XAMPP und Hetzner Standard). GD ist nicht nötig.
 - Ein Webserver mit `public/` als Document Root
 - Kein Datenbankserver nötig – alle Daten liegen als Dateien unter `data/`, bewusst außerhalb des Document Root
   (Zugriff nur über die API wie `api/songs.php`, nicht direkt per URL)
@@ -18,15 +21,15 @@
    ```
 3. Webserver mit Document Root `public/` auf ein Verzeichnis zeigen lassen (z. B. XAMPP-vHost).
 
-4. GD-Extension für PHP aktivieren. Zur Prüfung gibt es `public/dev/info.php` (ruft `phpinfo()` auf, im Browser
-   aufrufen und nach "gd" suchen) – siehe auch Abschnitt "Admin-/Dev-Skripte" unter Projektstruktur.
+4. zip-Extension für PHP aktivieren. Zur Prüfung gibt es `public/dev/info.php` (ruft `phpinfo()` auf, im Browser
+   aufrufen und nach "zip" suchen).
 
    Unter XAMPP:
-   - `C:\xampp\php\php.ini` öffnen und die Zeile `;extension=gd` zu `extension=gd` ändern.
+   - `C:\xampp\php\php.ini` öffnen und die Zeile `;extension=zip` zu `extension=zip` ändern.
    - Apache neu starten.
 
    Unter Hetzner-Webspace:
-   - GD ist standardmäßig aktiviert. Falls nicht, kann dies per KonsoleH eingerichtet werden.
+   - zip ist standardmäßig aktiviert. Falls nicht, kann dies per KonsoleH eingerichtet werden.
 
 5. **HTTP Basic Auth einrichten** (schützt zusätzlich zum API-Token auch die statische `index.html` selbst – ohne
    diese Auth wäre die leere Seiten-Hülle trotz Token-Schutz der API weiterhin für jeden abrufbar):

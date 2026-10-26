@@ -17,3 +17,8 @@ AuthType Basic
 AuthName "Gitarrenbuch"
 AuthUserFile "/absoluter/pfad/zur/.htpasswd"
 Require valid-user
+
+# MIME-Typen für alphaTab (ES-Module, Notenschrift, SoundFont), falls der Server sie nicht kennt.
+AddType text/javascript .mjs
+AddType font/woff2 .woff2
+AddType application/octet-stream .sf2
