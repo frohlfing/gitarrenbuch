@@ -16,7 +16,8 @@
  *                                     Token nötig.
  * DELETE /api/songs.php?slug=xyz   -> löscht das Lied samt Ordner (Rohmaterial inklusive). Token nötig.
  *
- * Jedes Lied enthält zusätzlich das berechnete Feld files (welche Dateien vorhanden sind, siehe SONG_FILES).
+ * Jedes Lied enthält zusätzlich die berechneten Felder files (welche Dateien vorhanden sind, siehe SONG_FILES) und
+ * tracks (Spurnamen aus score.atex, siehe read_track_names()).
  * Token wird per Header X-API-Token erwartet (siehe api/lib/http.php: require_token()).
  * Die eigentliche Lese-/Schreib-/Rename-/Delete-Logik steckt in api/lib/crud.php.
  */

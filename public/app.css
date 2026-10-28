@@ -52,7 +52,7 @@ header p.sub{
   font-size:.95rem;
 }
 .controls{
-  max-width:960px;
+  max-width:1180px;
   margin:1.4rem auto 0;
   padding:0 1rem;
   display:flex;
@@ -62,8 +62,8 @@ header p.sub{
   justify-content:center;
 }
 .controls input[type=search]{
-  flex:1 1 260px;
-  max-width:420px;
+  flex:1 1 270px;
+  max-width:330px;
 }
 .controls input[type=search], .controls select, .form-field input, .form-field select, .form-field textarea,
 .player-panel select, .player-panel input[type=number]{

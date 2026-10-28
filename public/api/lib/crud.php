@@ -101,8 +101,8 @@ function read_song_json(string $slug): ?array
 }
 
 /**
- * Schreibt $song als song.json (überschreibt eine vorhandene Datei vollständig). Das berechnete Feld files wird
- * nicht gespeichert.
+ * Schreibt $song als song.json (überschreibt eine vorhandene Datei vollständig). Die berechneten Felder files und
+ * tracks werden nicht gespeichert.
  *
  * @param string $slug Slug des Lieds, der Ordner muss existieren
  * @param array $song zu speichernde Felder
@@ -110,7 +110,7 @@ function read_song_json(string $slug): ?array
  */
 function write_song_json(string $slug, array $song): void
 {
-    unset($song['files']);
+    unset($song['files'], $song['tracks']);
     // Leeres sources muss als {} statt [] gespeichert werden (json_decode() liefert dafür ein leeres Array).
     $song['sources'] = (object) ($song['sources'] ?? []);
     file_put_contents(
@@ -140,18 +140,36 @@ function list_song_slugs(): array
 }
 
 /**
- * Ergänzt $song um das berechnete Feld files (welche Dateien im Liedordner vorhanden sind).
+ * Namen der Spuren aus score.atex, in der Reihenfolge der Partitur (z. B. aus `\track ("Guitar" "Guitar")` der
+ * erste Name).
+ *
+ * @param string $slug Slug des Lieds
+ * @return string[] Spurnamen; leer, wenn es keine Partitur gibt
+ */
+function read_track_names(string $slug): array
+{
+    $path = song_dir($slug) . '/' . SONG_FILES['score'];
+    if (!is_file($path)) {
+        return [];
+    }
+    preg_match_all('/\\\\track\s*\(?\s*"((?:[^"\\\\]|\\\\.)*)"/', file_get_contents($path), $matches);
+    return array_map('stripslashes', $matches[1]);
+}
+
+/**
+ * Ergänzt $song um die berechneten Felder files (welche Dateien im Liedordner vorhanden sind) und tracks.
  *
  * @param string $slug Slug des Lieds
  * @param array $song Inhalt von song.json
  * @return array $song mit files (Liste der Schlüssel aus SONG_FILES, deren Datei vorhanden ist, z. B.
- *               ["score", "audio", "cover"]) und sources als Objekt
+ *               ["score", "audio", "cover"]), tracks (Spurnamen, siehe read_track_names()) und sources als Objekt
  */
 function with_file_flags(string $slug, array $song): array
 {
     $dir = song_dir($slug);
     $song['sources'] = (object) ($song['sources'] ?? []);
     $song['files'] = array_keys(array_filter(SONG_FILES, fn(string $name) => is_file($dir . '/' . $name)));
+    $song['tracks'] = read_track_names($slug);
     return $song;
 }
 

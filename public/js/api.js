@@ -30,6 +30,7 @@
  * @property {string} created Anlagezeitpunkt (ISO 8601)
  * @property {string} updated Änderungszeitpunkt (ISO 8601)
  * @property {SongFile[]} files vorhandene Dateien (berechnet die API bei jedem Lesen), z. B. ["score", "cover"]
+ * @property {string[]} tracks Namen der Spuren aus der Partitur (berechnet die API bei jedem Lesen), z. B. ["Guitar"]
  */
 
 /** Schlüssel des API-Tokens im localStorage. */

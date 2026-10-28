@@ -25,6 +25,7 @@ const sheet = document.getElementById('sheet');
 const searchInput = document.getElementById('search');
 const sortSel = document.getElementById('sortSel');
 const tagSel = document.getElementById('tagSel');
+const trackSel = document.getElementById('trackSel');
 const resultCount = document.getElementById('resultCount');
 const subCount = document.getElementById('subCount');
 
@@ -37,7 +38,7 @@ function byId(id){
   return /** @type {?HTMLInputElement} */ (document.getElementById(id));
 }
 
-/** Schlüssel im `localStorage` für den Suchbegriff, den Genre-Filter (Tags) und die Sortierung der Liste. */
+/** Schlüssel im `localStorage` für den Suchbegriff, den Genre- (Tags) und Spur-Filter und die Sortierung der Liste. */
 const VIEW_STATE_KEY = 'gitarrenbuch_view_state';
 
 // `true`, während ein Formular offen ist (ungespeicherte Eingaben sind möglich). Dann schließen nur
@@ -130,27 +131,72 @@ function refreshTagFilter(){
   tagSel.value = tags.includes(current) ? current : '';
 }
 
+/** Wert im Spur-Filter für Songs mit Audiospur (Doppelpunkt davor, damit er keinem Spurnamen gleicht). */
+const WITH_AUDIO = ':mit-audio';
+
+/** Wert im Spur-Filter für Songs ohne Audiospur. */
+const WITHOUT_AUDIO = ':ohne-audio';
+
 /**
- * Aktualisiert Genre-Filter, Anzahl im Kopfbereich und Liste.
+ * Alle Spurnamen aus den Partituren.
+ * @returns {string[]} alphabetisch, ohne Duplikate
+ */
+function knownTracks(){
+  return [...new Set(SONGS.flatMap(s => s.tracks))].sort((a, b) => a.localeCompare(b, 'de'));
+}
+
+/**
+ * Baut die Optionen des Spur-Filters neu auf: alle Spurnamen, nach einer Trennlinie "Mit Audio" und "Ohne Audio".
+ * Behält die Auswahl bei, falls es sie noch gibt.
+ * @returns {void}
+ */
+function refreshTrackFilter(){
+  const current = trackSel.value;
+  trackSel.innerHTML = '<option value="">Alle Spuren</option>'
+    + knownTracks().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')
+    + `<option disabled>──────────</option>`
+    + `<option value="${WITH_AUDIO}">Mit Audio</option><option value="${WITHOUT_AUDIO}">Ohne Audio</option>`;
+  trackSel.value = [...trackSel.options].some(o => !o.disabled && o.value === current) ? current : '';
+}
+
+/**
+ * Prüft, ob ein Song zur Auswahl im Spur-Filter passt.
+ * @param {Song} s Song
+ * @param {string} track Spurname, WITH_AUDIO oder WITHOUT_AUDIO
+ * @returns {boolean} true, wenn der Song die Spur hat bzw. (keine) Audiospur
+ */
+function hasTrack(s, track){
+  if(track === WITH_AUDIO) return s.files.includes('audio');
+  if(track === WITHOUT_AUDIO) return !s.files.includes('audio');
+  return s.tracks.includes(track);
+}
+
+/**
+ * Aktualisiert Genre- und Spur-Filter, Anzahl im Kopfbereich und Liste.
  * @returns {void}
  */
 function refreshLibrary(){
   refreshTagFilter();
+  refreshTrackFilter();
   subCount.textContent = `${SONGS.length} ${SONGS.length === 1 ? 'Song' : 'Songs'}`;
   renderList();
 }
 
 /**
- * Zeichnet die Liste nach Suchbegriff, Genre-Filter und Sortierung.
+ * Zeichnet die Liste nach Suchbegriff, Genre- und Spur-Filter und Sortierung.
  * @returns {void}
  */
 function renderList(){
   const q = searchInput.value.trim().toLowerCase();
   const tag = tagSel.value;
+  const track = trackSel.value;
   let items = SONGS.slice();
 
   if(tag){
     items = items.filter(s => s.tags.includes(tag));
+  }
+  if(track){
+    items = items.filter(s => hasTrack(s, track));
   }
   if(q){
     items = items.filter(s =>
@@ -183,16 +229,19 @@ function renderList(){
 }
 
 /**
- * Merkt sich Suchbegriff, Genre-Filter und Sortierung im localStorage.
+ * Merkt sich Suchbegriff, Genre- und Spur-Filter und Sortierung im localStorage.
  * @returns {void}
  */
 function saveViewState(){
-  localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({search: searchInput.value, tag: tagSel.value, sort: sortSel.value}));
+  localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
+    search: searchInput.value, tag: tagSel.value, track: trackSel.value, sort: sortSel.value,
+  }));
 }
 
 /**
  * Liest den gemerkten Zustand der Liste.
- * @returns {{search?: string, tag?: string, sort?: string}} leer, wenn nichts (Gültiges) gespeichert ist
+ * @returns {{search?: string, tag?: string, track?: string, sort?: string}} leer, wenn nichts (Gültiges) gespeichert
+ *   ist
  */
 function loadViewState(){
   try {
@@ -891,15 +940,18 @@ export async function initLibrary(){
   searchInput.addEventListener('input', onFilterChange);
   sortSel.addEventListener('change', onFilterChange);
   tagSel.addEventListener('change', onFilterChange);
+  trackSel.addEventListener('change', onFilterChange);
 
   SONGS = await loadSongs();
   refreshTagFilter();
+  refreshTrackFilter();
 
-  // Suchbegriff/Filter/Sortierung vom letzten Besuch wiederherstellen (Tag nur, wenn es ihn noch gibt).
+  // Suchbegriff/Filter/Sortierung vom letzten Besuch wiederherstellen (Genre und Spur nur, wenn es sie noch gibt).
   const saved = loadViewState();
   if(saved.search) searchInput.value = saved.search;
   if(saved.sort && [...sortSel.options].some(o => o.value === saved.sort)) sortSel.value = saved.sort;
   if(saved.tag && [...tagSel.options].some(o => o.value === saved.tag)) tagSel.value = saved.tag;
+  if(saved.track && [...trackSel.options].some(o => !o.disabled && o.value === saved.track)) trackSel.value = saved.track;
 
   refreshLibrary();
 }
