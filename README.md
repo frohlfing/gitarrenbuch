@@ -561,7 +561,7 @@ Das Zahnrad öffnet die Einstellungen:
 - **Lautstärke**: Synth, Audiospur und Metronom (auch für den Vorzähler) mit eigenen Reglern untereinander; dazu
   vorübergehend (bis zum Sync-Editor) der Audio-Versatz in ms (je Song gemerkt, nur im Browser), um eine Korrektur
   der Sync-Punkte nach Gehör auszuprobieren
-- **Darstellung**: Noten + Tabs (wie in der Datei), nur Tabs oder nur Noten; eine Seite oder eine Zeile; Größe
+- **Darstellung**: Noten + Tabs (wie in der Datei), nur Tabs oder nur Noten; Größe
 
 Die Einstellungen (außer den Spuren) gelten für alle Songs und werden im Browser gemerkt.
 

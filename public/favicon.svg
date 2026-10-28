@@ -1,38 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <defs>
-    <!-- Sunburst-Lackierung: hell in der Mitte, dunkel zum Rand -->
-    <radialGradient id="sunburst" cx="50%" cy="62%" r="60%">
-      <stop offset="0" stop-color="#ffc58f"/>
-      <stop offset="0.6" stop-color="#ff9a52"/>
-      <stop offset="1" stop-color="#a8441a"/>
-    </radialGradient>
-  </defs>
-  <g transform="rotate(35 50 50)">
-    <!-- Kopfplatte mit Mechaniken -->
-    <rect x="43" y="1" width="14" height="15" rx="3" fill="#569fff"/>
-    <circle cx="41" cy="5" r="2.2" fill="#272b34"/>
-    <circle cx="41" cy="12" r="2.2" fill="#272b34"/>
-    <circle cx="59" cy="5" r="2.2" fill="#272b34"/>
-    <circle cx="59" cy="12" r="2.2" fill="#272b34"/>
-    <!-- Hals mit Bünden -->
-    <rect x="46" y="15" width="8" height="38" fill="#3b2a1e"/>
-    <g stroke="#dbdbdb" stroke-width="1">
-      <line x1="46" y1="22" x2="54" y2="22"/>
-      <line x1="46" y1="29" x2="54" y2="29"/>
-      <line x1="46" y1="36" x2="54" y2="36"/>
-      <line x1="46" y1="43" x2="54" y2="43"/>
-    </g>
-    <!-- Korpus: zwei Rundungen mit Taille -->
-    <path d="M50 46 C37 46 33 53 35 61 C36 65 31 68 30 76 C29 90 40 99 50 99 C60 99 71 90 70 76 C69 68 64 65 65 61 C67 53 63 46 50 46 Z"
-          fill="url(#sunburst)" stroke="#272b34" stroke-width="2"/>
-    <!-- Schallloch und Steg -->
-    <circle cx="50" cy="66" r="6.5" fill="#272b34"/>
-    <rect x="42" y="84" width="16" height="4" rx="1.5" fill="#272b34"/>
-    <!-- Saiten -->
-    <g stroke="#f6f7f8" stroke-width="0.7">
-      <line x1="48" y1="9" x2="48" y2="85"/>
-      <line x1="50" y1="9" x2="50" y2="85"/>
-      <line x1="52" y1="9" x2="52" y2="85"/>
-    </g>
-  </g>
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+	<defs>
+		<linearGradient id="pick" x1="0" y1="0" x2="1" y2="1">
+			<stop offset="0%" stop-color="#8cc2ff"/>
+			<stop offset="100%" stop-color="#2a62c9"/>
+		</linearGradient>
+		<path id="outline" d="M443.313,40.189C398.235,16.019,326.214,1,255.387,1C185.137,1,113.521,15.848,68.55,39.784
+		C35.803,57.213,13.617,87.101,4.486,121.021L0.33,163.694C1.034,174.638,2.613,185.604,6.154,196.462
+		C8.053,202.286,10.57,209.155,13.557,216.707L34.525,264.403C82.611,364.947,175.133,512.957,255.347,513
+		L255.496,513C316.104,513,383.624,428.861,433.821,344.275L455.861,305.155C464.373,289.24,472.074,273.816,478.88,259.395
+		L496.433,219.41C500.038,210.45,503.004,202.407,505.18,195.709C524.785,135.357,498.779,69.949,443.313,40.189z"/>
+		<mask id="stripes">
+			<use href="#outline" fill="#fff"/>
+			<g transform="rotate(6 256 240)" fill="#000">
+				<polygon points="-100,100.12 612,242.52 612,286.03 -100,143.63"/>
+				<polygon points="-100,194 612,336.4 612,379.9 -100,237.5"/>
+			</g>
+		</mask>
+	</defs>
+	<g transform="translate(5 4) scale(0.98)">
+		<use href="#outline" fill="url(#pick)" mask="url(#stripes)"/>
+	</g>
 </svg>

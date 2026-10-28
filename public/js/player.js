@@ -31,12 +31,12 @@ const OFFSET_KEY_PREFIX = 'gitarrenbuch_audio_offset_';
 
 /**
  * Liest die Player-Einstellungen, ergänzt um Vorgaben.
- * @returns {{speed: number, metronome: boolean, countIn: boolean, layout: string, stave: string, scale: number,
- *   synthVolume: number, audioVolume: number, metronomeVolume: number}} Lautstärken von 0 bis 1
+ * @returns {{speed: number, metronome: boolean, countIn: boolean, stave: string, scale: number, synthVolume: number,
+ *   audioVolume: number, metronomeVolume: number}} Lautstärken von 0 bis 1
  */
 function loadPrefs(){
   const defaults = {
-    speed: 1, metronome: false, countIn: false, layout: 'Page', stave: 'Default', scale: window.innerWidth < 600 ? 0.75 : 1,
+    speed: 1, metronome: false, countIn: false, stave: 'Default', scale: window.innerWidth < 600 ? 0.75 : 1,
     // Der Synth klingt bei gleicher Einstellung deutlich lauter als eine Aufnahme; Synth 50 % zu Audio 100 % klingt
     // etwa ausgeglichen.
     synthVolume: 0.5, audioVolume: 1, metronomeVolume: 1,
@@ -189,7 +189,7 @@ export class Player {
       core: {fontDirectory: VENDOR_URL + 'font/'},
       display: {
         scale: this.prefs.scale,
-        layoutMode: alphaTab.LayoutMode[this.prefs.layout],
+        layoutMode: alphaTab.LayoutMode.Page,
       },
       player: {
         playerMode: alphaTab.PlayerMode.EnabledSynthesizer,
@@ -516,10 +516,6 @@ export class Player {
           ${option('Tab', 'Nur Tabs', this.prefs.stave)}
           ${option('Score', 'Nur Noten', this.prefs.stave)}
         </select>
-        <select data-pref="layout" aria-label="Layout">
-          ${option('Page', 'Seite', this.prefs.layout)}
-          ${option('Horizontal', 'Eine Zeile', this.prefs.layout)}
-        </select>
         <select data-pref="scale" aria-label="Größe">
           ${SCALES.map(s => option(s, `${Math.round(s * 100)} %`, this.prefs.scale)).join('')}
         </select>
@@ -534,7 +530,6 @@ export class Player {
    */
   onPanelChange(t){
     const api = this.api;
-    const alphaTab = this.alphaTab;
     if(t.dataset.mix){
       // Lautstärken übernimmt onMixChange() schon beim input-Ereignis.
     } else if(t.dataset.trackShow !== undefined){
@@ -552,7 +547,6 @@ export class Player {
       } else {
         this.prefs[pref] = pref === 'scale' ? Number(t.value) : t.value;
         api.settings.display.scale = this.prefs.scale;
-        api.settings.display.layoutMode = alphaTab.LayoutMode[this.prefs.layout];
         this.applyStave(api.score);
         api.updateSettings();
         api.render();

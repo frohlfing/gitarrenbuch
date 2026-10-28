@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#272b34">
 <title>Gitarrenbuch</title>
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="app.css">
+<link rel="icon" href="favicon.svg?4" type="image/svg+xml">
+<link rel="stylesheet" href="app.css?v=20261028b">
 </head>
 <body>
 
@@ -40,6 +40,38 @@
   <div class="sheet" id="sheet"></div>
 </div>
 
-<script type="module" src="app.js"></script>
+<script>
+// Startdiagnose: Scheitert ein ES-Modul (Laden oder Verknüpfen), läuft app.js gar nicht und kann nichts melden.
+// Dann steht hier statt "wird geladen …" der Fehler bzw. nach 10 s, welche Skripte mit welchem Status kamen.
+{
+  const sub = document.getElementById('subCount');
+  const loading = () => sub.textContent.startsWith('wird geladen');
+  addEventListener('error', e => {
+    if(!loading()) return;
+    sub.textContent = `Start fehlgeschlagen: ${e.message || `Datei nicht geladen ${e.target?.src}`}`;
+  }, true);
+  setTimeout(() => {
+    if(!loading()) return;
+    const files = performance.getEntriesByType('resource')
+      .filter(r => /\.(m?js|php)/.test(r.name))
+      .map(r => `${r.name.replace(location.origin, '')} ${r.responseStatus || '?'}`);
+    sub.textContent = `Start hängt. Geladen: ${files.join(', ') || 'nichts'}`;
+  }, 10000);
+}
+</script>
+<!-- Versionszähler (?v=…): Bei jedem Hochladen mit geänderten Dateien hier überall erhöhen, damit Browser keine alten
+     Fassungen aus dem Cache nehmen. Die Import-Map hängt ihn an die Module unter js/, ohne die import-Zeilen zu ändern. -->
+<script type="importmap">
+{
+  "imports": {
+    "./js/api.js": "./js/api.js?v=20261028b",
+    "./js/library.js": "./js/library.js?v=20261028b",
+    "./js/mixer.js": "./js/mixer.js?v=20261028b",
+    "./js/player.js": "./js/player.js?v=20261028b",
+    "./js/score.js": "./js/score.js?v=20261028b"
+  }
+}
+</script>
+<script type="module" src="app.js?v=20261028b"></script>
 </body>
 </html>
