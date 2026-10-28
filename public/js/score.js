@@ -32,6 +32,14 @@ const MAJOR_KEYS = ['Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A',
 /** Moll-Tonarten nach Vorzeichen, Index wie bei MAJOR_KEYS. */
 const MINOR_KEYS = ['Abm', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm', 'Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'D#m', 'A#m'];
 
+/**
+ * Klingende Dur-Tonarten je Tonhöhenklasse (Grundton mod 12), in der üblichen Schreibweise mit den wenigsten
+ * Vorzeichen (Db statt C#, Bb statt A#).
+ */
+const SOUNDING_MAJOR_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+/** Klingende Moll-Tonarten je Tonhöhenklasse, wie bei SOUNDING_MAJOR_KEYS (C#m statt Dbm, Bbm statt A#m). */
+const SOUNDING_MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'Bbm', 'Bm'];
+
 /** Standardstimmung als MIDI-Noten, tiefe bis hohe Saite (E2 A2 D3 G3 B3 E4). */
 const STANDARD_TUNING = [40, 45, 50, 55, 59, 64];
 
@@ -60,8 +68,10 @@ const INFO_FIELDS = {
 /**
  * Eckdaten eines Songs, gelesen aus den Noten (erste Spur, die kein Schlagzeug ist, erster Takt).
  * @typedef {Object} ScoreInfo
- * @property {string} key Tonart, z. B. "A" oder "Em"
+ * @property {string} key Tonart, wie notiert (mit Capo die Tonart der Griffe), z. B. "A" oder "Em"
  * @property {number} capo Bund des Kapodasters, 0 ohne
+ * @property {string} soundingKey Tonart, wie sie klingt (key um capo Halbtöne höher, siehe soundingKey()); ohne Capo
+ *   gleich key
  * @property {string} tuning Stimmung von der tiefen zur hohen Saite, z. B. "E A D G B E"; leer ohne Saiten
  * @property {number} tempo Anfangstempo in BPM
  * @property {?number} recordedTempo Anfangstempo, wie es in der Aufnahme klingt (siehe recordingTempoFactor()),
@@ -114,14 +124,30 @@ export function readScoreInfo(alphaTab, score){
     ? staff.tuning.slice().reverse().map(p => alphaTab.model.Tuning.getTextForTuning(p, false)).join(' ')
     : '';
   const factor = recordingTempoFactor(alphaTab, score);
+  const key = bar ? (keys[bar.keySignature + 7] ?? '') : '';
+  const capo = staff?.capo || 0;
   return {
-    key: bar ? (keys[bar.keySignature + 7] ?? '') : '',
-    capo: staff?.capo || 0,
+    key,
+    capo,
+    soundingKey: soundingKey(key, capo),
     tuning,
     tempo: score.tempo,
     recordedTempo: factor ? Math.round(score.tempo * factor) : null,
     lastSyncMs: lastSyncMs(score),
   };
+}
+
+/**
+ * Tonart, wie sie mit Kapodaster klingt: Jeder Bund hebt um einen Halbton.
+ * @param {string} key notierte Tonart (Tonart der Griffe), z. B. "C" oder "F#m"
+ * @param {number} capo Bund des Kapodasters, 0 ohne
+ * @returns {string} z. B. "Db" für C mit Capo 1; ohne Capo oder bei unbekannter Tonart unverändert key
+ */
+function soundingKey(key, capo){
+  const minor = key.endsWith('m');
+  const pitchClass = PITCH_CLASSES[(minor ? key.slice(0, -1) : key).toUpperCase()];
+  if(!capo || pitchClass === undefined) return key;
+  return (minor ? SOUNDING_MINOR_KEYS : SOUNDING_MAJOR_KEYS)[(pitchClass + capo) % 12];
 }
 
 /**
@@ -151,7 +177,8 @@ export function isSyncOutsideAudio(info, audioSeconds){
  * @param {ScoreInfo} info Eckdaten aus readScoreInfo()
  * @param {?number} [audioSeconds] Länge der Audiospur, sobald sie geladen ist; dann wird auch geprüft, ob die
  *   Sync-Punkte hineinpassen (isSyncOutsideAudio())
- * @returns {string} z. B. "Tonart Am · Capo 2 · 84 BPM", Standardstimmung und Capo 0 werden weggelassen; passt das
+ * @returns {string} z. B. "Tonart Bm · Capo 2 (Griffe Am) · 84 BPM": die klingende Tonart, mit Capo dahinter die
+ *   Tonart der Griffe; Standardstimmung und Capo 0 werden weggelassen; passt das
  *   Tempo nicht zur Aufnahme (isTempoMismatch()), folgt das Tempo der Audiospur hervorgehoben:
  *   "105 BPM<span class="tempo-warn">(⚠ Audio: 211 BPM)</span>"
  */
@@ -161,8 +188,8 @@ export function describeScoreInfo(info, audioSeconds = null){
       + `(⚠ Audio: ${info.recordedTempo} BPM)</span>`
     : '');
   return [
-    info.key && escapeHtml(`Tonart ${info.key}`),
-    info.capo ? `Capo ${info.capo}` : null,
+    info.soundingKey && escapeHtml(`Tonart ${info.soundingKey}`),
+    info.capo ? escapeHtml(`Capo ${info.capo}` + (info.key ? ` (Griffe ${info.key})` : '')) : null,
     info.tuning && info.tuning !== 'E A D G B E' ? escapeHtml(info.tuning) : null,
     tempo,
     isSyncOutsideAudio(info, audioSeconds)
