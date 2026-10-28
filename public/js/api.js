@@ -16,7 +16,7 @@
  * @property {string} title Titel
  * @property {?string} artist Interpret
  * @property {?('strumming'|'fingerpicking')} technique Spieltechnik
- * @property {string[]} tags Schlagwörter
+ * @property {string[]} tags Genres (in der Oberfläche "Genre", mehrere je Song möglich), z. B. ["Rock & Pop"]
  * @property {?string} subtitle Untertitel (wie die folgenden Felder beim Import aus der GP-Datei, vorerst ungenutzt)
  * @property {?string} album Album
  * @property {?string} words Text von

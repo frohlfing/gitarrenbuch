@@ -37,7 +37,7 @@ function byId(id){
   return /** @type {?HTMLInputElement} */ (document.getElementById(id));
 }
 
-/** Schlüssel im `localStorage` für den Suchbegriff, Tag-Filter und Sortierung der Liste. */
+/** Schlüssel im `localStorage` für den Suchbegriff, den Genre-Filter (Tags) und die Sortierung der Liste. */
 const VIEW_STATE_KEY = 'gitarrenbuch_view_state';
 
 // `true`, während ein Formular offen ist (ungespeicherte Eingaben sind möglich). Dann schließen nur
@@ -92,10 +92,8 @@ function placeholderHue(slug){
  * @returns {string} HTML
  */
 function cardHtml(s){
-  const badges = [
-    s.files.includes('score') && '<span class="badge">Noten</span>',
-    s.files.includes('audio') && '<span class="badge">Audio</span>',
-  ].filter(Boolean).join('');
+  // Noten hat jeder Song; markiert wird nur, was fehlt.
+  const badges = s.files.includes('audio') ? '' : '<span class="badge missing" title="Keine Audiospur">Audio</span>';
   const thumb = s.files.includes('cover')
     ? `<div class="thumb"><img src="${escapeHtml(coverUrl(s))}" alt="" loading="lazy">`
     : `<div class="thumb placeholder" style="--h:${placeholderHue(s.slug)}">
@@ -113,7 +111,7 @@ function cardHtml(s){
 }
 
 /**
- * Alle verwendeten Tags.
+ * Alle verwendeten Tags (in der Oberfläche "Genre").
  * @returns {string[]} alphabetisch, ohne Duplikate
  */
 function knownTags(){
@@ -121,18 +119,19 @@ function knownTags(){
 }
 
 /**
- * Baut die Tag-Filter-Optionen neu auf und behält die Auswahl bei, falls es den Tag noch gibt.
+ * Baut die Optionen des Genre-Filters (Tags) neu auf und behält die Auswahl bei, falls es das Genre noch gibt.
  * @returns {void}
  */
 function refreshTagFilter(){
   const tags = knownTags();
   const current = tagSel.value;
-  tagSel.innerHTML = '<option value="">Alle Tags</option>' + tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  tagSel.innerHTML = '<option value="">Alle Genres</option>'
+    + tags.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
   tagSel.value = tags.includes(current) ? current : '';
 }
 
 /**
- * Aktualisiert Tag-Filter, Anzahl im Kopfbereich und Liste.
+ * Aktualisiert Genre-Filter, Anzahl im Kopfbereich und Liste.
  * @returns {void}
  */
 function refreshLibrary(){
@@ -142,7 +141,7 @@ function refreshLibrary(){
 }
 
 /**
- * Zeichnet die Liste nach Suchbegriff, Tag-Filter und Sortierung.
+ * Zeichnet die Liste nach Suchbegriff, Genre-Filter und Sortierung.
  * @returns {void}
  */
 function renderList(){
@@ -184,7 +183,7 @@ function renderList(){
 }
 
 /**
- * Merkt sich Suchbegriff, Tag-Filter und Sortierung im localStorage.
+ * Merkt sich Suchbegriff, Genre-Filter und Sortierung im localStorage.
  * @returns {void}
  */
 function saveViewState(){
@@ -304,6 +303,29 @@ function bindChordFileField(s){
       field.classList.remove('busy');
     }
   });
+}
+
+/**
+ * Verdrahtet die Knöpfe der vorhandenen Genres unter dem Feld "Genre" (gespeichert als tags): Ein Klick nimmt das
+ * Genre in die Liste im Textfeld auf oder entfernt es; Tippen im Textfeld hält die Knöpfe auf dem gleichen Stand.
+ * @returns {void}
+ */
+function bindGenrePicks(){
+  const input = byId('tagsInput');
+  const picks = byId('genrePicks');
+  const current = () => input.value.split(',').map(t => t.trim()).filter(Boolean);
+  const sync = () => {
+    const chosen = current();
+    picks.querySelectorAll('[data-genre]').forEach(b => b.classList.toggle('on', chosen.includes(b.dataset.genre)));
+  };
+  picks.addEventListener('click', e => {
+    const genre = /** @type {HTMLElement} */ (e.target).closest('[data-genre]')?.dataset.genre;
+    if(!genre) return;
+    const chosen = current();
+    input.value = (chosen.includes(genre) ? chosen.filter(t => t !== genre) : [...chosen, genre]).join(', ');
+    sync();
+  });
+  input.addEventListener('input', sync);
 }
 
 /** Wartezeit nach der letzten Eingabe in die YouTube-URL, bevor die Länge des Clips abgefragt wird. */
@@ -486,7 +508,14 @@ export function openSongForm(song, onSaved, sources = {}){
       <input type="text" id="tuningInput" placeholder="E A D G B E">
       <div class="hint">Tonart, Capo, Tempo und Stimmung gehen in die Noten und werden dort später geändert.</div>
     </div>`}
-    ${field('tagsInput', 'Tags', s.tags.join(', '), 'placeholder="z. B. 70er, Lagerfeuer"')}
+    <div class="form-field">
+      <label for="tagsInput">Genre</label>
+      <input type="text" id="tagsInput" value="${escapeHtml(s.tags.join(', '))}"
+        placeholder="z. B. Rock &amp; Pop, Weihnachtslied">
+      <div class="genre-picks" id="genrePicks">${knownTags().map(t => `<button class="tag-pick${
+        s.tags.includes(t) ? ' on' : ''}" type="button" data-genre="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')}</div>
+      <div class="hint">Mehrere durch Komma trennen, vorhandene per Klick an- und abwählen.</div>
+    </div>
     ${field('ugInput', `Quelle für Guitar-Pro-Datei${isEdit ? '<span class="lengths" id="scoreLength"></span>' : ''}`,
     s.sources.ultimateGuitar, 'inputmode="url"')}
     <div class="form-field">
@@ -526,6 +555,7 @@ export function openSongForm(song, onSaved, sources = {}){
 
   if(isEdit) bindChordFileField(s);
   const clipSeconds = bindYoutubeField(s);
+  bindGenrePicks();
   if(isEdit) showFileLengths(s);
 
   byId('saveBtn').addEventListener('click', async () => {

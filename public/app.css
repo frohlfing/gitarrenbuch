@@ -143,6 +143,7 @@ header p.sub{
   gap:.25rem;
 }
 .card .thumb .badge{background:rgba(39,43,52,.8); color:#fff;}
+.badge.missing{text-decoration:line-through;}
 .card .body{padding:.65rem .8rem .8rem;}
 .card h3{
   margin:0 0 .15rem;
@@ -159,6 +160,13 @@ header p.sub{
   white-space:nowrap;
 }
 .tag{background:var(--paper-deep); color:var(--ink-soft);}
+/* Vorhandene Genres im Formular zum An- und Abwählen */
+.genre-picks{display:flex; flex-wrap:wrap; gap:.35rem; margin-top:.45rem;}
+.tag-pick{
+  font:inherit; font-size:.8rem; padding:.2rem .65rem; border-radius:999px; cursor:pointer;
+  border:1px solid var(--rule); background:var(--paper-deep); color:var(--ink-soft);
+}
+.tag-pick.on{background:var(--accent); border-color:var(--accent); color:#fff;}
 .badge{background:var(--accent-soft); color:var(--accent-dark); font-weight:600; text-transform:uppercase;}
 .empty{
   text-align:center;

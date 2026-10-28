@@ -30,7 +30,7 @@ Wo was liegt (je Song unter `data/songs/<slug>/`):
 
 | Datei            | Inhalt                                                                              |
 |------------------|-------------------------------------------------------------------------------------|
-| `song.json`      | Titel, Interpret, Spieltechnik, Tags, weitere Angaben aus der GP-Datei, Notizen     |
+| `song.json`      | Titel, Interpret, Spieltechnik, Genres, weitere Angaben aus der GP-Datei, Notizen   |
 | `score.atex`     | Noten, Tabs, Text, Akkorde, Abschnitte, Tempo, Stimmung, Capo, Tonart, Sync-Punkte  |
 | `audio.mp3`      | Aufnahme                                                                            |
 | `cover.jpg`      | Cover                                                                               |
@@ -282,7 +282,7 @@ nicht gespeichert.
   "title": "Three Little Birds",
   "artist": "Bob Marley",
   "technique": null,
-  "tags": [],
+  "tags": ["Reggae"],
   "subtitle": null,
   "album": "Exodus",
   "words": null,
@@ -299,8 +299,9 @@ nicht gespeichert.
 }
 ```
 
-`technique` ist `strumming`, `fingerpicking` oder `null`. Tonart, Capo, Stimmung und Tempo stehen nicht in
-`song.json`, sondern nur in den Noten; die Songansicht liest sie von dort. `subtitle` bis `instructions` sind die
+`technique` ist `strumming`, `fingerpicking` oder `null`. `tags` sind die Genres (in der Oberfläche "Genre"),
+mehrere je Song möglich, z. B. "Rock & Pop", "Folk", "Weihnachtslied"; das Formular zeigt die vorhandenen zum An- und
+Abwählen. Tonart, Capo, Stimmung und Tempo stehen nicht in `song.json`, sondern nur in den Noten; die Songansicht liest sie von dort. `subtitle` bis `instructions` sind die
 weiteren Angaben aus der GP-Datei, 1:1 übernommen (Untertitel, Album, Text, Musik, Copyright, Tab-Autor,
 Anweisungen); das Gitarrenbuch nutzt sie vorerst nicht, und "Song bearbeiten" lässt sie unverändert. `notes` sind freie, mehrzeilige Notizen. Interpret und
 Titel zusammen dürfen nur einmal vorkommen.
@@ -348,11 +349,11 @@ b) du es manuell löschst, z. B. in den Browser-DevTools mit `localStorage.remov
 
 ### Übersicht
 
-Die Songs erscheinen als Kacheln mit Cover, Titel, Interpret und Tags, wie im Kochbuch und in der Videothek. Ohne
+Die Songs erscheinen als Kacheln mit Cover, Titel, Interpret und Genres, wie im Kochbuch und in der Videothek. Ohne
 Cover zeigt die Kachel einen Farbverlauf mit dem Anfangsbuchstaben des Titels; die Farbe ergibt sich aus dem Slug
-und bleibt so für jeden Song gleich. Kleine Hinweise auf dem Bild zeigen, was vorhanden ist (Noten, Audio).
+und bleibt so für jeden Song gleich. Fehlt die Audiospur, steht auf dem Bild ein durchgestrichenes "Audio".
 
-Über den Kacheln gibt es eine Suche (Titel, Interpret, Tags), einen Tag-Filter und die Sortierung nach Titel,
+Über den Kacheln gibt es eine Suche (Titel, Interpret, Genre), einen Genre-Filter und die Sortierung nach Titel,
 Interpret, zuletzt geändert oder zuletzt angelegt. Suchbegriff, Filter und Sortierung merkt sich der Browser.
 
 ### Import-Funktion
@@ -567,9 +568,9 @@ Die Einstellungen (außer den Spuren) gelten für alle Songs und werden im Brows
 ## Stand / Roadmap
 
 - ✅ Projekt aus dem Kochbuch abgeleitet (gleiche Architektur: PHP/JSON-API ohne Datenbank, statisches Frontend)
-- ✅ Song-Datenmodell (Titel, Interpret, Spieltechnik, Tags, Notizen, Quellen-URLs, weitere Angaben aus der GP-Datei)
+- ✅ Song-Datenmodell (Titel, Interpret, Spieltechnik, Genres, Notizen, Quellen-URLs, weitere Angaben aus der GP-Datei)
 - ✅ JSON-API (CRUD, Import, Auslieferung von Noten, Audiospur und Cover)
-- ✅ Übersicht als Kacheln mit Suche, Tag-Filter und Sortierung
+- ✅ Übersicht als Kacheln mit Suche, Genre-Filter und Sortierung
 - ✅ Import von GP3 bis GP8 per Drag & Drop, Angaben aus der Datei übernommen
 - ✅ Cover von Deezer bzw. iTunes, auswählbar, eigenes Bild möglich
 - ✅ Notenansicht und Wiedergabe mit alphaTab (Tempo, Loop, Spuren, Metronom, Vorzähler, Darstellung)
@@ -586,6 +587,7 @@ Die Einstellungen (außer den Spuren) gelten für alle Songs und werden im Brows
 - ❌ Editor für Text und Akkorde samt Aufbereitung: Song-Modell, Ansicht Text & Akkorde, Speichern der Noten
   (`PUT api/score.php`), Einarbeiten von Akkorddateien (Grundsatz 3), eingefügter Text, Vorschläge beim Nachreichen
   von Material, Export als `.cho`, "Tempo an der Audiospur anpassen"
+  - TODO: Drag-&-Drop-Feld "Akkorddatei" aus dem Formular "Song bearbeiten" in den Editor verschieben
 - ❌ DIN-A4-Seite zum Spielen am Lagerfeuer: Akkordbibliothek, `leadsheet.json`, Muster, SVG-Bausteine, A4-Fit-Loop
   (Zielstil: die handgebauten Seiten in `data/archiv/Leadsheets/`)
 - ❌ Editor für Noten und Tabs

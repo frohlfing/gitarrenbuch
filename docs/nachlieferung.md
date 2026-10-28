@@ -46,7 +46,7 @@ Stand 27.10.2026 hat jedes der 42 Lieder ein Cover mit 500 × 500 px.
   unter `Upload/`, im Gitarrenbuch steht das Lied aber unter Bruce Springsteen). -> Das is ok, von Springsteen gibt es keine GP-Datei.
 - [x] Traditional – Easy Slow Delta Blues – der Link zeigt auf eine Lektion vom Blues Guitar Institute. -> das ist ok.
 
-## Zwei Ultimate-Guitar-Links in den Notizen (8 ❌)
+## Zwei Ultimate-Guitar-Links in den Notizen (✅ erledigt)
 
 Als Quelle wurde jeweils der erste Link übernommen. Der zweite steht weiter in den Notizen.
 
