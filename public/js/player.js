@@ -1,16 +1,21 @@
 /**
- * alphaTab-Wrapper: Noten und Tabs anzeigen und mit dem Synthesizer abspielen. Übe-Funktionen: Tempo,
- * Loop über einen Taktbereich, Spuren anzeigen/stumm/solo, Metronom, Vorzähler, Darstellung.
+ * alphaTab-Wrapper: Noten und Tabs anzeigen und mit dem Synthesizer abspielen, bei vorhandener audio.mp3 zusammen
+ * mit der Audiospur (siehe mixer.js). Übe-Funktionen: Tempo, Loop über einen Taktbereich, Spuren anzeigen/stumm/solo,
+ * Metronom, Vorzähler, Darstellung, Lautstärke von Synth und Audiospur.
  *
  * alphaTab (rund 1 MB) und der SoundFont werden erst geladen, wenn ein Lied geöffnet wird.
  */
 
-import {escapeHtml, scoreUrl} from './api.js';
+import {escapeHtml, loadScoreText} from './api.js';
+import {Mixer} from './mixer.js';
+import {applySongMeta, loadAlphaTab, parseScore, readScoreInfo} from './score.js';
 
 /** @typedef {typeof import('../../types/alphatab')} AlphaTabModule */
 /** @typedef {import('../../types/alphatab').AlphaTabApi} AlphaTabApi */
 /** @typedef {import('../../types/alphatab').model.Score} Score */
 /** @typedef {import('../../types/alphatab').model.Track} Track */
+/** @typedef {import('./api.js').Song} Song */
+/** @typedef {import('./score.js').ScoreInfo} ScoreInfo */
 
 /** Basis-URL von alphaTab mit Schrift und SoundFont, relativ zu diesem Modul. */
 const VENDOR_URL = new URL('../vendor/alphatab/', import.meta.url).href;
@@ -18,62 +23,23 @@ const VENDOR_URL = new URL('../vendor/alphatab/', import.meta.url).href;
 const PREFS_KEY = 'gitarrenbuch_player';
 /** Präfix im localStorage für die angezeigten Spuren je Lied (+ Slug). */
 const TRACKS_KEY_PREFIX = 'gitarrenbuch_tracks_';
-
 /**
- * Ladevorgang des alphaTab-Moduls, null bis zum ersten Aufruf von loadAlphaTab().
- * @type {?Promise<AlphaTabModule>}
+ * Präfix im localStorage für den Audio-Versatz je Lied (+ Slug). Vorübergehend, bis der Sync-Editor kommt: Damit lässt
+ * sich eine Korrektur der Sync-Punkte nach Gehör ausprobieren (siehe docs/nachlieferung.md).
  */
-let alphaTabPromise = null;
-
-/**
- * Lädt das alphaTab-Modul beim ersten Aufruf (Lazy Loading).
- * @returns {Promise<AlphaTabModule>} das Modul
- */
-export function loadAlphaTab(){
-  alphaTabPromise ??= import('../vendor/alphatab/alphaTab.mjs');
-  return alphaTabPromise;
-}
-
-/** Dur-Tonarten nach Vorzeichen, Index = Anzahl Kreuze + 7 (wie bar.keySignature + 7). */
-const MAJOR_KEYS = ['Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#'];
-/** Moll-Tonarten nach Vorzeichen, Index wie bei MAJOR_KEYS. */
-const MINOR_KEYS = ['Abm', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm', 'Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'D#m', 'A#m'];
-
-/**
- * Liest Titel, Interpret, Tempo, Tonart, Capo und Stimmung aus einer GP-Datei, ohne sie anzuzeigen.
- * Dient als Angaben für das neue Lied beim Import.
- * @param {File} file Guitar-Pro-Datei
- * @returns {Promise<{title: string, artist: string, tempo: ?number, key: string, capo: number, tuning: string}>}
- *   leere Texte, wenn die Datei die Angabe nicht enthält
- */
-export async function readGpMetadata(file){
-  const alphaTab = await loadAlphaTab();
-  const score = alphaTab.importer.ScoreLoader.loadScoreFromBytes(new Uint8Array(await file.arrayBuffer()));
-  const track = score.tracks.find(t => !t.isPercussion) ?? score.tracks[0];
-  const staff = track?.staves[0];
-  const bar = staff?.bars[0];
-  const keys = bar?.keySignatureType === alphaTab.model.KeySignatureType.Minor ? MINOR_KEYS : MAJOR_KEYS;
-  // alphaTab führt die Saiten von der höchsten zur tiefsten, üblich ist die Schreibweise von Tief nach Hoch.
-  const tuning = staff?.isStringed
-    ? staff.tuning.slice().reverse().map(p => alphaTab.model.Tuning.getTextForTuning(p, false)).join(' ')
-    : '';
-  return {
-    title: score.title.trim(),
-    artist: score.artist.trim(),
-    tempo: score.tempo || null,
-    key: bar ? (keys[bar.keySignature + 7] ?? '') : '',
-    capo: staff?.capo || 0,
-    tuning,
-  };
-}
+const OFFSET_KEY_PREFIX = 'gitarrenbuch_audio_offset_';
 
 /**
  * Liest die Player-Einstellungen, ergänzt um Vorgaben.
- * @returns {{speed: number, metronome: boolean, countIn: boolean, layout: string, stave: string, scale: number}}
+ * @returns {{speed: number, metronome: boolean, countIn: boolean, layout: string, stave: string, scale: number,
+ *   synthVolume: number, audioVolume: number, metronomeVolume: number}} Lautstärken von 0 bis 1
  */
 function loadPrefs(){
   const defaults = {
     speed: 1, metronome: false, countIn: false, layout: 'Page', stave: 'Default', scale: window.innerWidth < 600 ? 0.75 : 1,
+    // Der Synth klingt bei gleicher Einstellung deutlich lauter als eine Aufnahme; Synth 50 % zu Audio 100 % klingt
+    // etwa ausgeglichen.
+    synthVolume: 0.5, audioVolume: 1, metronomeVolume: 1,
   };
   try {
     return Object.assign(defaults, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'));
@@ -108,13 +74,13 @@ export function formatTime(ms){
 const PLAYER_STATE_PLAYING = 1;
 
 /** Wählbare Abspieltempi (Faktor). */
-const SPEEDS = [0.5, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.1, 1.25];
+const SPEEDS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
 /** Wählbare Größen der Notendarstellung (Faktor). */
 const SCALES = [0.5, 0.6, 0.75, 0.9, 1, 1.25, 1.5];
 
 /**
  * Notenansicht mit Transportleiste und Einstellungsfeld für ein Lied.
- * Aufruf: const player = new Player(root); await player.load(slug); … player.destroy();
+ * Aufruf: const player = new Player(root); const info = await player.load(song); … player.destroy();
  */
 export class Player {
   /**
@@ -136,6 +102,20 @@ export class Player {
   prefs = loadPrefs();
   /** Slug des geladenen Lieds. */
   slug = '';
+  /**
+   * Audiospur, die dem Synth folgt; null, wenn das Lied keine audio.mp3 hat.
+   * @type {?Mixer}
+   */
+  mixer = null;
+  /** Audiospur stumm geschaltet (M in der Spurliste; gilt nur, solange das Lied offen ist). */
+  audioMute = false;
+  /** Audiospur solo geschaltet (S in der Spurliste): Die Spuren des Synths schweigen, das Metronom nicht. */
+  audioSolo = false;
+  /**
+   * Länge der Audiospur in Sekunden, sobald sie geladen ist; null ohne (oder mit unlesbarer) audio.mp3.
+   * @type {Promise<?number>}
+   */
+  audioDuration = new Promise(resolve => { this.resolveAudioDuration = resolve; });
   /**
    * Noten-/Tab-Anzeige je Notensystem, wie sie in der Datei steht (für prefs.stave = "Default").
    * @type {Map<Object, {notation: boolean, tab: boolean}>}
@@ -176,6 +156,9 @@ export class Player {
     this.seek = /** @type {HTMLInputElement} */ (this.el.seek);
     /** Auswahl des Abspieltempos. */
     this.speed = /** @type {HTMLSelectElement} */ (this.el.speed);
+    // Ein gespeichertes Tempo, das es in der Auswahl nicht mehr gibt (z. B. 75 %), auf das nächste setzen.
+    const saved = this.prefs.speed;
+    this.prefs.speed = SPEEDS.reduce((best, s) => Math.abs(s - saved) < Math.abs(best - saved) ? s : best);
     this.speed.value = String(this.prefs.speed);
     /** Holt die Wake-Lock-Sperre zurück, wenn die Seite beim Abspielen wieder sichtbar wird. */
     this.onVisibility = () => { if(document.visibilityState === 'visible' && this.isPlaying) void this.requestWakeLock(); };
@@ -191,16 +174,16 @@ export class Player {
   }
 
   /**
-   * Lädt alphaTab, den SoundFont und die Noten des Lieds.
-   * @param {string} slug Slug des Lieds
-   * @returns {Promise<void>} erfüllt, sobald die Noten an alphaTab übergeben sind
+   * Lädt alphaTab, den SoundFont und die Noten des Lieds (score.atex); Titel und Interpret kommen aus song.json.
+   * @param {Song} song Lied
+   * @returns {Promise<ScoreInfo>} Eckdaten aus den Noten, sobald diese an alphaTab übergeben sind
    */
-  async load(slug){
-    this.slug = slug;
-    const alphaTab = this.alphaTab = await loadAlphaTab();
-    const res = await fetch(scoreUrl(slug));
-    if(!res.ok) throw new Error(res.status === 404 ? 'Keine Noten vorhanden.' : `Noten konnten nicht geladen werden (HTTP ${res.status}).`);
-    const data = new Uint8Array(await res.arrayBuffer());
+  async load(song){
+    this.slug = song.slug;
+    // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
+    const alphaTab = await loadAlphaTab();
+    const tex = await loadScoreText(song.slug);
+    this.alphaTab = alphaTab;
 
     const api = this.api = new alphaTab.AlphaTabApi(this.el.at, {
       core: {fontDirectory: VENDOR_URL + 'font/'},
@@ -215,11 +198,9 @@ export class Player {
         scrollOffsetY: -80,
       },
     });
-    api.metronomeVolume = this.prefs.metronome ? 1 : 0;
-    api.countInVolume = this.prefs.countIn ? 1 : 0;
+    this.applyLevels();
     api.playbackSpeed = this.prefs.speed;
 
-    api.scoreLoaded.on(score => this.onScoreLoaded(score));
     api.renderStarted.on(() => this.setStatus('Noten werden gezeichnet &hellip;'));
     api.renderFinished.on(() => this.setStatus(''));
     api.soundFontLoad.on(e => this.setStatus(`Klänge werden geladen &hellip; ${Math.round(e.loaded / e.total * 100)} %`));
@@ -228,7 +209,11 @@ export class Player {
       this.el.stop.disabled = false;
     });
     api.playerStateChanged.on(e => this.onStateChanged(e.state));
-    api.playerPositionChanged.on(e => this.onPosition(e.currentTime, e.endTime));
+    api.playerPositionChanged.on(e => {
+      this.onPosition(e.currentTime, e.endTime);
+      this.mixer?.onPosition(e.currentTick, e.isSeek);
+      this.applySpeed(e.currentTick);
+    });
     api.playbackRangeChanged.on(() => this.renderPanel());
     api.error.on(err => this.setStatus(escapeHtml('Fehler: ' + (err.message || err))));
 
@@ -236,7 +221,9 @@ export class Player {
     this.el.stop.addEventListener('click', () => api.stop());
     this.seek.addEventListener('input', () => { api.timePosition = Number(this.seek.value); });
     this.speed.addEventListener('change', () => {
-      api.playbackSpeed = this.prefs.speed = Number(this.speed.value);
+      this.prefs.speed = Number(this.speed.value);
+      this.mixer?.setSpeed(this.prefs.speed);
+      this.applySpeed(api.tickPosition);
       savePrefs(this.prefs);
     });
     this.el.loop.addEventListener('click', () => {
@@ -245,9 +232,98 @@ export class Player {
     });
     this.el.settings.addEventListener('click', () => this.togglePanel());
     this.el.panel.addEventListener('change', e => this.onPanelChange(/** @type {HTMLInputElement} */ (e.target)));
+    // Lautstärken und Versatz schon beim Ziehen bzw. Tippen übernehmen, nicht erst beim Loslassen.
+    this.el.panel.addEventListener('input', e => {
+      const t = /** @type {HTMLInputElement} */ (e.target);
+      if(t.dataset.mix) this.onMixChange(t);
+    });
     this.el.panel.addEventListener('click', e => this.onPanelClick(/** @type {HTMLElement} */ (e.target)));
 
-    api.load(data);
+    const score = parseScore(alphaTab, tex, api.settings);
+    applySongMeta(score, song);
+    this.applyStave(score);
+    api.renderScore(score, this.loadVisibleTracks(score).map(t => t.index));
+    if(song.files.includes('audio')) void this.loadMixer(score);
+    else this.resolveAudioDuration(null);
+    return readScoreInfo(alphaTab, score);
+  }
+
+  /**
+   * Lädt die Audiospur in den Mixer; Fehler erscheinen in der Statuszeile, der Synth spielt weiter allein.
+   * @param {Score} score geladene Noten (mit Sync-Punkten)
+   * @returns {Promise<void>}
+   */
+  async loadMixer(score){
+    const mixer = new Mixer(this.alphaTab);
+    try {
+      this.resolveAudioDuration(await mixer.load(this.slug, score));
+    } catch(err){
+      this.resolveAudioDuration(null);
+      this.setStatus(escapeHtml(err.message));
+      return;
+    }
+    if(!this.api){
+      mixer.destroy();
+      return;
+    }
+    mixer.setSpeed(this.prefs.speed);
+    mixer.setOffset(Number(localStorage.getItem(OFFSET_KEY_PREFIX + this.slug)) || 0);
+    mixer.onState(this.isPlaying);
+    this.mixer = mixer;
+    this.applyLevels();
+    this.applySpeed(this.api.tickPosition);
+    this.renderPanel();
+  }
+
+  /**
+   * Setzt das Abspieltempo von alphaTab: eingestelltes Tempo mal Tempofaktor der Aufnahme an dieser Stelle (siehe
+   * Mixer.tempoFactor()). Ohne Audiospur bleibt es beim eingestellten Tempo.
+   * @param {number} tick aktueller MIDI-Tick
+   * @returns {void}
+   */
+  applySpeed(tick){
+    const speed = this.prefs.speed * (this.mixer?.tempoFactor(tick) ?? 1);
+    if(this.api && Math.abs(this.api.playbackSpeed - speed) > 0.0005) this.api.playbackSpeed = speed;
+  }
+
+  /**
+   * Setzt alle Lautstärken: Synth, Metronom und Vorzähler (ein Regler für beide), Audiospur. Stumm und Solo der
+   * Audiospur wirken wie bei den Spuren des Synths: Solo auf der Audiospur lässt die Synth-Spuren schweigen, Solo auf
+   * einer Synth-Spur die Audiospur. Das Metronom bleibt in beiden Fällen hörbar.
+   * @returns {void}
+   */
+  applyLevels(){
+    const api = this.api;
+    if(!api) return;
+    /** @type {?Score} */
+    const score = api.score;
+    const trackSolo = score ? score.tracks.some(t => t.playbackInfo.isSolo) : false;
+    api.masterVolume = this.prefs.synthVolume;
+    api.metronomeVolume = this.prefs.metronome ? this.prefs.metronomeVolume : 0;
+    api.countInVolume = this.prefs.countIn ? this.prefs.metronomeVolume : 0;
+    if(score) api.changeTrackVolume(score.tracks, this.audioSolo && !trackSolo ? 0 : 1);
+    const audible = !this.audioMute && (this.audioSolo || !trackSolo);
+    this.mixer?.setVolume(audible ? this.prefs.audioVolume : 0);
+  }
+
+  /**
+   * Übernimmt die Lautstärke von Synth, Audiospur oder Metronom bzw. den Audio-Versatz aus dem Einstellungsfeld.
+   * @param {HTMLInputElement} t geändertes Element mit data-mix ("synth", "audio", "metronome" oder "offset")
+   * @returns {void}
+   */
+  onMixChange(t){
+    const value = Number(t.value);
+    if(t.dataset.mix === 'offset'){
+      this.mixer?.setOffset(value || 0);
+      localStorage.setItem(OFFSET_KEY_PREFIX + this.slug, String(value || 0));
+      return;
+    }
+    const level = this.el.panel.querySelector(`[data-level="${t.dataset.mix}"]`);
+    if(level) level.textContent = `${Math.round(value * 100)} %`;
+    const pref = {synth: 'synthVolume', audio: 'audioVolume', metronome: 'metronomeVolume'}[t.dataset.mix];
+    this.prefs[pref] = value;
+    this.applyLevels();
+    savePrefs(this.prefs);
   }
 
   /**
@@ -258,18 +334,6 @@ export class Player {
   setStatus(html){
     this.el.status.innerHTML = html;
     this.el.status.hidden = !html;
-  }
-
-  /**
-   * Zeigt die gemerkten Spuren an, sobald alphaTab die Noten gelesen hat.
-   * @param {Score} score geladene Noten
-   * @returns {void}
-   */
-  onScoreLoaded(score){
-    this.applyStave(score);
-    const visible = this.loadVisibleTracks(score);
-    if(visible.length) this.api.renderTracks(visible);
-    this.renderPanel();
   }
 
   /**
@@ -324,6 +388,7 @@ export class Player {
     const playing = state === PLAYER_STATE_PLAYING;
     this.el.play.innerHTML = playing ? '&#10074;&#10074;' : '&#9654;';
     this.el.play.setAttribute('aria-label', playing ? 'Pause' : 'Abspielen');
+    this.mixer?.onState(playing);
     if(playing) void this.requestWakeLock();
     else this.releaseWakeLock();
   }
@@ -409,7 +474,18 @@ export class Player {
             <button class="tbtn small${t.playbackInfo.isMute ? ' on' : ''}" type="button" data-track-mute="${t.index}" title="Stumm">M</button>
             <button class="tbtn small${t.playbackInfo.isSolo ? ' on' : ''}" type="button" data-track-solo="${t.index}" title="Solo">S</button>
           </li>`).join('')}
+        ${this.mixer ? `
+          <li>
+            <label><input type="checkbox" checked disabled> Audiospur</label>
+            <button class="tbtn small${this.audioMute ? ' on' : ''}" type="button" data-audio-mute title="Stumm">M</button>
+            <button class="tbtn small${this.audioSolo ? ' on' : ''}" type="button" data-audio-solo title="Solo">S</button>
+          </li>` : ''}
       </ul>
+      <h4>Üben</h4>
+      <div class="panel-row">
+        <label><input type="checkbox" data-pref="metronome"${this.prefs.metronome ? ' checked' : ''}> Metronom</label>
+        <label><input type="checkbox" data-pref="countIn"${this.prefs.countIn ? ' checked' : ''}> Vorzähler</label>
+      </div>
       <h4>Loop-Bereich</h4>
       <div class="panel-row">
         Takt <input type="number" min="1" max="${barCount}" value="${fromBar}" data-range="from" aria-label="Von Takt">
@@ -417,11 +493,22 @@ export class Player {
         <button class="tbtn small" type="button" data-range-clear>&times;</button>
       </div>
       <div class="hint">Oder im Notenblatt mit der Maus bzw. dem Finger über die Takte ziehen.</div>
-      <h4>Üben</h4>
-      <div class="panel-row">
-        <label><input type="checkbox" data-pref="metronome"${this.prefs.metronome ? ' checked' : ''}> Metronom</label>
-        <label><input type="checkbox" data-pref="countIn"${this.prefs.countIn ? ' checked' : ''}> Vorzähler</label>
+      <h4>Lautstärke</h4>
+      <div class="mix-grid">
+        ${[['synth', 'Synth', this.prefs.synthVolume], ...(this.mixer ? [['audio', 'Audio', this.prefs.audioVolume]] : []),
+          ['metronome', 'Metronom', this.prefs.metronomeVolume]].map(([key, label, value]) => `
+          <label for="mix-${key}">${label}</label>
+          <input type="range" id="mix-${key}" min="0" max="1" step="0.05" value="${value}" data-mix="${key}">
+          <output data-level="${key}">${Math.round(value * 100)} %</output>`).join('')}
       </div>
+      ${!this.mixer ? '' : this.mixer.synced ? `
+        <div class="panel-row">
+          <label>Audio-Versatz <input type="number" step="10" value="${this.mixer.offset}" data-mix="offset"
+            aria-label="Audio-Versatz in Millisekunden"> ms</label>
+        </div>
+        <div class="hint">Vorübergehend bis zum Sync-Editor: Negativ heißt Audiospur früher. Zum Ausprobieren einer
+          Korrektur der Sync-Punkte; gilt nur hier im Browser.</div>`
+        : '<div class="hint">Die Noten haben keine Sync-Punkte, die Audiospur kann ihnen noch nicht folgen.</div>'}
       <h4>Darstellung</h4>
       <div class="panel-row">
         <select data-pref="stave" aria-label="Notensystem">
@@ -448,7 +535,9 @@ export class Player {
   onPanelChange(t){
     const api = this.api;
     const alphaTab = this.alphaTab;
-    if(t.dataset.trackShow !== undefined){
+    if(t.dataset.mix){
+      // Lautstärken übernimmt onMixChange() schon beim input-Ereignis.
+    } else if(t.dataset.trackShow !== undefined){
       const checked = [...this.el.panel.querySelectorAll('[data-track-show]:checked')].map(n => Number(n.dataset.trackShow));
       if(!checked.length){ t.checked = true; return; }
       localStorage.setItem(TRACKS_KEY_PREFIX + this.slug, JSON.stringify(checked));
@@ -459,8 +548,7 @@ export class Player {
       const pref = t.dataset.pref;
       if(pref === 'metronome' || pref === 'countIn'){
         this.prefs[pref] = t.checked;
-        if(pref === 'metronome') api.metronomeVolume = t.checked ? 1 : 0;
-        else api.countInVolume = t.checked ? 1 : 0;
+        this.applyLevels();
       } else {
         this.prefs[pref] = pref === 'scale' ? Number(t.value) : t.value;
         api.settings.display.scale = this.prefs.scale;
@@ -474,7 +562,7 @@ export class Player {
   }
 
   /**
-   * Reagiert auf Klicks im Einstellungsfeld: Stumm, Solo, Loop-Bereich löschen.
+   * Reagiert auf Klicks im Einstellungsfeld: Stumm, Solo (auch der Audiospur), Loop-Bereich löschen.
    * @param {HTMLElement} t angeklicktes Element
    * @returns {void}
    */
@@ -489,6 +577,15 @@ export class Player {
       const track = api.score.tracks[Number(t.dataset.trackSolo)];
       api.changeTrackSolo([track], !track.playbackInfo.isSolo);
       track.playbackInfo.isSolo = !track.playbackInfo.isSolo;
+      this.applyLevels();
+      this.renderPanel();
+    } else if(t.dataset.audioMute !== undefined){
+      this.audioMute = !this.audioMute;
+      this.applyLevels();
+      this.renderPanel();
+    } else if(t.dataset.audioSolo !== undefined){
+      this.audioSolo = !this.audioSolo;
+      this.applyLevels();
       this.renderPanel();
     } else if(t.dataset.rangeClear !== undefined){
       api.playbackRange = null;
@@ -527,6 +624,8 @@ export class Player {
   destroy(){
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.releaseWakeLock();
+    this.mixer?.destroy();
+    this.mixer = null;
     this.api?.destroy();
     this.api = null;
     this.root.innerHTML = '';

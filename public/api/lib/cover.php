@@ -160,8 +160,49 @@ function is_allowed_cover_url(string $url): bool
 }
 
 /**
- * Legt eine lokale JPEG-Datei als cover.jpg eines Lieds ab (ersetzt ein vorhandenes Cover).
- * Andere Formate wandelt der Browser vor dem Hochladen in JPEG um, so braucht der Server kein GD.
+ * JPEG-Qualität beim Zuschneiden eigener Bilder (wie toCoverJpeg() in js/library.js).
+ *
+ * @var int 0 bis 100
+ */
+const COVER_JPEG_QUALITY = 88;
+
+/**
+ * Schneidet ein JPEG mittig quadratisch zu und skaliert es auf COVER_SIZE × COVER_SIZE (kleinere Bilder werden
+ * vergrößert). Bilder, die schon so groß sind (Deezer, iTunes), bleiben unverändert, damit sie nicht neu komprimiert
+ * werden.
+ *
+ * @param string $path JPEG-Datei, wird überschrieben
+ * @param int $width Breite in Pixeln
+ * @param int $height Höhe in Pixeln
+ * @return void
+ * @throws CoverValidationException wenn sich das Bild nicht lesen lässt
+ * @throws RuntimeException wenn GD fehlt oder das Schreiben scheitert
+ */
+function crop_cover(string $path, int $width, int $height): void
+{
+    if ($width === COVER_SIZE && $height === COVER_SIZE) {
+        return;
+    }
+    if (!extension_loaded('gd')) {
+        throw new RuntimeException('Zuschneiden nicht möglich: PHP-Erweiterung GD fehlt');
+    }
+    $source = @imagecreatefromjpeg($path);
+    if ($source === false) {
+        throw new CoverValidationException('JPEG-Bild nicht lesbar');
+    }
+    $side = min($width, $height);
+    $cover = imagecreatetruecolor(COVER_SIZE, COVER_SIZE);
+    imagecopyresampled($cover, $source, 0, 0, intdiv($width - $side, 2), intdiv($height - $side, 2),
+        COVER_SIZE, COVER_SIZE, $side, $side);
+    if (!imagejpeg($cover, $path, COVER_JPEG_QUALITY)) {
+        throw new RuntimeException('Cover konnte nicht gespeichert werden');
+    }
+}
+
+/**
+ * Legt eine lokale JPEG-Datei als cover.jpg eines Lieds ab (ersetzt ein vorhandenes Cover), mittig quadratisch
+ * zugeschnitten auf COVER_SIZE × COVER_SIZE (siehe crop_cover()). Andere Formate wandelt der Browser vor dem
+ * Hochladen in JPEG um.
  *
  * @param string $slug Slug des Lieds
  * @param string $localPath lokale Bilddatei; wird nur gelesen, Aufräumen bleibt Sache des Aufrufers
@@ -171,14 +212,23 @@ function is_allowed_cover_url(string $url): bool
 function store_cover(string $slug, string $localPath): array
 {
     if (read_song_json($slug) === null) {
-        throw new NotFoundException("Lied '$slug' nicht gefunden");
+        throw new NotFoundException("Song '$slug' nicht gefunden");
     }
     $info = @getimagesize($localPath);
     if ($info === false || $info[2] !== IMAGETYPE_JPEG) {
         throw new CoverValidationException('Kein JPEG-Bild');
     }
-    if (!copy($localPath, song_dir($slug) . '/' . SONG_FILES['cover'])) {
-        throw new RuntimeException('Cover konnte nicht gespeichert werden');
+    $tmp = tempnam(sys_get_temp_dir(), 'gbcover_');
+    try {
+        if (!copy($localPath, $tmp)) {
+            throw new RuntimeException('Cover konnte nicht gespeichert werden');
+        }
+        crop_cover($tmp, $info[0], $info[1]);
+        if (!copy($tmp, song_dir($slug) . '/' . SONG_FILES['cover'])) {
+            throw new RuntimeException('Cover konnte nicht gespeichert werden');
+        }
+    } finally {
+        @unlink($tmp);
     }
     return touch_song($slug);
 }
@@ -234,7 +284,7 @@ function auto_cover(string $slug, string $artist, string $title): ?array
 function delete_cover(string $slug): array
 {
     if (read_song_json($slug) === null) {
-        throw new NotFoundException("Lied '$slug' nicht gefunden");
+        throw new NotFoundException("Song '$slug' nicht gefunden");
     }
     $path = song_dir($slug) . '/' . SONG_FILES['cover'];
     if (is_file($path) && !unlink($path)) {

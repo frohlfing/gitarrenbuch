@@ -34,7 +34,7 @@ try {
                 json_response(200, ['results' => search_covers(trim((string) ($_GET['artist'] ?? '')), $title)]);
             }
             if (read_song_json($slug) === null) {
-                json_error(404, "Lied '$slug' nicht gefunden");
+                json_error(404, "Song '$slug' nicht gefunden");
             }
             $path = song_dir($slug) . '/' . SONG_FILES['cover'];
             if (!is_file($path)) {

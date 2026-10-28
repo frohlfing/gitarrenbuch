@@ -1,13 +1,13 @@
 <?php
 
 /**
- * Liefert die Arbeitsversion score.gp eines Lieds aus (binär, für alphaTab).
+ * Liefert die Noten eines Lieds aus (score.atex, für alphaTab).
  * Nötig, weil DATA_DIR bewusst außerhalb des Document Root liegt.
  *
  * `GET /api/score.php?slug=xyz`
- * Antwort: die GP-Datei als application/octet-stream, 404, falls Lied oder Datei fehlt.
+ * Antwort: alphaTex als text/plain (UTF-8), 404, falls Lied oder Datei fehlt.
  *
- * Schreiben (PUT) kommt mit dem Editor in Phase 3.
+ * Schreiben (PUT) kommt mit dem geplanten Editor.
  */
 
 require_once __DIR__ . '/../../config.php';
@@ -20,12 +20,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 
 $slug = (string) ($_GET['slug'] ?? '');
 if (read_song_json($slug) === null) {
-    json_error(404, "Lied '$slug' nicht gefunden");
+    json_error(404, "Song '$slug' nicht gefunden");
 }
 
-$path = song_dir($slug) . '/score.gp';
+$path = song_dir($slug) . '/' . SONG_FILES['score'];
 if (!is_file($path)) {
     json_error(404, 'Keine Noten vorhanden');
 }
 
-send_file($path, 'application/octet-stream');
+send_file($path, 'text/plain; charset=utf-8');

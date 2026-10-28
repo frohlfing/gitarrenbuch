@@ -4,14 +4,9 @@
  */
 
 /**
- * Welche Dateien im Liedordner vorhanden sind (berechnet die API bei jedem Lesen).
- * @typedef {Object} SongFiles
- * @property {boolean} score Noten (score.gp)
- * @property {boolean} lyrics Text mit Akkorden (song.cho)
- * @property {boolean} audio Audiospur (audio.mp3)
- * @property {boolean} sync Sync-Punkte zwischen Noten und Audio (sync.json)
- * @property {boolean} leadsheet Leadsheet (leadsheet.json)
- * @property {boolean} cover Albumcover (cover.jpg)
+ * Eine Datei im Liedordner: score (score.atex, Noten mit Text, Akkorden und Sync-Punkten), audio (audio.mp3),
+ * leadsheet (leadsheet.json) oder cover (cover.jpg).
+ * @typedef {'score'|'audio'|'leadsheet'|'cover'} SongFile
  */
 
 /**
@@ -20,16 +15,21 @@
  * @property {string} slug Ordnername, aus Interpret + Titel gebildet
  * @property {string} title Titel
  * @property {?string} artist Interpret
- * @property {?string} key Tonart, z. B. "A" oder "Em"
- * @property {?number} capo Bund des Kapodasters
- * @property {?string} tuning Stimmung, z. B. "E A D G B E"
- * @property {?number} tempo Tempo in BPM
  * @property {?('strumming'|'fingerpicking')} technique Spieltechnik
  * @property {string[]} tags Schlagwörter
+ * @property {?string} subtitle Untertitel (wie die folgenden Felder beim Import aus der GP-Datei, vorerst ungenutzt)
+ * @property {?string} album Album
+ * @property {?string} words Text von
+ * @property {?string} music Musik von
+ * @property {?string} copyright Copyright
+ * @property {?string} tab Tab-Autor
+ * @property {?string} instructions Anweisungen
+ * @property {?string} notes Notizen, mehrzeilig (beim Import die Beschreibung aus der GP-Datei)
  * @property {{ultimateGuitar?: string, youtube?: string}} sources Herkunft des Rohmaterials (URLs)
+ * @property {?number} youtubeSeconds Länge des YouTube-Clips aus sources.youtube in Sekunden; null, wenn unbekannt
  * @property {string} created Anlagezeitpunkt (ISO 8601)
  * @property {string} updated Änderungszeitpunkt (ISO 8601)
- * @property {SongFiles} files vorhandene Dateien
+ * @property {SongFile[]} files vorhandene Dateien (berechnet die API bei jedem Lesen), z. B. ["score", "cover"]
  */
 
 /** Schlüssel des API-Tokens im localStorage. */
@@ -60,12 +60,51 @@ export async function loadSongs(){
 }
 
 /**
- * URL der Arbeitsversion score.gp (data/ liegt außerhalb des Document Root, deshalb über die API).
+ * Lädt die Noten eines Lieds (score.atex; data/ liegt außerhalb des Document Root, deshalb über die API).
  * @param {string} slug Slug des Lieds
- * @returns {string} URL von api/score.php
+ * @returns {Promise<string>} alphaTex
  */
-export function scoreUrl(slug){
-  return `${API_URL}score.php?slug=${encodeURIComponent(slug)}`;
+export async function loadScoreText(slug){
+  const res = await fetch(`${API_URL}score.php?slug=${encodeURIComponent(slug)}`);
+  if(!res.ok){
+    throw new Error(res.status === 404
+      ? 'Keine Noten vorhanden.'
+      : `Noten konnten nicht geladen werden (HTTP ${res.status}).`);
+  }
+  return res.text();
+}
+
+/**
+ * Lädt die Audiospur eines Lieds (audio.mp3).
+ * @param {string} slug Slug des Lieds
+ * @returns {Promise<Uint8Array>} MP3
+ */
+export async function loadAudio(slug){
+  const res = await fetch(audioUrl(slug));
+  if(!res.ok) throw new Error(`Audiospur konnte nicht geladen werden (HTTP ${res.status}).`);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+/**
+ * URL der Audiospur eines Lieds (audio.mp3).
+ * @param {string} slug Slug des Lieds
+ * @returns {string} URL
+ */
+export function audioUrl(slug){
+  return `${API_URL}audio.php?slug=${encodeURIComponent(slug)}`;
+}
+
+/**
+ * Titel und Länge eines YouTube-Videos.
+ * @param {string} url YouTube-URL
+ * @returns {Promise<{id: string, title: string, seconds: number}>} Angaben zum Video
+ * @throws {Error} wenn die URL kein YouTube-Video ist oder das Video nicht verfügbar ist
+ */
+export async function loadYoutubeInfo(url){
+  const res = await fetch(`${API_URL}youtube.php?${new URLSearchParams({url})}`);
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  return data;
 }
 
 /**
@@ -127,15 +166,17 @@ export async function apiWrite(url, options){
 }
 
 /**
- * Importiert eine GP-Datei als neues Lied.
- * @param {File} file Guitar-Pro-Datei
- * @param {Object} meta im Browser aus der Datei gelesene Angaben (Felder wie bei POST api/songs.php)
+ * Legt ein neues Lied mit Noten an: aus einer importierten GP-Datei oder mit dem Gerüst aus dem Formular.
+ * @param {Object} meta Angaben aus der Datei bzw. dem Formular (Felder wie bei PUT api/songs.php)
+ * @param {string} tex Noten als alphaTex (siehe readGpFile() bzw. createScore() in score.js)
+ * @param {?File} [file] Original-GP-Datei; der Server legt sie unter orig/ ab und löst die Audiospur heraus
  * @returns {Promise<Song>} das neue Lied
  */
-export function importGpFile(file, meta){
+export function importSong(meta, tex, file = null){
   const fd = new FormData();
-  fd.append('file', file);
   fd.append('meta', JSON.stringify(meta));
+  fd.append('score', tex);
+  if(file) fd.append('file', file);
   return apiWrite(API_URL + 'import.php', {method: 'POST', body: fd});
 }
 
@@ -152,7 +193,7 @@ export function importGpFile(file, meta){
 
 /**
  * URL des Covers. Das Änderungsdatum hängt als Parameter dran, damit ein neues Cover sofort erscheint.
- * @param {Song} song Lied mit files.cover
+ * @param {Song} song Lied mit Cover (files enthält "cover")
  * @returns {string} URL von api/cover.php
  */
 export function coverUrl(song){
@@ -206,4 +247,17 @@ export function uploadCover(slug, jpeg){
  */
 export function deleteCover(slug){
   return apiWrite(`${API_URL}cover.php?slug=${encodeURIComponent(slug)}`, {method: 'DELETE'});
+}
+
+/**
+ * Lädt eine Akkorddatei (ChordPro oder Text) hoch. Sie landet als Rohmaterial unter orig/ und wird mit dem Editor
+ * (geplant) in die Noten eingearbeitet.
+ * @param {string} slug Slug des Lieds
+ * @param {File} file .cho, .chopro, .crd, .pro oder .txt
+ * @returns {Promise<Song>} das aktualisierte Lied
+ */
+export function uploadChordFile(slug, file){
+  const fd = new FormData();
+  fd.append('file', file);
+  return apiWrite(`${API_URL}lyrics.php?slug=${encodeURIComponent(slug)}`, {method: 'POST', body: fd});
 }

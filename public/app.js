@@ -3,9 +3,10 @@
  * Die eigentliche Arbeit steckt in den ES-Modulen unter js/.
  */
 
-import {escapeHtml} from './js/api.js';
-import {deleteSongUI, findSong, initLibrary, openCoverForm, openImportForm, openSongForm, songMeta} from './js/library.js';
+import {escapeHtml, loadAudio, loadScoreText} from './js/api.js';
+import {deleteSongUI, findSong, initLibrary, openImportForm, openSongForm} from './js/library.js';
 import {Player} from './js/player.js';
+import {describeScoreInfo, exportGpFile} from './js/score.js';
 
 /** @typedef {import('./js/api.js').Song} Song */
 
@@ -13,7 +14,7 @@ import {Player} from './js/player.js';
 const libraryView = document.getElementById('libraryView');
 /** Bereich der Liedansicht. */
 const songView = document.getElementById('songView');
-/** Button „+ Neues Lied“. */
+/** Button „+ Neuer Song“: öffnet den Import-Dialog (dort auch „Manuell“). */
 const newSongBtn = document.getElementById('newSongBtn');
 
 /**
@@ -45,6 +46,23 @@ function showLibrary(){
 }
 
 /**
+ * Lädt eine vollständige Guitar-Pro-Datei des Lieds herunter (Noten, Angaben, Audiospur mit Sync-Punkten).
+ * @param {Song} song Lied
+ * @returns {Promise<void>}
+ */
+async function downloadGpFile(song){
+  // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
+  const tex = await loadScoreText(song.slug);
+  const audio = song.files.includes('audio') ? await loadAudio(song.slug) : null;
+  const file = await exportGpFile(song, tex, audio);
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(file);
+  link.download = file.name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+/**
  * Zeigt die Liedansicht mit Kopfzeile, Menü und Noten.
  * @param {Song} song Lied
  * @returns {void}
@@ -57,19 +75,19 @@ function showSong(song){
   document.title = `${song.title} – Gitarrenbuch`;
   window.scrollTo(0, 0);
 
-  const meta = songMeta(song);
   songView.innerHTML = `
     <div class="songbar">
-      <a class="btn btn-icon" href="#/" aria-label="Zur Liederliste">&larr;</a>
+      <a class="btn btn-icon" href="#/" aria-label="Zur Songliste">&larr;</a>
       <div class="songbar-titles">
         <h2>${escapeHtml(song.title)}</h2>
-        <div class="songbar-meta">${escapeHtml([song.artist, meta].filter(Boolean).join(' · '))}</div>
+        <div class="songbar-meta" id="songMeta">${escapeHtml(song.artist ?? '')}</div>
       </div>
       <div class="songbar-menu">
         <button class="btn btn-icon" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
         <div class="menu" id="menu" hidden>
           <button type="button" id="editBtn">Bearbeiten</button>
-          <button type="button" id="coverBtn">Cover ändern</button>
+          <button type="button" id="exportBtn"${song.files.includes('score') ? '' : ' hidden'}
+            title="Als Guitar-Pro-Datei (.gp) mit Audiospur und Sync-Punkten">Exportieren</button>
           <button type="button" id="deleteBtn" class="danger">Löschen</button>
         </div>
       </div>
@@ -81,7 +99,7 @@ function showSong(song){
   const menuBtn = document.getElementById('menuBtn');
   const setMenu = open => { menu.hidden = !open; menuBtn.setAttribute('aria-expanded', String(open)); };
   menuBtn.addEventListener('click', () => setMenu(menu.hidden));
-  // Cover-Änderungen landen nur in SONGS, nicht in song: Formulare deshalb mit dem aktuellen Stand öffnen.
+  // Ein im Formular geändertes Cover landet nur in SONGS, nicht in song: deshalb mit dem aktuellen Stand öffnen.
   const current = () => findSong(song.slug) ?? song;
 
   document.getElementById('editBtn').addEventListener('click', () => {
@@ -92,9 +110,9 @@ function showSong(song){
       else showSong(saved);
     });
   });
-  document.getElementById('coverBtn').addEventListener('click', () => {
+  document.getElementById('exportBtn').addEventListener('click', () => {
     setMenu(false);
-    openCoverForm(current(), () => {});
+    downloadGpFile(current()).catch(err => alert('Export fehlgeschlagen: ' + err.message));
   });
   document.getElementById('deleteBtn').addEventListener('click', async () => {
     setMenu(false);
@@ -102,12 +120,24 @@ function showSong(song){
   });
 
   const root = document.getElementById('playerRoot');
-  if(!song.files.score){
-    root.innerHTML = `<p class="empty">Keine Noten vorhanden. Noten kommen über „Importieren“ in der Liederliste.</p>`;
+  if(!song.files.includes('score')){
+    root.innerHTML = `<p class="empty">Keine Noten vorhanden. Noten kommen über „+ Neuer Song“ in der Songliste.</p>`;
     return;
   }
   player = new Player(root);
-  player.load(song.slug).catch(err => {
+  // Tonart, Capo usw. stehen nur in den Noten und kommen deshalb erst nach dem Laden in die Kopfzeile.
+  // Element vorher merken: Ist bis dahin schon ein anderes Lied offen, trifft die Antwort nur das alte, entfernte.
+  const metaEl = document.getElementById('songMeta');
+  const showMeta = (info, audioSeconds = null) => {
+    metaEl.innerHTML = [escapeHtml(song.artist ?? ''), describeScoreInfo(info, audioSeconds)]
+      .filter(Boolean).join(' · ');
+  };
+  const songPlayer = player;
+  songPlayer.load(song).then(info => {
+    showMeta(info);
+    // Ob die Sync-Punkte in die Audiospur passen, steht erst fest, wenn sie geladen ist.
+    void songPlayer.audioDuration.then(seconds => { if(seconds) showMeta(info, seconds); });
+  }).catch(err => {
     root.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
   });
 }
@@ -133,8 +163,7 @@ function route(){
  * @returns {void}
  */
 const openSaved = saved => { location.hash = songHash(saved.slug); };
-newSongBtn.addEventListener('click', () => openSongForm(null, openSaved));
-document.getElementById('importBtn').addEventListener('click', () => openImportForm(openSaved));
+newSongBtn.addEventListener('click', () => openImportForm(openSaved));
 window.addEventListener('hashchange', route);
 // Klick außerhalb schließt das Menü der Liedansicht.
 document.addEventListener('click', e => {
@@ -149,5 +178,5 @@ try {
   route();
 } catch(err){
   console.error(err);
-  document.getElementById('subCount').textContent = 'Lieder konnten nicht geladen werden.';
+  document.getElementById('subCount').textContent = 'Songs konnten nicht geladen werden.';
 }

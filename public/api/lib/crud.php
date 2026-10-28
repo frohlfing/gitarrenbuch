@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/slug.php';
+require_once __DIR__ . '/youtube.php';
 
 /** Eingaben eines Lieds sind ungültig; $errors enthält die einzelnen Meldungen. */
 class ValidationException extends RuntimeException
@@ -39,16 +40,32 @@ const SONG_TECHNIQUES = ['strumming', 'fingerpicking'];
 const SONG_SOURCES = ['ultimateGuitar', 'youtube'];
 
 /**
- * Dateien im Liedordner, deren Vorhandensein die API als "files" mitliefert. Wird bei jedem Lesen aus dem
- * Dateisystem bestimmt und nicht in song.json gespeichert, damit es nicht veralten kann.
+ * Weitere Angaben aus der GP-Datei, beim Import 1:1 übernommen und in song.json als eigene Felder vor notes
+ * gespeichert (die Noten enthalten keine Angaben; beim GP-Export werden sie wieder eingesetzt). Das Gitarrenbuch nutzt
+ * sie vorerst nicht, das Formular "Song bearbeiten" lässt sie unverändert.
+ *
+ * @var array<string, string> Feld in song.json => Bezeichnung in Guitar Pro
+ */
+const SONG_INFO_FIELDS = [
+    'subtitle' => 'Untertitel',
+    'album' => 'Album',
+    'words' => 'Text',
+    'music' => 'Musik',
+    'copyright' => 'Copyright',
+    'tab' => 'Tab-Autor',
+    'instructions' => 'Anweisungen',
+];
+
+/**
+ * Dateien im Liedordner, deren Vorhandensein die API als "files" mitliefert (Liste der Schlüssel der vorhandenen
+ * Dateien). Wird bei jedem Lesen aus dem Dateisystem bestimmt und nicht in song.json gespeichert, damit es nicht
+ * veralten kann.
  *
  * @var array<string, string> Schlüssel in files => Dateiname
  */
 const SONG_FILES = [
-    'score' => 'score.gp',
-    'lyrics' => 'song.cho',
+    'score' => 'score.atex',
     'audio' => 'audio.mp3',
-    'sync' => 'sync.json',
     'leadsheet' => 'leadsheet.json',
     'cover' => 'cover.jpg',
 ];
@@ -127,13 +144,14 @@ function list_song_slugs(): array
  *
  * @param string $slug Slug des Lieds
  * @param array $song Inhalt von song.json
- * @return array $song mit files (Schlüssel aus SONG_FILES => bool) und sources als Objekt
+ * @return array $song mit files (Liste der Schlüssel aus SONG_FILES, deren Datei vorhanden ist, z. B.
+ *               ["score", "audio", "cover"]) und sources als Objekt
  */
 function with_file_flags(string $slug, array $song): array
 {
     $dir = song_dir($slug);
     $song['sources'] = (object) ($song['sources'] ?? []);
-    $song['files'] = array_map(fn(string $name) => is_file($dir . '/' . $name), SONG_FILES);
+    $song['files'] = array_keys(array_filter(SONG_FILES, fn(string $name) => is_file($dir . '/' . $name)));
     return $song;
 }
 
@@ -205,7 +223,7 @@ function song_exists(string $artist, string $title, ?string $excludeSlug = null)
 /**
  * Prüft die rohen Request-Daten eines Lieds.
  *
- * @param array $data Request-Daten (siehe POST api/songs.php)
+ * @param array $data Request-Daten (siehe PUT api/songs.php bzw. meta von api/import.php)
  * @return string[] Fehlermeldungen, leer wenn valide
  */
 function validate_song_input(array $data): array
@@ -215,15 +233,9 @@ function validate_song_input(array $data): array
     if (trim((string) ($data['title'] ?? '')) === '') {
         $errors[] = 'title ist erforderlich';
     }
-    foreach (['artist', 'key', 'tuning'] as $field) {
+    foreach (['artist', 'notes', ...array_keys(SONG_INFO_FIELDS)] as $field) {
         if (isset($data[$field]) && !is_string($data[$field])) {
             $errors[] = "$field muss ein Text sein";
-        }
-    }
-    foreach (['capo' => [0, 24], 'tempo' => [1, 400]] as $field => [$min, $max]) {
-        $v = $data[$field] ?? null;
-        if ($v !== null && $v !== '' && (filter_var($v, FILTER_VALIDATE_INT) === false || $v < $min || $v > $max)) {
-            $errors[] = "$field muss eine ganze Zahl von $min bis $max sein";
         }
     }
     if (!empty($data['technique']) && !in_array($data['technique'], SONG_TECHNIQUES, true)) {
@@ -235,20 +247,26 @@ function validate_song_input(array $data): array
     if (isset($data['sources']) && !is_array($data['sources'])) {
         $errors[] = 'sources muss ein Objekt sein';
     }
+    if (isset($data['youtubeSeconds']) && (!is_int($data['youtubeSeconds']) || $data['youtubeSeconds'] < 0)) {
+        $errors[] = 'youtubeSeconds muss eine ganze Zahl ab 0 sein';
+    }
 
     return $errors;
 }
 
 /**
- * Baut aus rohen Request-Daten die vom Store verwalteten Felder, mit Defaults/Typumwandlung.
+ * Baut aus rohen Request-Daten die vom Store verwalteten Felder, mit Defaults/Typumwandlung. Tonart, Capo,
+ * Stimmung und Tempo gehören nicht dazu: Sie stehen nur in den Noten. Eine YouTube-Quelle wird auf
+ * "https://www.youtube.com/watch?v=<ID>" gekürzt (siehe youtube_watch_url()). youtubeSeconds ist die Länge dieses
+ * Clips; das Formular ermittelt sie nur, wenn sich die URL ändert, und speichert sie hier, damit YouTube nicht bei
+ * jedem Öffnen abgefragt wird. Ohne YouTube-Quelle ist sie null.
  *
  * @param array $data bereits validierte Request-Daten (siehe validate_song_input())
- * @return array title, artist, key, capo, tuning, tempo, technique, tags, sources
+ * @return array title, artist, technique, tags, die Felder aus SONG_INFO_FIELDS, notes, sources, youtubeSeconds
  */
 function normalize_song_fields(array $data): array
 {
     $optionalText = fn(string $field) => trim((string) ($data[$field] ?? '')) ?: null;
-    $optionalInt = fn(string $field) => isset($data[$field]) && $data[$field] !== '' ? (int) $data[$field] : null;
 
     $tags = array_map(fn($t) => trim((string) $t), $data['tags'] ?? []);
     $tags = array_values(array_unique(array_filter($tags, fn(string $t) => $t !== '')));
@@ -256,21 +274,29 @@ function normalize_song_fields(array $data): array
     $sources = [];
     foreach (SONG_SOURCES as $key) {
         $url = trim((string) ($data['sources'][$key] ?? ''));
+        if ($key === 'youtube') {
+            $url = youtube_watch_url($url);
+        }
         if ($url !== '') {
             $sources[$key] = $url;
         }
     }
 
+    $info = [];
+    foreach (array_keys(SONG_INFO_FIELDS) as $field) {
+        $info[$field] = $optionalText($field);
+    }
+
     return [
         'title' => trim((string) ($data['title'] ?? '')),
         'artist' => $optionalText('artist'),
-        'key' => $optionalText('key'),
-        'capo' => $optionalInt('capo'),
-        'tuning' => $optionalText('tuning'),
-        'tempo' => $optionalInt('tempo'),
         'technique' => !empty($data['technique']) ? (string) $data['technique'] : null,
         'tags' => $tags,
+        ...$info,
+        'notes' => $optionalText('notes'),
         'sources' => (object) $sources,
+        'youtubeSeconds' => isset($sources['youtube']) && isset($data['youtubeSeconds'])
+            ? (int) $data['youtubeSeconds'] : null,
     ];
 }
 
@@ -293,7 +319,7 @@ function song_base_slug(array $fields): string
 /**
  * Legt ein neues Lied an: validiert, vergibt Slug/created, erstellt den Ordner und schreibt song.json.
  *
- * @param array $data Request-Daten (siehe POST api/songs.php)
+ * @param array $data Request-Daten (siehe PUT api/songs.php bzw. meta von api/import.php)
  * @return array das neue Lied inkl. files
  * @throws ValidationException|RuntimeException
  */
@@ -306,13 +332,13 @@ function create_song(array $data): array
 
     $fields = normalize_song_fields($data);
     if (song_exists((string) $fields['artist'], $fields['title'])) {
-        throw new ValidationException(['Lied mit diesem Interpreten und Titel gibt es schon']);
+        throw new ValidationException(['Song mit diesem Interpreten und Titel gibt es schon']);
     }
 
     $slug = unique_slug(song_base_slug($fields));
 
     if (!mkdir(song_dir($slug), 0775, true) && !is_dir(song_dir($slug))) {
-        throw new RuntimeException('Liedordner konnte nicht angelegt werden');
+        throw new RuntimeException('Song-Ordner konnte nicht angelegt werden');
     }
 
     $now = date('c');
@@ -329,6 +355,7 @@ function create_song(array $data): array
 /**
  * Aktualisiert ein Lied. Ändern sich Interpret oder Titel so, dass der Slug wechselt, wird der
  * Ordner umbenannt – bei Fehlschlag bleibt der alte Zustand vollständig erhalten.
+ * Ändert sich die YouTube-URL, wird die bisherige audio.mp3 entfernt (siehe delete_audio()).
  *
  * @param string $slug bisheriger Slug des Lieds
  * @param array $data Request-Daten (siehe PUT api/songs.php)
@@ -339,7 +366,7 @@ function update_song(string $slug, array $data): array
 {
     $existing = read_song_json($slug);
     if ($existing === null) {
-        throw new NotFoundException("Lied '$slug' nicht gefunden");
+        throw new NotFoundException("Song '$slug' nicht gefunden");
     }
 
     $errors = validate_song_input($data);
@@ -347,9 +374,17 @@ function update_song(string $slug, array $data): array
         throw new ValidationException($errors);
     }
 
+    // Das Formular schickt die Angaben aus SONG_INFO_FIELDS nicht mit (nicht angezeigt): Fehlen sie, bleiben die
+    // gespeicherten.
+    $data += array_intersect_key($existing, SONG_INFO_FIELDS);
     $fields = normalize_song_fields($data);
+    // Ohne youtubeSeconds (z. B. Aufruf per Skript) bleibt die gespeicherte Länge, solange die URL gleich ist.
+    if (!array_key_exists('youtubeSeconds', $data)
+        && ($fields['sources']->youtube ?? null) === ($existing['sources']['youtube'] ?? null)) {
+        $fields['youtubeSeconds'] = $existing['youtubeSeconds'] ?? null;
+    }
     if (song_exists((string) $fields['artist'], $fields['title'], $slug)) {
-        throw new ValidationException(['Lied mit diesem Interpreten und Titel gibt es schon']);
+        throw new ValidationException(['Song mit diesem Interpreten und Titel gibt es schon']);
     }
 
     $newBaseSlug = song_base_slug($fields);
@@ -362,13 +397,39 @@ function update_song(string $slug, array $data): array
             throw new ConflictException("Zielordner '$newSlug' existiert bereits");
         }
         if (!rename($oldDir, $newDir)) {
-            throw new RuntimeException('Umbenennen des Liedordners fehlgeschlagen');
+            throw new RuntimeException('Umbenennen des Song-Ordners fehlgeschlagen');
         }
     }
 
-    $song = array_merge($existing, $fields, ['slug' => $newSlug, 'updated' => date('c')]);
+    // Anderer YouTube-Clip: Die Audiospur passt nicht mehr dazu (und die Sync-Punkte meist auch nicht). Wird die URL
+    // nur gelöscht, bleibt die Audiospur.
+    $newUrl = $fields['sources']->youtube ?? null;
+    if ($newUrl !== null && $newUrl !== ($existing['sources']['youtube'] ?? null)) {
+        delete_audio($newSlug);
+    }
+
+    // $fields zweimal: Das erste bestimmt die Reihenfolge der Schlüssel (neu hinzugekommene Felder landen so an
+    // ihrem Platz statt am Ende), das zweite die Werte. Übrige Felder aus $existing (created usw.) bleiben erhalten.
+    $song = array_merge($fields, $existing, $fields, ['slug' => $newSlug, 'updated' => date('c')]);
     write_song_json($newSlug, $song);
     return with_file_flags($newSlug, $song);
+}
+
+/**
+ * Entfernt audio.mp3 eines Lieds, z. B. weil ein anderer YouTube-Clip eingetragen wurde. Danach hat das Lied keine
+ * Audiospur mehr, und bin/audio.php holt die neue. Ein Backup auf dem Server gibt es nicht: Das YouTube-Original
+ * liegt bei bin/audio.php (data/backup/<slug>/youtube-<Video-ID>.<ext>). Ohne audio.mp3 passiert nichts.
+ *
+ * @param string $slug Slug des Lieds
+ * @return void
+ * @throws RuntimeException wenn die Datei nicht gelöscht werden kann
+ */
+function delete_audio(string $slug): void
+{
+    $audio = song_dir($slug) . '/' . SONG_FILES['audio'];
+    if (is_file($audio) && !unlink($audio)) {
+        throw new RuntimeException('Audiospur konnte nicht entfernt werden');
+    }
 }
 
 /**
@@ -382,7 +443,7 @@ function touch_song(string $slug): array
 {
     $song = read_song_json($slug);
     if ($song === null) {
-        throw new NotFoundException("Lied '$slug' nicht gefunden");
+        throw new NotFoundException("Song '$slug' nicht gefunden");
     }
     $song['updated'] = date('c');
     write_song_json($slug, $song);
@@ -399,7 +460,7 @@ function touch_song(string $slug): array
 function delete_song(string $slug): void
 {
     if (read_song_json($slug) === null) {
-        throw new NotFoundException("Lied '$slug' nicht gefunden");
+        throw new NotFoundException("Song '$slug' nicht gefunden");
     }
     remove_directory_recursive(song_dir($slug));
 }

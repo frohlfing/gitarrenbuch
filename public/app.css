@@ -65,7 +65,8 @@ header p.sub{
   flex:1 1 260px;
   max-width:420px;
 }
-.controls input[type=search], .controls select, .form-field input, .form-field select, .player-panel select, .player-panel input[type=number]{
+.controls input[type=search], .controls select, .form-field input, .form-field select, .form-field textarea,
+.player-panel select, .player-panel input[type=number]{
   padding:.6rem .8rem;
   border:1px solid var(--rule);
   border-radius:6px;
@@ -224,7 +225,7 @@ header p.sub{
 }
 .sheet .close:hover{color:var(--accent-dark);}
 .form-field{margin-bottom:1rem;}
-.form-field label{
+.form-field label, .form-field .label{
   display:block;
   font-size:.75rem;
   text-transform:uppercase;
@@ -233,7 +234,16 @@ header p.sub{
   margin-bottom:.3rem;
 }
 .form-field input[type=text], .form-field select{width:100%;}
+.form-field textarea{width:100%; resize:vertical; line-height:1.4;}
+.form-field.busy{opacity:.6; pointer-events:none;}
 .form-field input[type=file]{width:100%; font-family:inherit;}
+.form-field .field-link{display:inline-block; margin-top:.35rem; font-size:.85rem; color:var(--accent-dark);}
+/* Längen von Noten, YouTube-Clip und MP3 rechts neben der Beschriftung */
+.form-field .lengths{
+  float:right; margin-left:.75rem;
+  text-transform:none; letter-spacing:normal; font-variant-numeric:tabular-nums; color:var(--ink);
+}
+.form-field .lengths span:not(:empty) + span:not(:empty)::before{content:' · ';}
 .form-field .hint, .player-panel .hint{font-size:.75rem; color:var(--ink-soft); margin-top:.3rem;}
 .dropzone{
   display:flex; align-items:center; justify-content:center;
@@ -320,6 +330,7 @@ header p.sub{
 .songbar-titles{flex:1; min-width:0;}
 .songbar h2{margin:0; font-size:1.15rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .songbar-meta{font-size:.82rem; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.tempo-warn{color:#d32f2f; font-weight:500; margin-left:8px}
 .songbar-menu{position:relative;}
 .menu{
   position:absolute; right:0; top:calc(100% + .3rem);
@@ -404,6 +415,10 @@ header p.sub{
   color:var(--ink-soft);
 }
 .player-panel .panel-row{display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;}
+.player-panel output{display:inline-block; min-width:3.2em; text-align:right; font-variant-numeric:tabular-nums;}
+/* Lautstärken untereinander: Beschriftung, Regler, Wert in festen Spalten */
+.player-panel .mix-grid{display:grid; grid-template-columns:auto minmax(0, 14rem) auto; gap:.4rem .6rem; align-items:center;}
+.player-panel .mix-grid input[type=range]{width:100%;}
 .player-panel input[type=number]{width:5rem; padding:.4rem .5rem;}
 .player-panel select{padding:.4rem .5rem; font-size:.9rem;}
 .track-list{list-style:none; margin:0; padding:0;}

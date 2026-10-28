@@ -1,38 +1,11 @@
 <?php
 
 require_once __DIR__ . '/crud.php';
+require_once __DIR__ . '/gp_file.php';
 
-/** Die Datei ist keine (unterstützte) Guitar-Pro-Datei (geprüft am Dateiinhalt, nicht an der Endung). */
+/** Eine hochgeladene Datei ist ungültig (geprüft am Inhalt, nicht an der Endung), z. B. keine GP-Datei. */
 class FileValidationException extends RuntimeException
 {
-}
-
-/**
- * Erkennt das Guitar-Pro-Format am Dateianfang.
- * - GP3–GP5: Längenbyte + "FICHIER GUITAR PRO v…"
- * - GP6 (.gpx): komprimiertes Containerformat mit "BCFZ"/"BCFS"
- * - GP7/GP8 (.gp): ZIP-Archiv
- *
- * @param string $path Pfad der zu prüfenden Datei
- * @return string|null Dateiendung ("gp3", "gp4", "gp5", "gpx", "gp") oder null, wenn es keine GP-Datei ist
- */
-function detect_gp_format(string $path): ?string
-{
-    $head = (string) file_get_contents($path, false, null, 0, 32);
-    if (str_starts_with(substr($head, 1), 'FICHIER GUITAR PRO v')) {
-        return match (substr($head, 21, 1)) {
-            '3' => 'gp3',
-            '4' => 'gp4',
-            default => 'gp5',
-        };
-    }
-    if (str_starts_with($head, 'BCFZ') || str_starts_with($head, 'BCFS')) {
-        return 'gpx';
-    }
-    if (str_starts_with($head, "PK\x03\x04")) {
-        return 'gp';
-    }
-    return null;
 }
 
 /**
@@ -55,45 +28,105 @@ function unique_filename(string $dir, string $baseName, string $ext): string
 }
 
 /**
- * Legt eine GP-Datei beim Import als Rohmaterial unter orig/ ab und kopiert sie als Arbeitsversion score.gp.
- * Nur einmal je Lied möglich: Gibt es score.gp schon, wird abgelehnt. Bis der Editor score.gp selbst als GP7
- * schreibt (Phase 3), ist score.gp eine unveränderte Kopie in deren Originalformat – alphaTab erkennt das Format
- * am Inhalt, nicht an der Endung.
+ * Legt eine hochgeladene Datei als Rohmaterial unter orig/ ab. Liegt dort schon eine Datei mit gleichem Inhalt
+ * (MD5), wird nichts abgelegt. Ist der Name belegt, wird ein Zähler angehängt (siehe unique_filename()): In orig/
+ * wird nie etwas überschrieben oder verändert.
  *
- * @param string $slug Lied, zu dem die Datei gehört
- * @param string $localPath lokale GP-Datei; wird nur gelesen, Aufräumen bleibt Sache des Aufrufers
- * @param string $originalName Ursprünglicher Dateiname, daraus wird der Name unter orig/ gebildet
- * @return array das aktualisierte Lied
- * @throws FileValidationException|NotFoundException|ConflictException
+ * @param string $slug Lied, zu dem die Datei gehört (der Ordner muss existieren)
+ * @param string $localPath lokale Datei; wird nur gelesen
+ * @param string $originalName ursprünglicher Dateiname, daraus wird der Name unter orig/ gebildet
+ * @param string|null $ext Endung ohne Punkt, sonst die des ursprünglichen Namens (z. B. nach Erkennung am Inhalt)
+ * @return string Dateiname unter orig/ (bei gleichem Inhalt der bereits vorhandene)
+ * @throws RuntimeException wenn orig/ nicht angelegt oder die Datei nicht kopiert werden kann
  */
-function store_gp_file(string $slug, string $localPath, string $originalName): array
+function store_original(string $slug, string $localPath, string $originalName, ?string $ext = null): string
+{
+    $origDir = song_dir($slug) . '/orig';
+    if (!is_dir($origDir) && !mkdir($origDir, 0775, true) && !is_dir($origDir)) {
+        throw new RuntimeException('Ordner orig/ konnte nicht angelegt werden');
+    }
+    $hash = md5_file($localPath);
+    foreach (glob("$origDir/*") ?: [] as $existing) {
+        if (is_file($existing) && md5_file($existing) === $hash) {
+            return basename($existing);
+        }
+    }
+    $ext ??= strtolower(pathinfo($originalName, PATHINFO_EXTENSION)) ?: 'bin';
+    $baseName = slugify(pathinfo($originalName, PATHINFO_FILENAME)) ?: 'datei';
+    $name = unique_filename($origDir, $baseName, $ext);
+    if (!copy($localPath, "$origDir/$name")) {
+        throw new RuntimeException("$originalName konnte nicht unter orig/ gespeichert werden");
+    }
+    return $name;
+}
+
+/**
+ * Höchstgröße der Noten (score.atex). Die größten Songs im Archiv kommen auf rund 300 KB.
+ *
+ * @var int Bytes
+ */
+const SCORE_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Prüft Noten im Format alphaTex, bevor sie gespeichert werden. Den Inhalt selbst kann nur alphaTab im Browser
+ * auswerten; geprüft werden deshalb nur Größe und dass es Text in UTF-8 ist.
+ *
+ * @param string $tex Noten als alphaTex
+ * @return void
+ * @throws FileValidationException wenn die Noten leer, zu groß oder kein Text sind
+ */
+function validate_score(string $tex): void
+{
+    if (trim($tex) === '') {
+        throw new FileValidationException('Keine Noten übermittelt');
+    }
+    if (strlen($tex) > SCORE_MAX_BYTES) {
+        throw new FileValidationException(
+            'Noten sind zu groß (Limit: ' . (int) (SCORE_MAX_BYTES / 1024 / 1024) . ' MB)'
+        );
+    }
+    if (!mb_check_encoding($tex, 'UTF-8') || str_contains($tex, "\0")) {
+        throw new FileValidationException('Noten sind kein Text in UTF-8');
+    }
+}
+
+/**
+ * Speichert die Noten eines neuen Lieds als score.atex, beim Import zusammen mit der Original-GP-Datei: Diese
+ * kommt unverändert als Rohmaterial nach orig/ (siehe store_original()), eine eingebettete Audiospur wird zu
+ * audio.mp3 (siehe extract_gp_audio()). Die Noten wandelt der Browser vorher mit alphaTab um, ohne Titel, Interpret
+ * und die übrigen Angaben (die stehen nur in song.json). Nur einmal je Lied möglich: Gibt es schon Noten, wird
+ * abgelehnt.
+ *
+ * @param string $slug Lied, zu dem die Noten gehören
+ * @param string $tex Noten als alphaTex
+ * @param string|null $gpPath lokale Original-GP-Datei; wird nur gelesen, Aufräumen bleibt Sache des Aufrufers.
+ *                            null, wenn die Noten im Formular entstanden sind
+ * @param string $gpName ursprünglicher Dateiname der GP-Datei, daraus wird der Name unter orig/ gebildet
+ * @return array das aktualisierte Lied
+ * @throws FileValidationException|NotFoundException|ConflictException|RuntimeException
+ */
+function store_new_score(string $slug, string $tex, ?string $gpPath = null, string $gpName = ''): array
 {
     if (read_song_json($slug) === null) {
-        throw new NotFoundException("Lied '$slug' nicht gefunden");
+        throw new NotFoundException("Song '$slug' nicht gefunden");
     }
-
-    $ext = detect_gp_format($localPath);
-    if ($ext === null) {
+    validate_score($tex);
+    $ext = $gpPath !== null ? detect_gp_format($gpPath) : null;
+    if ($gpPath !== null && $ext === null) {
         throw new FileValidationException('Keine Guitar-Pro-Datei (unterstützt: GP3 bis GP8)');
     }
 
     $dir = song_dir($slug);
-    if (is_file("$dir/score.gp")) {
-        throw new ConflictException('Das Lied hat bereits Noten');
+    $scorePath = "$dir/" . SONG_FILES['score'];
+    if (is_file($scorePath)) {
+        throw new ConflictException('Der Song hat bereits Noten');
     }
-    $origDir = "$dir/orig";
-    if (!is_dir($origDir) && !mkdir($origDir, 0775, true) && !is_dir($origDir)) {
-        throw new RuntimeException('Ordner orig/ konnte nicht angelegt werden');
+    if ($gpPath !== null) {
+        $original = store_original($slug, $gpPath, $gpName, $ext);
+        extract_gp_audio("$dir/orig/$original", $dir);
     }
-
-    $baseName = slugify(pathinfo($originalName, PATHINFO_FILENAME)) ?: 'score';
-    $stored = unique_filename($origDir, $baseName, $ext);
-    if (!copy($localPath, "$origDir/$stored")) {
-        throw new RuntimeException('GP-Datei konnte nicht gespeichert werden');
-    }
-
-    if (!copy($localPath, "$dir/score.gp")) {
-        throw new RuntimeException('Arbeitsversion score.gp konnte nicht angelegt werden');
+    if (file_put_contents($scorePath, $tex) === false) {
+        throw new RuntimeException('Noten konnten nicht gespeichert werden');
     }
 
     return touch_song($slug);
@@ -121,4 +154,40 @@ function send_file(string $path, string $mime): never
     header('Content-Length: ' . filesize($path));
     readfile($path);
     exit;
+}
+
+/**
+ * Legt eine MP3 als audio.mp3 eines Lieds ab (ersetzt eine vorhandene). Geprüft wird nur der Anfang der Datei
+ * (ID3-Kopf oder MP3-Frame); Länge und Qualität bestimmt bin/audio.php beim Umwandeln.
+ *
+ * @param string $slug Slug des Lieds
+ * @param string $localPath lokale MP3-Datei; wird nur gelesen, Aufräumen bleibt Sache des Aufrufers
+ * @return array das aktualisierte Lied
+ * @throws FileValidationException|NotFoundException|RuntimeException
+ */
+function store_audio(string $slug, string $localPath): array
+{
+    if (read_song_json($slug) === null) {
+        throw new NotFoundException("Song '$slug' nicht gefunden");
+    }
+    $size = (int) filesize($localPath);
+    if ($size === 0 || $size > MAX_UPLOAD_BYTES) {
+        throw new FileValidationException(
+            'Audiodatei leer oder größer als ' . intdiv(MAX_UPLOAD_BYTES, 1024 * 1024) . ' MB'
+        );
+    }
+    $head = (string) file_get_contents($localPath, false, null, 0, 3);
+    $isMp3 = str_starts_with($head, 'ID3')
+        || (strlen($head) > 1 && ord($head[0]) === 0xFF && (ord($head[1]) & 0xE0) === 0xE0);
+    if (!$isMp3) {
+        throw new FileValidationException('Keine MP3-Datei');
+    }
+    // Erst daneben schreiben, dann umbenennen: Wer gerade abspielt, bekommt nie eine halbe Datei.
+    $target = song_dir($slug) . '/' . SONG_FILES['audio'];
+    $tmp = "$target.tmp";
+    if (!copy($localPath, $tmp) || !rename($tmp, $target)) {
+        @unlink($tmp);
+        throw new RuntimeException('Audiodatei konnte nicht gespeichert werden');
+    }
+    return touch_song($slug);
 }

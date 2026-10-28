@@ -1,13 +1,15 @@
 /**
  * Liederliste mit Suche, Tag-Filter und Sortierung sowie das Formular zum Anlegen und Bearbeiten eines Lieds
- * (Overlay wie beim Kochbuch) sowie der Import einer GP-Datei als neues Lied. Titel, Interpret usw. liest dabei
- * alphaTab im Browser aus der Datei.
+ * (Overlay wie beim Kochbuch) sowie der Import einer GP-Datei als neues Lied. alphaTab liest die Datei dabei im
+ * Browser und wandelt die Noten in alphaTex um (siehe readGpFile() in score.js).
  */
 
 import {
-  API_URL, apiWrite, coverUrl, deleteCover, escapeHtml, importGpFile, loadSongs, searchCovers, setCover, uploadCover,
+  API_URL, apiWrite, audioUrl, coverUrl, deleteCover, escapeHtml, importSong, loadScoreText, loadSongs,
+  loadYoutubeInfo, searchCovers, setCover, uploadChordFile, uploadCover,
 } from './api.js';
-import {readGpMetadata} from './player.js';
+import {formatTime} from './player.js';
+import {createScore, loadAlphaTab, parseScore, readGpFile, scoreDuration} from './score.js';
 
 /** @typedef {import('./api.js').Song} Song */
 
@@ -74,20 +76,6 @@ export function findSong(slug){
 }
 
 /**
- * Kurzinfo unter dem Titel: Tonart, Capo, abweichende Stimmung, Tempo.
- * @param {Song} s Lied
- * @returns {string} Angaben, mit " · " getrennt (leer, wenn keine vorhanden)
- */
-export function songMeta(s){
-  return [
-    s.key && `Tonart ${s.key}`,
-    s.capo ? `Capo ${s.capo}` : null,
-    s.tuning && s.tuning !== 'E A D G B E' ? s.tuning : null,
-    s.tempo && `${s.tempo} BPM`,
-  ].filter(Boolean).join(' · ');
-}
-
-/**
  * Farbton des Platzhalters, aus dem Slug berechnet, damit jedes Lied immer dieselbe Farbe hat.
  * @param {string} slug Slug des Lieds
  * @returns {number} Farbton 0–359
@@ -105,11 +93,10 @@ function placeholderHue(slug){
  */
 function cardHtml(s){
   const badges = [
-    s.files.score && '<span class="badge">Noten</span>',
-    s.files.audio && '<span class="badge">Audio</span>',
-    s.files.lyrics && '<span class="badge">Text</span>',
+    s.files.includes('score') && '<span class="badge">Noten</span>',
+    s.files.includes('audio') && '<span class="badge">Audio</span>',
   ].filter(Boolean).join('');
-  const thumb = s.files.cover
+  const thumb = s.files.includes('cover')
     ? `<div class="thumb"><img src="${escapeHtml(coverUrl(s))}" alt="" loading="lazy">`
     : `<div class="thumb placeholder" style="--h:${placeholderHue(s.slug)}">
         <span class="initial" aria-hidden="true">${escapeHtml(s.title.charAt(0).toUpperCase())}</span>`;
@@ -150,7 +137,7 @@ function refreshTagFilter(){
  */
 function refreshLibrary(){
   refreshTagFilter();
-  subCount.textContent = `${SONGS.length} ${SONGS.length === 1 ? 'Lied' : 'Lieder'}`;
+  subCount.textContent = `${SONGS.length} ${SONGS.length === 1 ? 'Song' : 'Songs'}`;
   renderList();
 }
 
@@ -190,10 +177,10 @@ function renderList(){
       items.sort(byTitle);
   }
 
-  resultCount.textContent = `${items.length} von ${SONGS.length} Liedern`;
+  resultCount.textContent = `${items.length} von ${SONGS.length} Songs`;
   list.innerHTML = items.length
     ? items.map(cardHtml).join('')
-    : `<p class="empty">${SONGS.length ? 'Keine Lieder gefunden.' : 'Noch keine Lieder. Leg mit „+ Neues Lied“ das erste an.'}</p>`;
+    : `<p class="empty">${SONGS.length ? 'Keine Songs gefunden.' : 'Noch keine Songs. Leg mit „+ Neuer Song“ den ersten an.'}</p>`;
 }
 
 /**
@@ -290,28 +277,190 @@ function field(id, label, value, attrs = ''){
  * @returns {string} HTML
  */
 function coverPickHtml(s){
-  return s.files.cover
+  return s.files.includes('cover')
     ? `<img src="${escapeHtml(coverUrl(s))}" alt="">`
     : `<span class="cover-empty" style="--h:${placeholderHue(s.slug)}">Cover wählen</span>`;
 }
 
 /**
- * Formular zum Anlegen oder Bearbeiten eines Lieds. Beim Bearbeiten steht das Cover neben Titel und Interpret;
- * ein Klick darauf öffnet den Cover-Dialog über dem Formular (Eingaben bleiben erhalten).
- * @param {?Song} song zu bearbeitendes Lied, null zum Anlegen
- * @param {(saved: Song) => void} onSaved wird nach erfolgreichem Speichern aufgerufen
+ * Verdrahtet das Feld "Akkorddatei" im Formular "Song bearbeiten": Hochladen per Auswahl oder Drag & Drop. Die Datei
+ * wird sofort gespeichert (wie das Cover), unabhängig vom Formular.
+ * @param {Song} s Lied des Formulars; updated wird nach dem Hochladen nachgeführt
  * @returns {void}
  */
-export function openSongForm(song, onSaved){
+function bindChordFileField(s){
+  const hint = byId('chordFileHint');
+  const field = byId('dropzone').closest('.form-field');
+  bindDropzone(async file => {
+    field.classList.add('busy');
+    try {
+      const saved = await uploadChordFile(s.slug, file);
+      s.updated = saved.updated;
+      storeSong(saved);
+      hint.textContent = `${file.name} ist abgelegt und wird mit dem Editor in die Noten übernommen.`;
+    } catch(err){
+      hint.textContent = err.message;
+    } finally {
+      field.classList.remove('busy');
+    }
+  });
+}
+
+/** Wartezeit nach der letzten Eingabe in die YouTube-URL, bevor die Länge des Clips abgefragt wird. */
+const YOUTUBE_LOOKUP_DELAY_MS = 500;
+
+/**
+ * Erkennt YouTube-URLs (watch?v=…, youtu.be/…, shorts/…, embed/…, live/…); Gruppe 1 ist die Video-ID.
+ * Gleiches Muster wie youtube_id() in api/lib/youtube.php.
+ */
+const YOUTUBE_URL = new RegExp('^https?://(?:(?:www\\.|m\\.|music\\.)?youtube\\.com/(?:watch\\?(?:.*&)?v=|shorts/|embed/'
+  + '|live/)|youtu\\.be/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])');
+
+/**
+ * Kurzform einer YouTube-URL ohne Playlist, Startzeit und andere Parameter (wie youtube_watch_url() in
+ * api/lib/youtube.php; der Server kürzt beim Speichern noch einmal).
+ * @param {string} url eingegebene URL
+ * @returns {string} "https://www.youtube.com/watch?v=<ID>"; andere Eingaben unverändert
+ */
+function youtubeWatchUrl(url){
+  const m = url.trim().match(YOUTUBE_URL);
+  return m ? `https://www.youtube.com/watch?v=${m[1]}` : url;
+}
+
+/**
+ * Verdrahtet die YouTube-Quelle im Formular: Link zur YouTube-Suche nach Interpret und Titel (wie die Trailersuche
+ * der Videothek; die gefundene URL trägt man selbst ein) und die Länge des Clips neben dem Feld. Gespeichert wird die
+ * Länge in song.json (youtubeSeconds); YouTube wird nur gefragt, wenn sich die URL ändert oder die Länge noch fehlt.
+ * Darunter steht, wenn nötig, dass bin/audio.php die Audiospur einbinden muss (siehe updateAudioHint()).
+ * @param {Song} s Lied des Formulars
+ * @returns {() => ?number} liefert die Länge des Clips in Sekunden zum Speichern; null ohne URL oder solange sie
+ *   unbekannt ist
+ */
+function bindYoutubeField(s){
+  const search = /** @type {HTMLAnchorElement} */ (/** @type {*} */ (byId('youtubeSearch')));
+  const updateSearch = () => {
+    const words = [byId('artistInput').value.trim(), byId('titleInput').value.trim()];
+    search.href = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(words.filter(Boolean).join(' '));
+  };
+  updateSearch();
+  ['artistInput', 'titleInput'].forEach(id => byId(id).addEventListener('input', updateSearch));
+
+  const input = byId('youtubeInput');
+  const clipLength = byId('youtubeLength');
+  /** Länge des Clips in Sekunden, null ohne URL oder solange sie unbekannt ist. */
+  let seconds = s.sources.youtube ? (s.youtubeSeconds ?? null) : null;
+  /** Zähler der Abfragen; eine Antwort zählt nur, wenn danach keine neue gestartet wurde. */
+  let lookup = 0;
+  const updateClipLength = async () => {
+    const url = input.value.trim();
+    const current = ++lookup;
+    seconds = null;
+    clipLength.textContent = url ? 'Clip …' : '';
+    clipLength.title = '';
+    if(!url) return;
+    try {
+      const info = await loadYoutubeInfo(url);
+      if(current !== lookup) return;
+      seconds = info.seconds;
+      clipLength.textContent = `Clip ${formatTime(seconds * 1000)}`;
+      clipLength.title = info.title;
+    } catch(err){
+      if(current !== lookup) return;
+      clipLength.textContent = 'Clip ?';
+      clipLength.title = err.message;
+    }
+  };
+  if(seconds !== null) clipLength.textContent = `Clip ${formatTime(seconds * 1000)}`;
+  else if(input.value.trim()) void updateClipLength();
+  /** @type {?number} */
+  let timer = null;
+  input.addEventListener('input', () => {
+    // Kopierte Links enthalten oft Playlist und Startzeit (&list=…&start_radio=1); nur die Video-ID bleibt.
+    const short = youtubeWatchUrl(input.value);
+    if(short !== input.value) input.value = short;
+    updateAudioHint(s, short);
+    clearTimeout(timer);
+    timer = setTimeout(() => void updateClipLength(), YOUTUBE_LOOKUP_DELAY_MS);
+  });
+  updateAudioHint(s, input.value);
+  return () => seconds;
+}
+
+/**
+ * Hinweis unter dem YouTube-Feld: Die Audiospur holt bin/audio.php. Bei einem anderen Clip verschiebt der Server die
+ * bisherige audio.mp3 beim Speichern (siehe update_song() in api/lib/crud.php).
+ * @param {Song} s Lied des Formulars
+ * @param {string} url eingegebene YouTube-URL
+ * @returns {void}
+ */
+function updateAudioHint(s, url){
+  const hint = byId('audioHint');
+  const hasAudio = s.files?.includes('audio') ?? false;
+  const changed = youtubeWatchUrl(url.trim()) !== youtubeWatchUrl((s.sources.youtube ?? '').trim());
+  hint.textContent = !url.trim() ? ''
+    : hasAudio && changed
+      ? 'Anderer Clip: Beim Speichern wird die bisherige Audiospur entfernt. Danach bin/audio.php ausführen, um '
+        + 'die neue einzubinden, und die Sync-Punkte prüfen.'
+      : !hasAudio ? 'Noch keine Audiospur: bin/audio.php ausführen, um sie einzubinden.' : '';
+  hint.hidden = !hint.textContent;
+}
+
+/**
+ * Zeigt neben den Quellen die Längen der Noten (im eigenen Tempo) und der vorhandenen MP3, damit man sieht, ob der
+ * YouTube-Clip zu den Noten passt. Beides wird bei jedem Öffnen aus den eigenen Dateien gemessen.
+ * @param {Song} s Lied des Formulars (nur beim Bearbeiten; ein neues Lied hat weder Noten noch MP3)
+ * @returns {void}
+ */
+function showFileLengths(s){
+  const scoreLength = byId('scoreLength');
+  scoreLength.textContent = 'Noten …';
+  // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
+  void (async () => {
+    const alphaTab = await loadAlphaTab();
+    const tex = await loadScoreText(s.slug);
+    scoreLength.textContent = `Noten ${formatTime(scoreDuration(alphaTab, parseScore(alphaTab, tex)))}`;
+  })()
+    .catch(err => {
+      scoreLength.textContent = 'Noten ?';
+      scoreLength.title = err.message;
+    });
+
+  if(!s.files.includes('audio')) return;
+  // Nur die Metadaten der MP3 laden; danach die Verbindung wieder freigeben.
+  const audioLength = byId('audioLength');
+  const audio = new Audio();
+  audio.preload = 'metadata';
+  audio.addEventListener('loadedmetadata', () => {
+    audioLength.textContent = `MP3 ${formatTime(audio.duration * 1000)}`;
+    audio.removeAttribute('src');
+    audio.load();
+  }, {once: true});
+  audio.addEventListener('error', () => {
+    if(audio.getAttribute('src')) audioLength.textContent = 'MP3 ?';
+  }, {once: true});
+  audio.src = audioUrl(s.slug);
+}
+
+/**
+ * Formular zum Anlegen oder Bearbeiten eines Lieds. Beim Anlegen erzeugt der Browser Noten mit leeren Takten
+ * (siehe createScore() in score.js), denn jeder Song hat Noten; Tonart, Capo, Tempo und Stimmung gehen nur dort hinein
+ * und werden später im Editor geändert. Beim Bearbeiten steht das Cover neben Titel und Interpret; ein Klick darauf
+ * öffnet den Cover-Dialog über dem Formular (Eingaben bleiben erhalten).
+ * @param {?Song} song zu bearbeitendes Lied, null zum Anlegen
+ * @param {(saved: Song) => void} onSaved wird nach erfolgreichem Speichern aufgerufen
+ * @param {{ultimateGuitar?: string}} [sources] Vorbelegung der Quellen beim Anlegen (z. B. aus dem Import-Dialog)
+ * @returns {void}
+ */
+export function openSongForm(song, onSaved, sources = {}){
   const isEdit = song !== null;
-  const s = song ?? /** @type {Song} */ ({tags: [], sources: {}});
+  const s = song ?? /** @type {Song} */ ({tags: [], sources: {...sources}});
   formIsOpen = true;
 
   const nameFields = `
     ${field('titleInput', 'Titel', s.title)}
     ${field('artistInput', 'Interpret', s.artist, 'list="artistList" autocomplete="off"')}`;
   openOverlay(`
-    <h2>${isEdit ? 'Song bearbeiten' : 'Neues Lied'}</h2>
+    <h2>${isEdit ? 'Song bearbeiten' : 'Neuer Song'}</h2>
     <div id="formError"></div>
     ${isEdit ? `<div class="form-head">
       <button class="cover-pick" id="coverPick" type="button" title="Cover ändern">${coverPickHtml(s)}</button>
@@ -319,9 +468,10 @@ export function openSongForm(song, onSaved){
     </div>` : nameFields}
     <datalist id="artistList">${[...new Set(SONGS.map(x => x.artist).filter(Boolean))].map(a => `<option value="${escapeHtml(a)}">`).join('')}</datalist>
     <div class="form-grid">
-      ${field('keyInput', 'Tonart', s.key, 'placeholder="z. B. G oder Am"')}
-      ${field('capoInput', 'Capo', s.capo || '', 'inputmode="numeric" placeholder="0"')}
-      ${field('tempoInput', 'Tempo (BPM)', s.tempo, 'inputmode="numeric"')}
+      ${isEdit ? '' : `
+        ${field('keyInput', 'Tonart', '', 'placeholder="z. B. G oder Am"')}
+        ${field('capoInput', 'Capo', '', 'inputmode="numeric" placeholder="0"')}
+        ${field('tempoInput', 'Tempo (BPM)', '', 'inputmode="numeric" placeholder="120"')}`}
       <div class="form-field">
         <label for="techniqueInput">Spieltechnik</label>
         <select id="techniqueInput">
@@ -331,10 +481,35 @@ export function openSongForm(song, onSaved){
         </select>
       </div>
     </div>
-    ${field('tuningInput', 'Stimmung', s.tuning, 'placeholder="E A D G B E"')}
+    ${isEdit ? '' : `<div class="form-field">
+      <label for="tuningInput">Stimmung</label>
+      <input type="text" id="tuningInput" placeholder="E A D G B E">
+      <div class="hint">Tonart, Capo, Tempo und Stimmung gehen in die Noten und werden dort später geändert.</div>
+    </div>`}
     ${field('tagsInput', 'Tags', s.tags.join(', '), 'placeholder="z. B. 70er, Lagerfeuer"')}
-    ${field('youtubeInput', 'YouTube-URL', s.sources.youtube, 'inputmode="url"')}
-    ${field('ugInput', 'Ultimate-Guitar-URL', s.sources.ultimateGuitar, 'inputmode="url"')}
+    ${field('ugInput', `Quelle für Guitar-Pro-Datei${isEdit ? '<span class="lengths" id="scoreLength"></span>' : ''}`,
+    s.sources.ultimateGuitar, 'inputmode="url"')}
+    <div class="form-field">
+      <label for="youtubeInput">Quelle für Audio-Datei (YouTube-URL)<span class="lengths"><span
+        id="youtubeLength"></span><span id="audioLength"></span></span></label>
+      <input type="text" id="youtubeInput" value="${escapeHtml(s.sources.youtube ?? '')}" inputmode="url"
+        placeholder="https://www.youtube.com/watch?v=…">
+      <a class="field-link" id="youtubeSearch" href="#" target="_blank" rel="noopener">Auf YouTube suchen</a>
+      <div class="hint" id="audioHint" hidden></div>
+    </div>
+    <div class="form-field">
+      <label for="notesInput">Notizen</label>
+      <textarea id="notesInput" rows="6">${escapeHtml(s.notes ?? '')}</textarea>
+    </div>
+    ${isEdit ? `<div class="form-field">
+      <span class="label">Akkorddatei</span>
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="chordFileInput" accept=".cho,.chopro,.crd,.pro,.txt">
+        <span>ChordPro- oder Textdatei hierher ziehen oder tippen zum Auswählen</span>
+      </label>
+      <div class="hint" id="chordFileHint">Text und Akkorde stehen in den Noten. Eine Akkorddatei wird abgelegt und
+        mit dem Editor eingearbeitet; vorhandener Text hat dabei Vorrang.</div>
+    </div>` : ''}
     <div class="btn-row">
       <button class="btn btn-primary" id="saveBtn" type="button">Speichern</button>
       <button class="btn" id="cancelBtn" type="button">Abbrechen</button>
@@ -349,19 +524,24 @@ export function openSongForm(song, onSaved){
     byId('coverPick').innerHTML = coverPickHtml(s);
   }, {artist: byId('artistInput').value.trim(), title: byId('titleInput').value.trim() || s.title}));
 
+  if(isEdit) bindChordFileField(s);
+  const clipSeconds = bindYoutubeField(s);
+  if(isEdit) showFileLengths(s);
+
   byId('saveBtn').addEventListener('click', async () => {
     const errorBox = byId('formError');
     errorBox.innerHTML = '';
     const payload = {
       title: byId('titleInput').value.trim(),
       artist: byId('artistInput').value.trim(),
-      key: byId('keyInput').value.trim(),
-      capo: byId('capoInput').value.trim(),
-      tempo: byId('tempoInput').value.trim(),
       technique: byId('techniqueInput').value,
-      tuning: byId('tuningInput').value.trim(),
       tags: byId('tagsInput').value.split(',').map(t => t.trim()).filter(Boolean),
-      sources: {youtube: byId('youtubeInput').value.trim(), ultimateGuitar: byId('ugInput').value.trim()},
+      sources: {
+        youtube: youtubeWatchUrl(byId('youtubeInput').value).trim(),
+        ultimateGuitar: byId('ugInput').value.trim(),
+      },
+      youtubeSeconds: clipSeconds(),
+      notes: byId('notesInput').value.trim(),
     };
     if(!payload.title){
       errorBox.innerHTML = '<div class="error-box">Titel ist erforderlich.</div>';
@@ -375,12 +555,19 @@ export function openSongForm(song, onSaved){
     /** @type {Song} */
     let saved;
     try {
-      const url = isEdit ? `${API_URL}songs.php?slug=${encodeURIComponent(s.slug)}` : API_URL + 'songs.php';
-      saved = await apiWrite(url, {
-        method: isEdit ? 'PUT' : 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload),
-      });
+      // Jeder Song hat Noten: Ein neuer Song bekommt ein Gerüst und läuft dann wie ein Import.
+      saved = isEdit
+        ? await apiWrite(`${API_URL}songs.php?slug=${encodeURIComponent(s.slug)}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        })
+        : await importSong(payload, await createScore({
+          key: byId('keyInput').value,
+          capo: byId('capoInput').value,
+          tempo: byId('tempoInput').value,
+          tuning: byId('tuningInput').value,
+        }));
     } catch(err){
       errorBox.innerHTML = `<div class="error-box">${escapeHtml(err.message)}</div>`;
       saveBtn.disabled = false;
@@ -434,7 +621,8 @@ function bindDropzone(onFile){
 }
 
 /**
- * Formular zum Import einer Guitar-Pro-Datei als neues Lied (wie der Rezept-Import im Kochbuch).
+ * Dialog "Song importieren" hinter "+ Neuer Song": Import einer Guitar-Pro-Datei als neuer Song (wie der Rezept-Import
+ * im Kochbuch). "Manuell" legt den Song ohne GP-Datei im Formular an (wie "Manuell" im Import-Dialog der Videothek).
  * @param {(saved: Song) => void} onImported wird nach erfolgreichem Import aufgerufen
  * @returns {void}
  */
@@ -453,8 +641,11 @@ export function openImportForm(onImported){
         <a href="https://www.ultimate-guitar.com/explore?type[]=Pro" target="_blank" rel="noopener">Ultimate Guitar</a>
         (Download unter "Tabs" vom Typ "Guitar Pro").</div>
     </div>
+    ${field('importUgInput', 'Quelle', '',
+    'inputmode="url" placeholder="https://tabs.ultimate-guitar.com/tab/…"')}
     <div class="btn-row">
       <button class="btn btn-primary" id="importSubmitBtn" type="button">Importieren</button>
+      <button class="btn" id="manualBtn" type="button" title="Ohne Guitar-Pro-Datei von Hand anlegen">Manuell</button>
       <button class="btn" id="cancelBtn" type="button">Abbrechen</button>
     </div>
   `);
@@ -468,6 +659,12 @@ export function openImportForm(onImported){
   });
 
   byId('cancelBtn').addEventListener('click', closeOverlay);
+  byId('manualBtn').addEventListener('click', () => {
+    // Eine schon eingetragene Quelle geht ins Formular mit.
+    const ultimateGuitar = byId('importUgInput').value.trim();
+    closeOverlay();
+    openSongForm(null, onImported, ultimateGuitar ? {ultimateGuitar} : {});
+  });
   byId('importSubmitBtn').addEventListener('click', async () => {
     const errorBox = byId('formError');
     errorBox.innerHTML = '';
@@ -480,13 +677,13 @@ export function openImportForm(onImported){
     btn.disabled = true;
     btn.textContent = 'Importiert …';
     try {
-      const meta = await readGpMetadata(file).catch(() => {
-        throw new Error('Die Datei konnte nicht als Guitar-Pro-Datei gelesen werden.');
-      });
+      const {meta, tex} = await readGpFile(file);
       if(!meta.title){
         Object.assign(meta, metaFromFileName(file.name), meta.artist ? {artist: meta.artist} : {});
       }
-      const saved = await importGpFile(file, meta);
+      // Die Quelle (z. B. die Seite des Tabs bei Ultimate Guitar) gleich mitspeichern.
+      const ultimateGuitar = byId('importUgInput').value.trim();
+      const saved = await importSong({...meta, sources: ultimateGuitar ? {ultimateGuitar} : {}}, tex, file);
       storeSong(saved);
       closeOverlay();
       onImported(saved);
@@ -498,12 +695,16 @@ export function openImportForm(onImported){
   });
 }
 
-/** Kantenlänge, auf den eigenen Cover vor dem Hochladen höchstens verkleinert werden (wie bei Deezer/iTunes). */
+/**
+ * Kantenlänge, auf die die kürzere Seite eigener Cover vor dem Hochladen höchstens verkleinert wird (wie bei
+ * Deezer/iTunes). Der Server schneidet das Bild danach mittig auf COVER_MAX_SIZE × COVER_MAX_SIZE zu.
+ */
 const COVER_MAX_SIZE = 500;
 
 /**
- * Wandelt ein beliebiges Bild im Browser in ein JPEG um und verkleinert es auf höchstens COVER_MAX_SIZE.
- * So braucht der Server zum Speichern kein GD.
+ * Wandelt ein beliebiges Bild im Browser in ein JPEG um und verkleinert es so, dass die kürzere Seite höchstens
+ * COVER_MAX_SIZE misst (kleinere Uploads; das Quadrat schneidet der Server aus, siehe crop_cover() in
+ * api/lib/cover.php).
  * @param {File} file Bilddatei (JPEG, PNG, WebP, …)
  * @returns {Promise<Blob>} JPEG
  */
@@ -511,7 +712,7 @@ async function toCoverJpeg(file){
   const bitmap = await createImageBitmap(file).catch(() => {
     throw new Error('Die Datei ist kein lesbares Bild.');
   });
-  const scale = Math.min(1, COVER_MAX_SIZE / Math.max(bitmap.width, bitmap.height));
+  const scale = Math.min(1, COVER_MAX_SIZE / Math.min(bitmap.width, bitmap.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
@@ -532,7 +733,7 @@ async function toCoverJpeg(file){
  * @param {{artist: ?string, title: string}} [query] Vorbelegung der Suche, sonst Interpret und Titel des Lieds
  * @returns {void}
  */
-export function openCoverForm(song, onSaved, query = song){
+function openCoverForm(song, onSaved, query = song){
   // Aus einem offenen Formular heraus über diesem öffnen, damit dessen Eingaben erhalten bleiben.
   const open = overlay.classList.contains('open') ? openStackedOverlay : openOverlay;
   open(`
@@ -550,9 +751,12 @@ export function openCoverForm(song, onSaved, query = song){
         <input type="file" id="coverInput" accept="image/*">
         <span>Bild hierherziehen oder tippen zum Auswählen</span>
       </label>
+      <a class="field-link" id="coverWebSearch" href="#" target="_blank" rel="noopener">Bilder bei DuckDuckGo suchen</a>
     </div>
     <div class="btn-row">
-      ${song.files.cover ? '<button class="btn btn-danger" id="coverDeleteBtn" type="button">Cover entfernen</button>' : ''}
+      ${song.files.includes('cover')
+        ? '<button class="btn btn-danger" id="coverDeleteBtn" type="button">Cover entfernen</button>'
+        : ''}
       <button class="btn" id="cancelBtn" type="button">Schließen</button>
     </div>
   `);
@@ -603,9 +807,18 @@ export function openCoverForm(song, onSaved, query = song){
     }
   };
 
+  // Weitere Bilder: DuckDuckGo-Bildersuche nach Interpret und Titel; das gefundene Bild lädt man als eigenes Bild hoch.
+  const webSearch = /** @type {HTMLAnchorElement} */ (/** @type {*} */ (byId('coverWebSearch')));
+  const updateWebSearch = () => {
+    const words = [byId('coverArtist').value.trim(), byId('coverTitle').value.trim()].filter(Boolean).join(' ');
+    webSearch.href = `https://duckduckgo.com/?${new URLSearchParams({q: words, ia: 'images', iax: 'images'})}`;
+  };
+  updateWebSearch();
+
   byId('coverSearchBtn').addEventListener('click', () => void search());
   for(const id of ['coverArtist', 'coverTitle']){
     byId(id).addEventListener('keydown', e => { if(e.key === 'Enter') void search(); });
+    byId(id).addEventListener('input', updateWebSearch);
   }
   bindDropzone(file => void apply(async () => uploadCover(song.slug, await toCoverJpeg(file))));
   byId('coverDeleteBtn')?.addEventListener('click', () => void apply(() => deleteCover(song.slug)));

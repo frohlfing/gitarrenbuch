@@ -1,15 +1,19 @@
 <?php
 
 /**
- * JSON-API für Lieder: Listen/Lesen, Anlegen, Bearbeiten (inkl. Rename bei Titeländerung)
- * und Löschen. Der Import einer GP-Datei als neues Lied läuft separat über import.php.
+ * JSON-API für Lieder: Listen/Lesen, Bearbeiten (inkl. Rename bei Titeländerung) und Löschen.
+ * Angelegt wird ein Lied nur über import.php, weil jedes Lied Noten hat (beim manuellen Anlegen erzeugt der
+ * Browser ein Gerüst, siehe createScore() in js/score.js).
  *
  * GET    /api/songs.php            -> {"songs": [...]}, alle Lieder, alphabetisch nach Titel sortiert. Kein Token nötig.
  * GET    /api/songs.php?slug=xyz   -> einzelnes Lied. Kein Token nötig. 404, falls unbekannt.
- * POST   /api/songs.php            -> legt ein neues Lied an. Body: JSON-Objekt mit title (Pflicht), artist, key,
- *                                     capo, tuning, tempo, technique, tags, sources. Token nötig. 201 bei Erfolg.
- * PUT    /api/songs.php?slug=xyz   -> aktualisiert ein Lied (gleicher Body wie POST). Ändert sich durch Interpret
- *                                     oder Titel der Slug, wird der Ordner umbenannt. Token nötig.
+ * PUT    /api/songs.php?slug=xyz   -> aktualisiert ein Lied. Body: JSON-Objekt mit title (Pflicht), artist,
+ *                                     technique, tags, subtitle, album, words, music, copyright, tab, instructions,
+ *                                     notes, sources, youtubeSeconds. Fehlen subtitle bis instructions, bleiben die
+ *                                     gespeicherten; fehlt youtubeSeconds, bleibt die gespeicherte Länge, solange
+ *                                     die YouTube-URL gleich ist.
+ *                                     Ändert sich durch Interpret oder Titel der Slug, wird der Ordner umbenannt.
+ *                                     Token nötig.
  * DELETE /api/songs.php?slug=xyz   -> löscht das Lied samt Ordner (Rohmaterial inklusive). Token nötig.
  *
  * Jedes Lied enthält zusätzlich das berechnete Feld files (welche Dateien vorhanden sind, siehe SONG_FILES).
@@ -30,17 +34,11 @@ try {
             if ($slug !== null) {
                 $song = get_song($slug);
                 if ($song === null) {
-                    json_error(404, "Lied '$slug' nicht gefunden");
+                    json_error(404, "Song '$slug' nicht gefunden");
                 }
                 json_response(200, $song);
             }
             json_response(200, ['songs' => list_songs()]);
-
-        case 'POST':
-            require_token();
-            $data = read_json_body();
-            $song = create_song($data);
-            json_response(201, $song);
 
         case 'PUT':
             require_token();
