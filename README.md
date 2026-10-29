@@ -305,25 +305,23 @@ nicht gespeichert.
 }
 ```
 
-`technique` ist `strumming`, `fingerpicking` oder `null`. `tags` sind die Genres (in der Oberfläche "Genre"),
-mehrere je Song möglich, z. B. "Rock & Pop", "Folk", "Weihnachtslied"; das Formular zeigt die vorhandenen zum An- und
-Abwählen. Tonart, Capo, Stimmung und Tempo stehen nicht in `song.json`, sondern nur in den Noten; die Songansicht liest sie von dort. `subtitle` bis `instructions` sind die
-weiteren Angaben aus der GP-Datei, 1:1 übernommen (Untertitel, Album, Text, Musik, Copyright, Tab-Autor,
-Anweisungen); das Gitarrenbuch nutzt sie vorerst nicht, und "Song bearbeiten" lässt sie unverändert. `notes` sind freie, mehrzeilige Notizen. Interpret und
-Titel zusammen dürfen nur einmal vorkommen.
+`technique` ist `strumming`, `fingerpicking` oder `null`. `tags` sind die Genres (in der Oberfläche "Genre"), mehrere 
+je Song möglich, z. B. "Rock & Pop", "Folk", "Weihnachtslied"; das Formular zeigt die vorhandenen zum An- und Abwählen. 
+Tonart, Capo, Stimmung und Tempo stehen nicht in `song.json`, sondern nur in den Noten; die Songansicht liest sie von 
+dort. `subtitle` bis `instructions` sind die weiteren Angaben aus der GP-Datei, 1:1 übernommen (Untertitel, Album, 
+Text, Musik, Copyright, Tab-Autor, Anweisungen); das Gitarrenbuch nutzt sie vorerst nicht, und "Song bearbeiten" lässt 
+sie unverändert. `notes` sind freie, mehrzeilige Notizen. Interpret und Titel zusammen dürfen nur einmal vorkommen.
 
-`sources` hält fest, woher das Rohmaterial stammt (im Formular "Quelle für Guitar-Pro-Datei" und "Quelle für
-Audio-Datei"): `ultimateGuitar` ist die Seite des Tabs bei Ultimate Guitar (von dort manuell heruntergeladen),
-`youtube` das Video, aus dem `bin/audio.php` die Audiospur holt. Beide werden von Hand eingetragen. Unter dem YouTube-Feld führt "Auf YouTube suchen" zur Suche nach Interpret und Titel.
-Ein eingefügter YouTube-Link wird sofort auf `https://www.youtube.com/watch?v=<ID>` gekürzt (Playlist, Startzeit
-usw. fallen weg); der Server kürzt beim Speichern noch einmal.
-Neben den Feldern stehen die Längen, damit man sieht, ob ein Clip passt: "Noten" (Spieldauer im eigenen Tempo mit
-Wiederholungen, ohne Sync-Punkte), "Clip" (Länge des eingetragenen Videos) und "MP3"
-(vorhandene `audio.mp3`). Die Clip-Länge steht als `youtubeSeconds` in `song.json`; YouTube wird nur gefragt, wenn
-sich die URL ändert oder die Länge noch fehlt (dann zeigt der Tooltip den Videotitel). Ohne YouTube-URL ist sie
-`null`.
-Regeln zu den einzelnen Feldern (Pflichtfelder, Wertebereiche, Dateien) stehen bei den Funktionen in
-`public/api/lib/crud.php`.
+`sources` hält fest, woher das Rohmaterial stammt (im Formular "Quelle für Guitar-Pro-Datei" und "Quelle für 
+Audio-Datei"): `ultimateGuitar` ist die Seite des Tabs bei Ultimate Guitar (von dort manuell heruntergeladen), 
+`youtube` das Video, aus dem `bin/audio.php` die Audiospur holt. Beide werden von Hand eingetragen. Unter dem 
+YouTube-Feld führt "Auf YouTube suchen" zur Suche nach Interpret und Titel. Ein eingefügter YouTube-Link wird sofort 
+auf `https://www.youtube.com/watch?v=<ID>` gekürzt (Playlist, Startzeit usw. fallen weg); der Server kürzt beim 
+Speichern noch einmal. Neben den Feldern stehen die Längen, damit man sieht, ob ein Clip passt: "Noten" (Spieldauer im 
+eigenen Tempo mit Wiederholungen, ohne Sync-Punkte), "Clip" (Länge des eingetragenen Videos) und "MP3" (vorhandene 
+`audio.mp3`). Die Clip-Länge steht als `youtubeSeconds` in `song.json`; YouTube wird nur gefragt, wenn sich die URL 
+ändert oder die Länge noch fehlt (dann zeigt der Tooltip den Videotitel). Ohne YouTube-URL ist sie `null`. Regeln zu 
+den einzelnen Feldern (Pflichtfelder, Wertebereiche, Dateien) stehen bei den Funktionen in `public/api/lib/crud.php`.
 
 ## Frontend / Arbeitsweise
 
@@ -440,9 +438,9 @@ oft nicht mehr genau und müssen im Sync-Editor nachgezogen werden.
 
 "Manuell" im selben Dialog ist für Songs ohne passende GP-Datei (wie "Manuell" im Import-Dialog der Videothek) und
 öffnet das Formular "Neuer Song"; eine schon eingetragene Quelle geht mit. Weil jeder Song Noten hat, erzeugt der
-Browser aus dem Formular ein Gerüst (`createScore()` in `js/score.js`): eine Gitarrenspur mit vier leeren Takten,
-dazu Tempo (sonst 120), Stimmung, Kapodaster und Tonart (die klingende, nicht die der Griffe). Diese vier Felder gibt es nur beim Anlegen; danach stehen sie in den Noten und werden
-im Editor geändert.
+Browser aus dem Formular ein Gerüst (`createScore()` in `js/score.js`): eine Gitarrenspur mit vier leeren Takten, dazu 
+Tempo (sonst 120), Stimmung, Kapodaster und Tonart (die klingende, nicht die der Griffe). Diese vier Felder gibt es nur 
+beim Anlegen; danach stehen sie in den Noten und werden im Editor geändert.
 
 ### GP-Export
 
@@ -568,9 +566,10 @@ schreibt ("Key: C (orig. D)"), teils im Widerspruch zu den Vorzeichen; sie steht
 
 ### Notenansicht und Wiedergabe
 
-alphaTab zeichnet Noten und Tabs und spielt sie mit dem eingebauten Synthesizer und einem SoundFont ab. Die
-Abspielleiste steht fest am unteren Rand: Abspielen, zum Anfang, Positionsregler, Tempo (30 bis 100 % in Zehnerschritten) und Loop.
-Beim Abspielen folgt die Ansicht dem Cursor, und der Bildschirm bleibt an (für das Smartphone am Notenständer).
+alphaTab zeichnet Noten und Tabs und spielt sie mit dem eingebauten Synthesizer und einem SoundFont ab. Die 
+Abspielleiste steht fest am unteren Rand: Abspielen, zum Anfang, Positionsregler, Tempo (30 bis 100 % in 
+Zehnerschritten) und Loop. Beim Abspielen folgt die Ansicht dem Cursor, und der Bildschirm bleibt an (für das 
+Smartphone am Notenständer).
 
 Hat der Song eine `audio.mp3`, läuft sie gleichzeitig mit dem Synth (`js/mixer.js`). alphaTab kann beides nicht
 zusammen abspielen, deshalb spielt ein eigenes `<audio>`-Element die Spur und folgt der Position des Synths: Die
@@ -596,8 +595,8 @@ Maßnahmen:
 
 - **Tempo der Aufnahme im MIDI:** Das Abspieltempo von alphaTab bleibt während der Wiedergabe gleich, der Synth folgt
   der Aufnahme über die Tempoangaben im MIDI. Nur wenn Sync-Punkte im Sync-Editor während der Wiedergabe geändert
-  werden, gleicht das Abspieltempo aus (ab 3 % Unterschied, kleinere Unterschiede holt die Audiospur auf). Das MIDI wird
-  neu erzeugt, sobald die Wiedergabe anhält, im Stand sofort.
+  werden, gleicht das Abspieltempo aus (ab 3 % Unterschied, kleinere Unterschiede holt die Audiospur auf). Das MIDI 
+  wird neu erzeugt, sobald die Wiedergabe anhält, im Stand sofort.
 - **Tempo aus den Sync-Punkten:** Das Tempo je Abschnitt ergibt sich aus Ticks und Zeit bis zum nächsten Sync-Punkt
   (`playbackSyncPoints()` in `js/score.js`). Synth und Audiospur kommen so gleichzeitig am Sync-Punkt an.
 - **Seltene Korrektur der Audiospur:** Gemessen wird höchstens alle 25 ms, geglättet über 500 ms. Ab 40 ms Abweichung
