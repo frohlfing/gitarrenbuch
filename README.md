@@ -181,6 +181,7 @@ Wo was liegt (je Song unter `data/songs/<slug>/`):
 gitarrenbuch/                         # Projektroot
  ├── data/                            # Außerhalb des Document Root, kein direkter Browser-Zugriff möglich
  │    ├── test/                       # Testdateien für die Entwicklung (z. B. eine GP8-Datei mit Audiospur)
+ │    ├── chords.json                 # Akkordbibliothek: Griffe je Akkordname, Standardgriff zuerst
  │    └── songs/                      # Ein Unterordner pro Song
  │         └── <slug>/                # Slug aus Interpret + Titel, z. B. "bob-marley-three-little-birds"
  │              ├── song.json         # Angaben (Titel, Interpret, Spieltechnik, Tags, Notizen, Quellen-URLs)
@@ -207,25 +208,29 @@ gitarrenbuch/                         # Projektroot
  │    │    │    ├── slug.php          # slugify() + Eindeutigkeits-Check
  │    │    │    └── youtube.php       # Video-ID, Titel und Länge eines YouTube-Videos
  │    │    ├── audio.php              # Liefert audio.mp3 (z. B. für den GP-Export)
+ │    │    ├── chords.php             # Akkordbibliothek ausliefern
  │    │    ├── cover.php              # Cover ausliefern, suchen, übernehmen, hochladen, entfernen
  │    │    ├── import.php             # Neuen Song mit Noten anlegen (Import oder Gerüst, inkl. Cover)
  │    │    ├── lyrics.php             # Akkorddatei hochladen (landet unter orig/)
- │    │    ├── score.php              # Liefert score.atex (für alphaTab)
+ │    │    ├── score.php              # score.atex ausliefern (für alphaTab) und ersetzen (Sync-Editor)
  │    │    ├── songs.php              # Songs lesen, bearbeiten, löschen
  │    │    └── youtube.php            # Titel und Länge eines YouTube-Videos (für das Formular)
  │    ├── dev/                        # Admin-/Wartungsskripte – NICHT dauerhaft auf dem Produktivserver lassen
  │    │    └── info.php               # phpinfo()
  │    ├── js/                         # ES-Module des Frontends (ohne Bundler, von app.js importiert)
  │    │    ├── api.js                 # API-Zugriff, Token-Abfrage, gemeinsame Typen (Song, CoverHit)
+ │    │    ├── chords.js              # Akkordbibliothek: Griffe, Griffbilder vereinheitlichen, Tonart erkennen
  │    │    ├── library.js             # Kachelübersicht, Formulare (Song, Import, Cover, Text), Overlay
  │    │    ├── mixer.js               # Audiospur parallel zum Synth, Gleichlauf über die Sync-Punkte
  │    │    ├── player.js              # alphaTab-Wrapper: Notenansicht, Abspielleiste, Einstellungen
- │    │    └── score.js               # Notenformat: GP lesen und prüfen, Gerüst, GP-Export, Eckdaten
+ │    │    ├── score.js               # Notenformat: GP lesen, bereinigen und prüfen, Gerüst, GP-Export, Eckdaten
+ │    │    ├── svg.js                 # Griffbild als SVG
+ │    │    └── sync-editor.js         # Sync-Editor: Wellenform, Sync-Punkte setzen, verschieben, speichern
  │    ├── vendor/alphatab/            # alphaTab 1.8.4 (MPL-2.0) mit Notenschrift und SoundFont, siehe "Lizenz"
  │    ├── .htaccess                   # Apache Zugriffsschutz
  │    ├── .htaccess.example           # Vorlage für Apache Zugriffsschutz
  │    ├── app.css                     # CSS-Styles für das Frontend
- │    ├── app.js                      # Einstieg des Frontends: Routing zwischen Übersicht und Songansicht
+ │    ├── app.js                      # Einstieg des Frontends: Routing zwischen Übersicht, Songansicht und Griffbildern
  │    ├── favicon.svg                 # Browser-Tab-Icon (Gitarre)
  │    └── index.html                  # Frontend (lädt/schreibt ausschließlich über /api/*)
  ├── types/alphatab.d.ts              # Nur für die IDE: Typen von alphaTab (nicht deployen)
@@ -261,6 +266,7 @@ abdeckt.
 | DELETE  | `/api/songs.php?slug=xyz`         | Song samt Ordner (Rohmaterial inklusive) löschen                                                                                              |
 | POST    | `/api/import.php`                 | Neuen Song anlegen (`multipart/form-data`: `meta` = JSON wie bei PUT `songs.php`, `score` = alphaTex, `file` = Original-GP-Datei, optional)   |
 | GET     | `/api/score.php?slug=xyz`         | Noten `score.atex` ausliefern (für alphaTab)                                                                                                  |
+| PUT     | `/api/score.php?slug=xyz`         | Noten ersetzen (Body: alphaTex als `text/plain`; nutzt der Sync-Editor). Nur für Songs, die schon Noten haben                                 |
 | GET     | `/api/audio.php?slug=xyz`         | Audiospur `audio.mp3` ausliefern                                                                                                              |
 | PUT     | `/api/audio.php?slug=xyz`         | Audiospur ersetzen (Body: die MP3 als `audio/mpeg`; nutzt `bin/audio.php`)                                                                    |
 | GET     | `/api/cover.php?slug=xyz`         | Cover `cover.jpg` ausliefern                                                                                                                  |
@@ -375,8 +381,11 @@ alphaTab liest die Datei im Browser, weil PHP die GP-Formate nicht selbst auswer
   gehen nach `song.json`: die Beschreibung in die Notizen (`notes`), Untertitel, Album, Text, Musik, Copyright,
   Tab-Autor und Anweisungen 1:1 in eigene Felder. Fehlt der Titel, wird er aus dem Dateinamen gebildet ("Interpret -
   Titel.gp").
-- Die Noten werden ohne diese Angaben zu alphaTex (siehe "Notenformat"). Danach liest der Browser das Ergebnis wieder
-  ein und vergleicht es Schlag für Schlag mit der Datei; geht dabei etwas verloren, lehnt er den Import ab.
+- Die Noten werden automatisch und ohne Rückfrage bereinigt (`cleanImportedScore()`, siehe "Akkorde und
+  Griffbilder"): je Spur und Akkordname ein Griffbild aus der Bibliothek, keine Rhythmus-Schrägstriche, keine
+  Anzeige-Angaben je Spur. Tonart und Vorzeichen bleiben wie in der Datei, Korrekturen schlägt der Editor vor.
+- Dann werden sie ohne die Angaben zu alphaTex (siehe "Notenformat"). Danach liest der Browser das Ergebnis wieder
+  ein und vergleicht es Schlag für Schlag mit dem Modell; geht dabei etwas verloren, lehnt er den Import ab.
 - Der Server prüft das Format am Dateiinhalt (nicht an der Endung), legt die GP-Datei unverändert unter `orig/` ab
   und speichert die Noten als `score.atex`. Noten lassen sich nur beim Anlegen speichern; ändern wird sie der
   geplante Editor.
@@ -427,12 +436,12 @@ Das Paket enthält dann das Token und darf nicht weitergegeben werden. Ohne `con
 liegt lokal bei `bin/audio.php` in `data/backup/<slug>/`, daraus lässt sich die alte Fassung wieder erzeugen. Der Song
 hat dann keine Audiospur mehr, und der nächste Lauf von `bin/audio.php` holt die neue. Wird die URL nur
 gelöscht, bleibt die Audiospur. Unter dem YouTube-Feld weist das Formular darauf hin. Die Sync-Punkte passen danach
-oft nicht mehr genau und müssen im Sync-Editor (geplant) nachgezogen werden.
+oft nicht mehr genau und müssen im Sync-Editor nachgezogen werden.
 
 "Manuell" im selben Dialog ist für Songs ohne passende GP-Datei (wie "Manuell" im Import-Dialog der Videothek) und
 öffnet das Formular "Neuer Song"; eine schon eingetragene Quelle geht mit. Weil jeder Song Noten hat, erzeugt der
 Browser aus dem Formular ein Gerüst (`createScore()` in `js/score.js`): eine Gitarrenspur mit vier leeren Takten,
-dazu Tempo (sonst 120), Stimmung, Kapodaster und Tonart. Diese vier Felder gibt es nur beim Anlegen; danach stehen sie in den Noten und werden
+dazu Tempo (sonst 120), Stimmung, Kapodaster und Tonart (die klingende, nicht die der Griffe). Diese vier Felder gibt es nur beim Anlegen; danach stehen sie in den Noten und werden
 im Editor geändert.
 
 ### GP-Export
@@ -525,6 +534,38 @@ unabhängig vom Formular. Die Datei kommt unverändert nach `orig/` (siehe "Rohm
 wird sie mit dem geplanten Editor: Vorhandener Text hat Vorrang, fehlt er, wird der Text aus der Akkorddatei
 bestmöglich übernommen.
 
+### Akkorde und Griffbilder
+
+Die **Akkordbibliothek** `data/chords.json` (`api/chords.php`, `js/chords.js`) enthält alle Akkorde aus den Songs
+mit ihren Griffen in Standardstimmung, z. B. `"c": ["x32010", "xxx553"]`. Schlüssel ist der Akkordname in
+Kleinbuchstaben, ein Griff steht von der tiefen E-Saite aus ("x" = nicht gespielt; ab Bund 10 mit "-" getrennt). Der
+erste Griff ist der Standard: offen bzw. am einfachsten zu greifen, für Anfänger möglichst in der ersten Lage (Bm als
+`xx4432`; F aber bewusst als volles Barré `133211`). Weitere Griffe kommen aus den Songs, geprüft gegen die
+Akkordtöne; Griffe, die nur Saiten eines anderen weglassen, fallen weg. "Griffbilder" in der Songliste (`#/akkorde`)
+zeigt alle zum Ansehen und Drucken, in aufklappbaren Gruppen je Grundton (gedruckt wird alles, auf weißem Grund).
+
+In den Noten zeigt jede Spur **je angeschlagenem Akkordnamen genau ein Griffbild**, den Standardgriff der Bibliothek
+(`normalizeChords()`), mit Barré-Balken für volle und kleine Barrés (`barreFret()`: F `133211`, F#m `xx4222`; alphaTex
+`barre N`). Nur Akkorde, die die Bibliothek nicht kennt, behalten ihren meistgenutzten Griff aus der Datei,
+z. B. die Septakkorde "D7*", "D#7*", "E7*" in "Kokain", die in einer Lage hochrutschen. Ob GP ein Griffbild ein- oder
+ausblendet, zählt nicht. Hintergrund: alphaTex unterscheidet Akkorde nur nach dem Namen, und viele GP-Dateien hatten
+mehrere Varianten gleichen Namens, oft Bruchstücke mit ausgeblendetem Griffbild; in 12 Songs fehlten deshalb
+Griffbilder im Kopf.
+
+Die **Vorzeichen** prüft `detectKeySignature()` (für den Editor, der Import ändert sie nicht): Akkorde (mit Capo
+klingend gerechnet) und gespielte Töne gegen die notierte Tonleiter. Passt eine andere klar besser, schlägt sie diese
+vor, mit dem Schlussakkord als Grundton, wenn dessen Tonart kaum schlechter passt ("Happy Xmas" mit G-Akkord in A
+wird A-Dur, nicht D-Dur). An den 42 Songs vor der Korrektur schlug sie genau Chasing Cars (A), Happy Xmas (A) und
+Drunken Sailor (Em) vor; diese drei sind von Hand korrigiert.
+
+Bereinigt wurden die 42 Songs am 29.10.2026 (Sicherung jeweils `data/backup/<slug>/score-vor-griffbilder.atex`);
+neue Songs bereinigt der Import nach denselben Regeln. Dabei fallen auch die
+Rhythmus-Schrägstriche weg (die Schläge stehen als normale Akkordschläge da): alphaTab 1.8.4 stürzt an ihnen ab,
+wenn eine Spur nur Tabs zeigt (`paintBeamingStem`), ganze Takte blieben leer. Ebenso die Anzeige-Angaben je Spur
+(`\staff { score tabs }`): Noten und Tabs wählt der Player. Und die Tonart, die GP oft in den Namen der Stimmung
+schreibt ("Key: C (orig. D)"), teils im Widerspruch zu den Vorzeichen; sie steht schon in `\ks` (Sicherung
+`score-vor-stimmungsnamen.atex`).
+
 ### Notenansicht und Wiedergabe
 
 alphaTab zeichnet Noten und Tabs und spielt sie mit dem eingebauten Synthesizer und einem SoundFont ab. Die
@@ -533,22 +574,57 @@ Beim Abspielen folgt die Ansicht dem Cursor, und der Bildschirm bleibt an (für 
 
 Hat der Song eine `audio.mp3`, läuft sie gleichzeitig mit dem Synth (`js/mixer.js`). alphaTab kann beides nicht
 zusammen abspielen, deshalb spielt ein eigenes `<audio>`-Element die Spur und folgt der Position des Synths: Die
-Sync-Punkte in den Noten rechnen sie in Audio-Zeit um. Kleine Abweichungen gleicht eine um bis zu 5 % veränderte
-Abspielrate aus, ab 300 ms springt die Spur. Beim langsameren Tempo läuft auch die Audiospur langsamer, ohne dass
-sich die Tonhöhe ändert. Ohne Sync-Punkte bleibt die Audiospur stumm.
+Sync-Punkte in den Noten rechnen sie in Audio-Zeit um. Der Synth folgt dem Tempo der Aufnahme je Abschnitt zwischen
+zwei Sync-Punkten: Beim Erzeugen des MIDI (Ereignis `midiLoad` von alphaTab) ersetzt der Player die notierten
+Tempoangaben durch das Tempo der Aufnahme (`applyRecordingTempo()` in `js/score.js`). Beim langsameren Tempo läuft
+auch die Audiospur langsamer, ohne dass sich die Tonhöhe ändert. Ohne Sync-Punkte bleibt die Audiospur stumm.
+
+**Gegen Haken und Ruckeln** (Oktober 2026). Die Wiedergabe hakte und ruckelte bei allen Songs mit Audiospur. Gemessen
+wurde an "Geiler is schon" und "Nussschüsselblues", es gab drei Ursachen:
+
+1. **Abspielrate der Audiospur ständig geändert:** Der Mixer führte die Audiospur stufenlos nach. Die gemessene
+   Abweichung schwankt um einige Millisekunden, also kam fast bei jeder Messung eine neue Rate heraus (462 Änderungen
+   in 30 s). Bei jeder Änderung stellt der Browser seine Tonhöhenkorrektur neu ein, das ist hörbar.
+2. **Tempo des Synths an jedem Sync-Punkt umgestellt:** Der Synth folgte der Aufnahme über das Abspieltempo von
+   alphaTab (`playbackSpeed`), meist um 1 bis 2 %. Jede Umstellung setzt den Synth in alphaTab neu an die Position,
+   dabei werden klingende Töne abgeschnitten. alphaTab meldet das außerdem als Spulen, und der Mixer hat die Audiospur
+   daraufhin angehalten und neu angesetzt.
+3. **Ungenaues Tempo je Abschnitt:** alphaTab berechnet das Tempo der Aufnahme je Abschnitt leicht ungenau. Bei "Geiler
+   is schon" kam der Synth 13 ms zu spät am nächsten Sync-Punkt an, die Audiospur sprang dort.
+
+Maßnahmen:
+
+- **Tempo der Aufnahme im MIDI:** Das Abspieltempo von alphaTab bleibt während der Wiedergabe gleich, der Synth folgt
+  der Aufnahme über die Tempoangaben im MIDI. Nur wenn Sync-Punkte im Sync-Editor während der Wiedergabe geändert
+  werden, gleicht das Abspieltempo aus (ab 3 % Unterschied, kleinere Unterschiede holt die Audiospur auf). Das MIDI wird
+  neu erzeugt, sobald die Wiedergabe anhält, im Stand sofort.
+- **Tempo aus den Sync-Punkten:** Das Tempo je Abschnitt ergibt sich aus Ticks und Zeit bis zum nächsten Sync-Punkt
+  (`playbackSyncPoints()` in `js/score.js`). Synth und Audiospur kommen so gleichzeitig am Sync-Punkt an.
+- **Seltene Korrektur der Audiospur:** Gemessen wird höchstens alle 25 ms, geglättet über 500 ms. Ab 40 ms Abweichung
+  läuft die Audiospur fest 4 % schneller oder langsamer, bis die Abweichung unter 10 ms liegt. Ab 300 ms springt sie.
+- **Kein unnötiges Neuansetzen:** Meldet alphaTab ein Spulen, die Audiospur liegt aber richtig, läuft sie weiter.
+- **Verzögerung beim Start:** Die Audiospur läuft nach `play()` einige Dutzend Millisekunden verspätet los. Der Mixer
+  misst das beim Start und setzt sie beim nächsten Start um so viel weiter hinten an.
+
+Ergebnis beim Nussschüsselblues (Tempo der Aufnahme schwankt je Abschnitt um bis zu 7 %): Über 32 s und 8 Sync-Punkte
+änderte sich weder das Abspieltempo des Synths noch die Rate der Audiospur. Die Abweichung blieb konstant bei −29 ms
+(±1 ms).
 
 Passt das notierte Tempo nicht zur Aufnahme, steht in der Kopfzeile dahinter rot das Tempo der Audiospur, z. B.
 "105 BPM (⚠ Audio: 211 BPM)". Verglichen wird die notierte Dauer (mit allen Tempowechseln) mit der Dauer in der
 Aufnahme, jeweils vom ersten bis zum letzten Sync-Punkt (`recordingTempoFactor()` in `js/score.js`); das Ergebnis
 wird auf eine ganze Zahl gerundet. Markiert ist jeder Song, bei dem ein anderes ganzzahliges Tempo besser passt, also
-auch kleine Abweichungen. Korrigiert wird später im Editor ("Tempo an der Audiospur anpassen").
+auch kleine Abweichungen. Korrigiert wird im Sync-Editor ("Tempo … → … BPM").
 
 Liegt der letzte Sync-Punkt hinter dem Ende der Audiospur, folgt in der Kopfzeile rot "(⚠ Sync-Punkte passen nicht zur
 Audiospur)", sobald die Audiospur geladen ist (`isSyncOutsideAudio()` in `js/score.js`). Das passiert z. B. nach dem
 Wechsel auf einen kürzeren Clip. Ein negativer erster Sync-Punkt ist gewollt (Takt 1 beginnt vor der Aufnahme).
 
 Titel und Interpret setzt der Player aus `song.json` ein, Tonart, Capo, Stimmung und Tempo liest er aus den Noten
-und zeigt sie in der Kopfzeile.
+und zeigt sie in der Kopfzeile, z. B. "Tonart Bbm · Capo 1 (Griffe Am)". Die Tonart (`\ks`) ist die klingende: Wie
+Guitar Pro notiert alphaTab mit Capo klingend, jeder Bund hebt die Saiten um einen Halbton. Die Tonart der Griffe
+liegt um so viele Halbtöne tiefer, wie der Capo Bünde hat (`shapeKey()` in `js/score.js`). Wer nachträglich einen
+Capo setzt (z. B. weil die Aufnahme höher klingt als notiert), muss auch `\ks` mit anheben.
 
 Das Zahnrad öffnet die Einstellungen:
 
@@ -558,12 +634,53 @@ Das Zahnrad öffnet die Einstellungen:
   bleibt hörbar.
 - **Üben**: Metronom und Vorzähler
 - **Loop-Bereich**: von Takt bis Takt, oder im Notenblatt über die Takte ziehen
-- **Lautstärke**: Synth, Audiospur und Metronom (auch für den Vorzähler) mit eigenen Reglern untereinander; dazu
-  vorübergehend (bis zum Sync-Editor) der Audio-Versatz in ms (je Song gemerkt, nur im Browser), um eine Korrektur
-  der Sync-Punkte nach Gehör auszuprobieren
-- **Darstellung**: Noten + Tabs (wie in der Datei), nur Tabs oder nur Noten; Größe
+- **Lautstärke**: Synth, Audiospur und Metronom (auch für den Vorzähler) mit eigenen Reglern untereinander. Ein
+  Audio-Versatz aus der Zeit vor dem Sync-Editor wirkt weiter und wird hier genannt, bis er im Sync-Editor in die
+  Sync-Punkte übernommen ist.
+- **Darstellung**: Noten + Tabs, nur Tabs oder nur Noten (gilt für alle Spuren); Größe. Was GP je Spur gespeichert
+  hatte (39 der 75 Spuren auf "nur Tabs", bei "Noten + Tabs" fehlten deshalb die Noten), steht seit 29.10.2026
+  nicht mehr in den Noten und zählt auch beim Import nicht.
 
 Die Einstellungen (außer den Spuren) gelten für alle Songs und werden im Browser gemerkt.
+
+### Sync-Editor
+
+Die Sync-Punkte (`\sync` in `score.atex`) ordnen Takte der Noten Stellen in der Audiospur zu. Bei importierten
+GP-Dateien übernimmt alphaTab sie beim Umwandeln. Bei YouTube-Audio und nach dem Wechsel auf einen anderen Clip
+werden sie im Sync-Editor gesetzt bzw. nachgezogen (`js/sync-editor.js`, Vorbild ist der "Media Sync Editor" im
+alphaTab-Playground). Er öffnet sich über das Menü der Songansicht, wenn der Song eine `audio.mp3` hat, und liegt fest
+über der Abspielleiste. Noten, Cursor und Wiedergabe bleiben dabei bedienbar.
+
+- **Wellenform** der Audiospur mit einem Marker je Sync-Punkt, beschriftet mit der Taktnummer (dazu "+ 50 %" für eine
+  Stelle mitten im Takt, "⇥" für das Taktende und "(2.)" für die zweite Wiederholung). Die rote Linie ist die
+  Wiedergabeposition; beim Abspielen blättert die Ansicht mit.
+- **Marker ziehen**, oder anklicken und mit den Pfeiltasten verschieben (10 ms, mit Umschalt 1 ms). Ein Marker bleibt
+  immer zwischen seinen Nachbarn. Entf löscht ihn, ein Klick daneben springt an diese Stelle der Aufnahme.
+- **Anfang erkennen:** Setzt den ersten Sync-Punkt auf die erste Note (im ersten Takt mit Noten, bei Pausen am
+  Taktanfang also mitten im Takt) und dorthin, wo die Aufnahme hörbar wird (−30 dB unter dem lautesten Stück).
+  Punkte davor fallen weg. Danach bietet der Editor an, die übrigen Punkte um dieselbe Zeit zu verschieben, etwa
+  nach dem Wechsel auf einen anders geschnittenen Clip. Das Ergebnis ist ein Vorschlag: Beginnt die Aufnahme mit
+  Sprechen oder Geräuschen, liegt er zu früh (getestet an 23 Songs: etwa die Hälfte auf ±100 ms genau, sonst bis zu
+  8 s daneben).
+- **Ende erkennen:** Setzt den letzten Sync-Punkt an das Ende des letzten Takts mit Noten (in seiner letzten
+  Wiederholung), dorthin, wo die Aufnahme verklingt. Punkte dahinter fallen weg.
+- **+ Punkt:** Setzt einen Sync-Punkt an den Anfang des Takts, in dem der Wellenform-Cursor (rote Linie) steht, an
+  die Stelle, die ihm schon entspricht. Danach lässt er sich an die richtige Stelle ziehen.
+- **ms verschieben:** Verschiebt alle Sync-Punkte um eine feste Zeit (negativ: Audiospur früher).
+- **Tempo … → … BPM** erscheint, wenn das notierte Tempo nicht zur Aufnahme passt (siehe Kopfzeile). Der Button
+  multipliziert alle Tempoangaben mit dem gemessenen Faktor (`recordingTempoFactor()` in `js/score.js`), damit
+  Tempowechsel im Verhältnis bleiben, gerundet auf ganze BPM. Die Sync-Punkte bleiben unverändert.
+- **Rückgängig** (auch Strg+Z) für jede Änderung bis zum Speichern; Mausrad verschiebt den Ausschnitt, Strg+Mausrad
+  bzw. − und + zoomen (5 s bis ganze Aufnahme; beim Öffnen die ganze).
+- Ein **Audio-Versatz** aus der Zeit vor dem Sync-Editor (früher im Einstellungsfeld des Players) lässt sich mit
+  einem Klick in die Sync-Punkte übernehmen; nach dem Speichern ist er im Player wieder 0.
+
+Jede Änderung wirkt sofort auf die Wiedergabe. **Speichern** schreibt mit `PUT api/score.php` nur die Zeilen
+`\sync (…)` (an der Stelle der bisherigen, sonst am Ende) und die Zahlen in den Zeilen `\tempo …`; alles andere in
+`score.atex` bleibt Zeichen für Zeichen erhalten (`writeSyncAndTempo()` in `js/score.js`). Vorher wird das Ergebnis
+eingelesen und mit dem Erwarteten verglichen. Den alphaTex-Exporter von alphaTab zu nehmen, kommt nicht in Frage: Er
+schreibt nur 6 der 42 Songs unverändert zurück (siehe "Offene Punkte"). "Schließen" fragt bei ungespeicherten
+Änderungen nach und setzt sie im Player zurück.
 
 ## Stand / Roadmap
 
@@ -582,15 +699,23 @@ Die Einstellungen (außer den Spuren) gelten für alle Songs und werden im Brows
 - ✅ `bin/audio.php`: YouTube → `audio.mp3`, Upload auf den Server über `api/audio.php`, portables Paket
 - ✅ Mixer für Synth und Audiospur (`js/mixer.js`), Kennzeichnung eines Tempos, das nicht zur Audiospur passt, und
   von Sync-Punkten außerhalb der Audiospur
-- ❌ Range-Support in `api/audio.php`, damit der Mixer die MP3 streamen kann, statt sie ganz zu laden
-- ❌ Sync-Editor: Wellenform, verschiebbare Marker, ersten und letzten Sync-Punkt automatisch setzen
-- ❌ Editor für Text und Akkorde samt Aufbereitung: Song-Modell, Ansicht Text & Akkorde, Speichern der Noten
-  (`PUT api/score.php`), Einarbeiten von Akkorddateien (Grundsatz 3), eingefügter Text, Vorschläge beim Nachreichen
-  von Material, Export als `.cho`, "Tempo an der Audiospur anpassen"
+- ✅ Sync-Editor (28.10.2026): Wellenform, verschiebbare Marker, Anfang und Ende erkennen, alle verschieben, Tempo
+  an die Aufnahme anpassen, Speichern der Sync-Punkte und Tempi (`PUT api/score.php`)
+- ✅ Haken und Ruckeln der Wiedergabe behoben (28.10.2026, siehe "Notenansicht und Wiedergabe")
+- ✅ Tonart mit Capo (28.10.2026): `\ks` ist die klingende Tonart, die Kopfzeile rechnete umgekehrt ("Junge" zeigte
+  "Griffe Bbm" statt Am); `\ks` der vier Songs mit nachträglich gesetztem Capo angehoben
+- ✅ Akkordbibliothek und Griffbilder (29.10.2026): `data/chords.json`, Seite "Griffbilder" zum Drucken, je Spur
+  und Akkord ein Griffbild, Rhythmus-Schrägstriche und Anzeige-Angaben entfernt, auch automatisch beim Import;
+  Vorzeichen von drei Songs korrigiert, Tonart aus den Stimmungsnamen entfernt (siehe "Akkorde und Griffbilder")
+- ❌ Editor für Text und Akkorde samt Aufbereitung: Song-Modell, Ansicht Text & Akkorde, Speichern der ganzen
+  Noten, Einarbeiten von Akkorddateien (Grundsatz 3), eingefügter Text, Vorschläge beim Nachreichen von Material,
+  Export als `.cho`
   - TODO: Drag-&-Drop-Feld "Akkorddatei" aus dem Formular "Song bearbeiten" in den Editor verschieben
-- ❌ DIN-A4-Seite zum Spielen am Lagerfeuer: Akkordbibliothek, `leadsheet.json`, Muster, SVG-Bausteine, A4-Fit-Loop
-  (Zielstil: die handgebauten Seiten in `data/archiv/Leadsheets/`)
+- ❌ DIN-A4-Seite zum Spielen am Lagerfeuer: Kennzeichen "gängig" in der Akkordbibliothek, `leadsheet.json`,
+  Muster, SVG-Bausteine, A4-Fit-Loop (Zielstil: die handgebauten Seiten in `data/archiv/Leadsheets/`)
 - ❌ Editor für Noten und Tabs
+- ⏸ Range-Support in `api/audio.php`, damit der Mixer die MP3 streamen kann, statt sie ganz zu laden (zurückgestellt,
+  bis die Ladezeit stört)
 - ❌ KI-Funktionen: Fingerstyle- oder Anfängerfassung (Spur als alphaTex hinein, neue Spur als alphaTex heraus),
   Akkorde aus der Aufnahme bestimmen (über die Sync-Punkte in Takte umgerechnet)
 
@@ -603,11 +728,8 @@ Was beim Übernehmen des Archivs noch nachzuliefern oder zu prüfen ist, steht i
 ### Geplante Dateien
 
 ```
- ├── data/
- │    └── chords.json                 # Akkordbibliothek: Griffe + Kennzeichen "gängig" (kein Diagramm im Leadsheet)
  └── public/
       ├── api/
-      │    ├── chords.php             # Akkordbibliothek lesen und schreiben
       │    └── leadsheet.php          # leadsheet.json lesen und schreiben
       ├── js/
       │    ├── editor/                # Editor für Text, Akkorde, Noten und Tabs
@@ -623,39 +745,17 @@ Was beim Übernehmen des Archivs noch nachzuliefern oder zu prüfen ist, steht i
       │    │    ├── merge.js          # Teilmodelle zusammenführen, unsichere Stellen markieren
       │    │    └── text.js           # Akkordblatt-Text (Akkorde über Text) → Teilmodell
       │    ├── leadsheet.js           # Leadsheet rendern + A4-Fit-Loop
-      │    ├── svg.js                 # Akkorddiagramm, Schlagmuster, Picking-Muster als SVG
-      │    └── sync-editor.js         # Wellenform + verschiebbare Sync-Marker
+      │    ├── svg.js                 # dazu Schlagmuster, Picking-Muster als SVG (Griffbild gibt es schon)
       ├── templates/leadsheet.html    # <template>-Bausteine für das Leadsheet
       └── print.css                   # Druck-Layout für das Leadsheet (@page A4)
 ```
 
-Dazu `PUT` für `api/score.php` (Noten aus dem Editor speichern). API-Erweiterungen:
+API-Erweiterungen (`PUT api/score.php` gibt es schon, siehe Sync-Editor):
 
 | Endpunkt                  | Methoden | Zweck                                                                         |
 |---------------------------|----------|-------------------------------------------------------------------------------|
-| `api/score.php?slug=`     | PUT      | Noten als alphaTex speichern (Editor)                                         |
 | `api/leadsheet.php?slug=` | GET, PUT | Druckinfos (Muster, Tab-Verweise, Layout)                                     |
-| `api/chords.php`          | GET, PUT | Akkordbibliothek                                                              |
-
-### Sync-Editor
-
-Bei importierten GP-Dateien übernimmt alphaTab die Sync-Punkte beim Umwandeln in die Noten. Bei YouTube-Audio und
-nach dem Wechsel auf einen anderen Clip werden sie im Sync-Editor gesetzt bzw. nachgezogen: Wellenform plus
-verschiebbare Marker. Vorbild ist der "Media Sync Editor" im alphaTab-Playground. Beim Laden des Audios entstehen
-automatisch Startpunkt, Endpunkt und Punkte an Tempowechseln.
-
-**Ersten Sync-Punkt automatisch setzen** und **Letzten Sync-Punkt automatisch setzen** (Buttons, festgelegt
-28.10.2026): Messen in der Audiospur, wann der erste Ton einsetzt bzw. der letzte verklingt, und setzen den ersten
-Sync-Punkt an den Anfang des ersten Takts mit Noten bzw. den letzten an das Ende des letzten Takts. Das hilft vor
-allem nach dem Wechsel auf einen anders geschnittenen Clip (z. B. "Junge": dieselbe Aufnahme, 5,3 s früher und am
-Ende gekürzt). Eine automatische Messung des Versatzes zwischen zwei Clips taugt nur als Vorschlag: Sie lag bei zwei
-Songs genau um das Doppelte daneben.
-
-**Audio-Versatz:** Ein Feld, um alle Sync-Punkte probeweise um einige Millisekunden zu verschieben und nach Gehör zu
-prüfen, bevor die Korrektur in die Noten übernommen wird (bis dahin vorübergehend im Einstellungsfeld des
-Players).
-
-Offen beim Mixer: Höreindruck auf dem Smartphone, Ausgabe-Latenz des Synths (ggf. fester Versatz).
+| `api/chords.php`          | PUT      | Akkordbibliothek schreiben (GET gibt es schon)                                |
 
 ### Editor
 
@@ -669,12 +769,6 @@ Ein Editor für alles: **Text, Akkorde, Noten und Tabs** eines Lieds in einer Ob
 - **Noten & Tabs:** alphaTab-Darstellung mit Cursor. Bearbeitet werden Bünde, Dauer und Effekte, Takte lassen sich
   einfügen und löschen. alphaTab bringt keinen Editor mit, das ist der größte Eigenanteil.
 - **Muster:** Schlag- und Picking-Muster sowie Tab-Verweise für Intro und Solo.
-
-**Tempo an der Audiospur anpassen** (Button, festgelegt 28.10.2026): Misst das Tempo der Aufnahme vom ersten bis zum
-letzten Sync-Punkt (`recordingTempoFactor()` in `js/score.js`) und multipliziert alle Tempoangaben mit diesem
-Faktor, damit Tempowechsel im Verhältnis bleiben. Tempi sind ganze Zahlen: Das Ergebnis wird gerundet (105,6 wird
-106), Kommazahlen sind auch als Eingabe nicht erlaubt. Die Sync-Punkte bleiben unverändert. Bis dahin markiert die
-Kopfzeile jedes Tempo, das sich so korrigieren ließe.
 
 **Kopplung:** Silben und Akkorde hängen an Schlägen in den Noten. Ein Klick auf eine Silbe setzt den Cursor auf die
 zugehörige Note und umgekehrt. Ein geänderter Akkord erscheint sofort in beiden Ansichten, und beim Abspielen läuft
@@ -692,10 +786,20 @@ und `leadsheet.json` (Zeilenumbrüche, Art und Muster der Abschnitte).
   Noten wandern selbst mit). Dafür braucht es keine eigene Zuordnungsdatei.
 - Passt das nicht mehr, etwa weil sich die Noten geändert haben, markiert der Editor die betroffenen Stellen.
 
+**Prüfen und Vorschläge:** Was der Import automatisch bereinigt (Griffbilder, siehe "Akkorde und Griffbilder"),
+hält der Editor beim Bearbeiten aktuell. Dazu, jeweils als Vorschlag, den der Benutzer übernimmt oder nicht:
+
+- **Tonart und Vorzeichen** aus `detectKeySignature()` vorschlagen, Kirchentonarten benennen (A-Mixolydisch in
+  "Happy Xmas", E-Dorisch in "Drunken Sailor").
+- **Auffällige Akkorde markieren**, die nicht zur Tonart passen (leiterfremd, unlesbarer Name).
+- **Griffbilder:** einen anderen Griff aus der Bibliothek wählen oder einen neuen in die Bibliothek aufnehmen
+  (`PUT api/chords.php`).
+
 **Speichern:** Alles wird aus dem Modell neu geschrieben, `orig/` bleibt immer unberührt.
 
-- `score.atex`: Noten, Tabs, Liedtext und Akkordsymbole an den Schlägen, Abschnitte als Marker, Sync-Punkte, über
-  den alphaTex-Exporter von alphaTab mit `PUT api/score.php`
+- `score.atex`: Noten, Tabs, Liedtext und Akkordsymbole an den Schlägen, Abschnitte als Marker, Sync-Punkte, mit
+  `PUT api/score.php`. Der alphaTex-Exporter von alphaTab taugt dafür erst, wenn er verlustfrei schreibt (siehe
+  "Offene Punkte").
 - `leadsheet.json`: mit `PUT api/leadsheet.php`, inklusive Zeilenumbrüchen und Abschnittsdaten
 
 **Manuell angelegte Songs** haben ein erzeugtes Gerüst, anfangs mit leeren Takten. Text und Akkorde aus einer
@@ -864,6 +968,7 @@ Begleitmuster, Tab-Verweise, Layout, dazu Art, `id` und Muster der Abschnitte so
 - Silbenzählung in Abspielreihenfolge bei Wiederholungen, Sprüngen (D.S., Coda) und mehreren Liedtextzeilen
 - Qualität der automatischen Zuordnung in `align.js` an echten Beispielen
 - Mixer auf dem Smartphone, Ausgabe-Latenz des Synths
+- Der alphaTex-Exporter schreibt nur 6 der 42 Songs unverändert zurück (u. a. zusätzliche `\scale`-Angaben)
 - Klang: Der mitgelieferte SoundFont (Sonivox, rund 1 MB) klingt eher nach Computer; bessere sind 30–150 MB groß
 - alphaTab-Updates: Die alphaTex-Syntax kann sich ändern. Vor einem Update alle Songs mit der alten Version laden und
   mit der neuen speichern.

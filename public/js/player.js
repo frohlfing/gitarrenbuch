@@ -8,12 +8,15 @@
 
 import {escapeHtml, loadScoreText} from './api.js';
 import {Mixer} from './mixer.js';
-import {applySongMeta, loadAlphaTab, parseScore, readScoreInfo} from './score.js';
+import {
+  applyRecordingTempo, applySongMeta, loadAlphaTab, parseScore, playbackSyncPoints, readScoreInfo, recordingTempoAt,
+} from './score.js';
 
 /** @typedef {typeof import('../../types/alphatab')} AlphaTabModule */
 /** @typedef {import('../../types/alphatab').AlphaTabApi} AlphaTabApi */
 /** @typedef {import('../../types/alphatab').model.Score} Score */
 /** @typedef {import('../../types/alphatab').model.Track} Track */
+/** @typedef {import('../../types/alphatab').synth.BackingTrackSyncPoint} BackingTrackSyncPoint */
 /** @typedef {import('./api.js').Song} Song */
 /** @typedef {import('./score.js').ScoreInfo} ScoreInfo */
 
@@ -24,8 +27,9 @@ const PREFS_KEY = 'gitarrenbuch_player';
 /** Präfix im localStorage für die angezeigten Spuren je Lied (+ Slug). */
 const TRACKS_KEY_PREFIX = 'gitarrenbuch_tracks_';
 /**
- * Präfix im localStorage für den Audio-Versatz je Lied (+ Slug). Vorübergehend, bis der Sync-Editor kommt: Damit lässt
- * sich eine Korrektur der Sync-Punkte nach Gehör ausprobieren (siehe docs/nachlieferung.md).
+ * Präfix im localStorage für den Audio-Versatz je Lied (+ Slug). Stammt aus der Zeit vor dem Sync-Editor, als sich eine
+ * Korrektur der Sync-Punkte nur so nach Gehör ausprobieren ließ. Ein gespeicherter Wert wirkt weiter, bis er im
+ * Sync-Editor in die Sync-Punkte übernommen ist (siehe clearStoredOffset()).
  */
 const OFFSET_KEY_PREFIX = 'gitarrenbuch_audio_offset_';
 
@@ -68,10 +72,30 @@ export function formatTime(ms){
 }
 
 /**
+ * Zeigt jedes Griffbild mit mindestens einer gegriffenen Saite, leere ("x x x x x x") nicht. Was die Datei je Akkord
+ * vorgibt (in GP "Griffbild anzeigen"), zählt nicht: Im Kopf soll jeder angeschlagene Akkord stehen.
+ * @param {Score} score geladene Noten
+ * @returns {void}
+ */
+function showChordDiagrams(score){
+  for(const track of score.tracks) for(const staff of track.staves){
+    for(const chord of staff.chords?.values() ?? []) chord.showDiagram = chord.strings.some(fret => fret >= 0);
+  }
+}
+
+/**
  * Wert von alphaTab.synth.PlayerState.Playing. Als Konstante, weil das Modul erst beim Öffnen eines Lieds
  * geladen wird und die IDE das Enum über den dynamischen Import nicht auflöst.
  */
 const PLAYER_STATE_PLAYING = 1;
+
+/**
+ * Kleinste Änderung des Tempofaktors, für die während der Wiedergabe das Abspieltempo von alphaTab umgestellt wird
+ * (Anteil). Nötig ist das nur, solange im Sync-Editor geänderte Sync-Punkte noch nicht im MIDI stecken (siehe
+ * applySpeed()). Jede Umstellung setzt den Synth intern neu an die Position, das ist als Aussetzer hörbar; kleinere
+ * Unterschiede gleicht der Mixer an der Audiospur aus.
+ */
+const SPEED_CHANGE_MIN = 0.03;
 
 /** Wählbare Abspieltempi (Faktor). */
 const SPEEDS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
@@ -102,6 +126,16 @@ export class Player {
   prefs = loadPrefs();
   /** Slug des geladenen Lieds. */
   slug = '';
+  /** Ob das Lied eine audio.mp3 hat; dann folgt der Synth ihrem Tempo. */
+  hasAudio = false;
+  /**
+   * Sync-Punkte, deren Tempo im MIDI des Synths steckt (siehe applyRecordingTempo() in score.js); leer ohne
+   * Audiospur.
+   * @type {BackingTrackSyncPoint[]}
+   */
+  midiSyncPoints = [];
+  /** Ob das MIDI neu erzeugt werden soll, sobald die Wiedergabe anhält (siehe refreshMidi()). */
+  midiStale = false;
   /**
    * Audiospur, die dem Synth folgt; null, wenn das Lied keine audio.mp3 hat.
    * @type {?Mixer}
@@ -116,11 +150,6 @@ export class Player {
    * @type {Promise<?number>}
    */
   audioDuration = new Promise(resolve => { this.resolveAudioDuration = resolve; });
-  /**
-   * Noten-/Tab-Anzeige je Notensystem, wie sie in der Datei steht (für prefs.stave = "Default").
-   * @type {Map<Object, {notation: boolean, tab: boolean}>}
-   */
-  staffDefaults = new Map();
 
   /**
    * @param {HTMLElement} root leeres Element, in das Notenblatt und Bedienelemente gerendert werden
@@ -180,6 +209,7 @@ export class Player {
    */
   async load(song){
     this.slug = song.slug;
+    this.hasAudio = song.files.includes('audio');
     // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
     const alphaTab = await loadAlphaTab();
     const tex = await loadScoreText(song.slug);
@@ -208,10 +238,15 @@ export class Player {
       this.el.play.disabled = false;
       this.el.stop.disabled = false;
     });
+    api.midiLoad.on(midi => {
+      this.midiSyncPoints = this.hasAudio ? playbackSyncPoints(alphaTab, api.score) : [];
+      applyRecordingTempo(alphaTab, midi, this.midiSyncPoints);
+    });
     api.playerStateChanged.on(e => this.onStateChanged(e.state));
     api.playerPositionChanged.on(e => {
       this.onPosition(e.currentTime, e.endTime);
-      this.mixer?.onPosition(e.currentTick, e.isSeek);
+      this.mixer?.onPosition(e.currentTick, e.isSeek,
+        api.playbackSpeed * recordingTempoAt(this.midiSyncPoints, e.currentTick));
       this.applySpeed(e.currentTick);
     });
     api.playbackRangeChanged.on(() => this.renderPanel());
@@ -223,7 +258,7 @@ export class Player {
     this.speed.addEventListener('change', () => {
       this.prefs.speed = Number(this.speed.value);
       this.mixer?.setSpeed(this.prefs.speed);
-      this.applySpeed(api.tickPosition);
+      this.applySpeed(api.tickPosition, true);
       savePrefs(this.prefs);
     });
     this.el.loop.addEventListener('click', () => {
@@ -232,7 +267,7 @@ export class Player {
     });
     this.el.settings.addEventListener('click', () => this.togglePanel());
     this.el.panel.addEventListener('change', e => this.onPanelChange(/** @type {HTMLInputElement} */ (e.target)));
-    // Lautstärken und Versatz schon beim Ziehen bzw. Tippen übernehmen, nicht erst beim Loslassen.
+    // Lautstärken schon beim Ziehen übernehmen, nicht erst beim Loslassen.
     this.el.panel.addEventListener('input', e => {
       const t = /** @type {HTMLInputElement} */ (e.target);
       if(t.dataset.mix) this.onMixChange(t);
@@ -241,6 +276,7 @@ export class Player {
 
     const score = parseScore(alphaTab, tex, api.settings);
     applySongMeta(score, song);
+    showChordDiagrams(score);
     this.applyStave(score);
     api.renderScore(score, this.loadVisibleTracks(score).map(t => t.index));
     if(song.files.includes('audio')) void this.loadMixer(score);
@@ -271,19 +307,45 @@ export class Player {
     mixer.onState(this.isPlaying);
     this.mixer = mixer;
     this.applyLevels();
-    this.applySpeed(this.api.tickPosition);
+    this.applySpeed(this.api.tickPosition, true);
     this.renderPanel();
   }
 
   /**
-   * Setzt das Abspieltempo von alphaTab: eingestelltes Tempo mal Tempofaktor der Aufnahme an dieser Stelle (siehe
-   * Mixer.tempoFactor()). Ohne Audiospur bleibt es beim eingestellten Tempo.
-   * @param {number} tick aktueller MIDI-Tick
+   * Erzeugt das MIDI neu, damit es das Tempo der aktuellen Sync-Punkte enthält (nach Änderungen im Sync-Editor). Das
+   * hält den Synth an; während der Wiedergabe geschieht es deshalb erst, wenn sie anhält. Die Position bleibt.
+   * @param {boolean} [now] auch während der Wiedergabe sofort (z. B. wenn sich die notierten Tempi geändert haben)
    * @returns {void}
    */
-  applySpeed(tick){
-    const speed = this.prefs.speed * (this.mixer?.tempoFactor(tick) ?? 1);
-    if(this.api && Math.abs(this.api.playbackSpeed - speed) > 0.0005) this.api.playbackSpeed = speed;
+  refreshMidi(now = false){
+    if(!this.api) return;
+    if(this.isPlaying && !now){
+      this.midiStale = true;
+      return;
+    }
+    this.midiStale = false;
+    const tick = this.api.tickPosition;
+    this.api.loadMidiForScore();
+    this.api.tickPosition = tick;
+    this.applySpeed(tick, true);
+  }
+
+  /**
+   * Setzt das Abspieltempo von alphaTab: eingestelltes Tempo mal Tempofaktor der Aufnahme an dieser Stelle (siehe
+   * Mixer.tempoFactor()), geteilt durch den Faktor, der schon im MIDI steckt. Normalerweise ist das genau das
+   * eingestellte Tempo; ohne Audiospur ebenso. Nach Änderungen im Sync-Editor (bis refreshMidi()) ändert es sich
+   * während der Wiedergabe nur ab SPEED_CHANGE_MIN, sonst genau.
+   * @param {number} tick aktueller MIDI-Tick
+   * @param {boolean} [force] auch kleine Änderungen während der Wiedergabe übernehmen (nach einer Einstellung)
+   * @returns {void}
+   */
+  applySpeed(tick, force = false){
+    if(!this.api) return;
+    const speed = this.mixer
+      ? this.prefs.speed * this.mixer.tempoFactor(tick) / recordingTempoAt(this.midiSyncPoints, tick)
+      : this.prefs.speed;
+    const change = Math.abs(speed / this.api.playbackSpeed - 1);
+    if(change > 0.0005 && (force || !this.isPlaying || change >= SPEED_CHANGE_MIN)) this.api.playbackSpeed = speed;
   }
 
   /**
@@ -307,17 +369,21 @@ export class Player {
   }
 
   /**
-   * Übernimmt die Lautstärke von Synth, Audiospur oder Metronom bzw. den Audio-Versatz aus dem Einstellungsfeld.
-   * @param {HTMLInputElement} t geändertes Element mit data-mix ("synth", "audio", "metronome" oder "offset")
+   * Löscht den gespeicherten Audio-Versatz, nachdem der Sync-Editor ihn in die Sync-Punkte übernommen hat.
+   * @returns {void}
+   */
+  clearStoredOffset(){
+    localStorage.removeItem(OFFSET_KEY_PREFIX + this.slug);
+    this.mixer?.setOffset(0);
+  }
+
+  /**
+   * Übernimmt die Lautstärke von Synth, Audiospur oder Metronom aus dem Einstellungsfeld.
+   * @param {HTMLInputElement} t geändertes Element mit data-mix ("synth", "audio" oder "metronome")
    * @returns {void}
    */
   onMixChange(t){
     const value = Number(t.value);
-    if(t.dataset.mix === 'offset'){
-      this.mixer?.setOffset(value || 0);
-      localStorage.setItem(OFFSET_KEY_PREFIX + this.slug, String(value || 0));
-      return;
-    }
     const level = this.el.panel.querySelector(`[data-level="${t.dataset.mix}"]`);
     if(level) level.textContent = `${Math.round(value * 100)} %`;
     const pref = {synth: 'synthVolume', audio: 'audioVolume', metronome: 'metronomeVolume'}[t.dataset.mix];
@@ -337,9 +403,11 @@ export class Player {
   }
 
   /**
-   * Stellt Noten und Tabs nach prefs.stave ein ("Default" = wie in der Datei, "Tab" = nur Tabs, "Score" = nur
-   * Noten). Ersetzt das veraltete settings.display.staveProfile: alphaTab steuert das inzwischen je Notensystem.
-   * Notensysteme ohne Saiten (z. B. Schlagzeug) behalten bei "Tab" ihre Noten. Neu gezeichnet wird vom Aufrufer.
+   * Stellt Noten und Tabs aller Spuren nach prefs.stave ein ("Default" = Noten und Tabs, "Tab" = nur Tabs,
+   * "Score" = nur Noten). Ersetzt das veraltete settings.display.staveProfile: alphaTab steuert das inzwischen je
+   * Notensystem. Was die Datei je Spur vorgibt, zählt nicht (aus GP kamen viele Spuren mit nur Tabs, zwei nur mit
+   * Rhythmus-Schrägstrichen); seit 29.10.2026 steht es auch nicht mehr in den Dateien.
+   * Notensysteme ohne Saiten (z. B. Schlagzeug) haben nur Noten. Neu gezeichnet wird vom Aufrufer.
    * @param {Score} score geladene Noten
    * @returns {void}
    */
@@ -347,20 +415,10 @@ export class Player {
     const mode = this.prefs.stave;
     for(const track of score.tracks){
       for(const staff of track.staves){
-        if(!this.staffDefaults.has(staff)){
-          this.staffDefaults.set(staff, {notation: staff.showStandardNotation, tab: staff.showTablature});
-        }
-        const original = this.staffDefaults.get(staff);
-        if(mode === 'Score' || (mode === 'Tab' && !staff.isStringed)){
-          staff.showStandardNotation = true;
-          staff.showTablature = false;
-        } else if(mode === 'Tab'){
-          staff.showStandardNotation = false;
-          staff.showTablature = true;
-        } else {
-          staff.showStandardNotation = original.notation;
-          staff.showTablature = original.tab;
-        }
+        staff.showStandardNotation = mode !== 'Tab' || !staff.isStringed;
+        staff.showTablature = mode !== 'Score' && staff.isStringed;
+        staff.showSlash = false;
+        staff.showNumbered = false;
       }
     }
   }
@@ -391,6 +449,7 @@ export class Player {
     this.mixer?.onState(playing);
     if(playing) void this.requestWakeLock();
     else this.releaseWakeLock();
+    if(!playing && this.midiStale) this.refreshMidi();
   }
 
   /**
@@ -501,14 +560,11 @@ export class Player {
           <input type="range" id="mix-${key}" min="0" max="1" step="0.05" value="${value}" data-mix="${key}">
           <output data-level="${key}">${Math.round(value * 100)} %</output>`).join('')}
       </div>
-      ${!this.mixer ? '' : this.mixer.synced ? `
-        <div class="panel-row">
-          <label>Audio-Versatz <input type="number" step="10" value="${this.mixer.offset}" data-mix="offset"
-            aria-label="Audio-Versatz in Millisekunden"> ms</label>
-        </div>
-        <div class="hint">Vorübergehend bis zum Sync-Editor: Negativ heißt Audiospur früher. Zum Ausprobieren einer
-          Korrektur der Sync-Punkte; gilt nur hier im Browser.</div>`
-        : '<div class="hint">Die Noten haben keine Sync-Punkte, die Audiospur kann ihnen noch nicht folgen.</div>'}
+      ${!this.mixer ? '' : !this.mixer.synced
+        ? '<div class="hint">Die Noten haben keine Sync-Punkte, die Audiospur kann ihnen noch nicht folgen. Setzen '
+          + 'lassen sie sich im Sync-Editor (Menü).</div>'
+        : this.mixer.offset ? `<div class="hint">Noch eingestellt: Audio-Versatz ${this.mixer.offset} ms (frühere
+          Einstellung). Im Sync-Editor (Menü) lässt er sich in die Sync-Punkte übernehmen.</div>` : ''}
       <h4>Darstellung</h4>
       <div class="panel-row">
         <select data-pref="stave" aria-label="Notensystem">

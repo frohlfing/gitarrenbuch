@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#272b34">
 <title>Gitarrenbuch</title>
 <link rel="icon" href="favicon.svg?4" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=20261028c">
+<link rel="stylesheet" href="app.css?v=20261029d">
 </head>
 <body>
 
@@ -27,6 +27,7 @@
       <option value="updated-desc">Zuletzt geändert</option>
       <option value="created-desc">Zuletzt angelegt</option>
     </select>
+    <a class="btn" href="#/akkorde">Griffbilder</a>
     <button class="btn btn-primary" id="newSongBtn" type="button">+ Neuer Song</button>
   </div>
   <p class="count" id="resultCount"></p>
@@ -35,6 +36,8 @@
 </div>
 
 <main id="songView" hidden></main>
+
+<main id="chordView" hidden></main>
 
 <div class="overlay" id="overlay">
   <div class="sheet" id="sheet"></div>
@@ -64,14 +67,17 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/api.js": "./js/api.js?v=20261028c",
-    "./js/library.js": "./js/library.js?v=20261028c",
-    "./js/mixer.js": "./js/mixer.js?v=20261028c",
-    "./js/player.js": "./js/player.js?v=20261028c",
-    "./js/score.js": "./js/score.js?v=20261028c"
+    "./js/api.js": "./js/api.js?v=20261029d",
+    "./js/chords.js": "./js/chords.js?v=20261029d",
+    "./js/library.js": "./js/library.js?v=20261029d",
+    "./js/mixer.js": "./js/mixer.js?v=20261029d",
+    "./js/player.js": "./js/player.js?v=20261029d",
+    "./js/score.js": "./js/score.js?v=20261029d",
+    "./js/svg.js": "./js/svg.js?v=20261029d",
+    "./js/sync-editor.js": "./js/sync-editor.js?v=20261029d"
   }
 }
 </script>
-<script type="module" src="app.js?v=20261028c"></script>
+<script type="module" src="app.js?v=20261029d"></script>
 </body>
 </html>

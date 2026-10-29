@@ -133,6 +133,34 @@ function store_new_score(string $slug, string $tex, ?string $gpPath = null, stri
 }
 
 /**
+ * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor. Nur für Lieder, die schon Noten haben; neue
+ * Noten kommen über store_new_score(). Geschrieben wird erst daneben und dann umbenannt, damit nie eine halbe Datei
+ * entsteht.
+ *
+ * @param string $slug Slug des Lieds
+ * @param string $tex Noten als alphaTex
+ * @return array das aktualisierte Lied
+ * @throws FileValidationException|NotFoundException|RuntimeException
+ */
+function store_score(string $slug, string $tex): array
+{
+    if (read_song_json($slug) === null) {
+        throw new NotFoundException("Song '$slug' nicht gefunden");
+    }
+    validate_score($tex);
+    $target = song_dir($slug) . '/' . SONG_FILES['score'];
+    if (!is_file($target)) {
+        throw new NotFoundException('Der Song hat noch keine Noten');
+    }
+    $tmp = "$target.tmp";
+    if (file_put_contents($tmp, $tex) === false || !rename($tmp, $target)) {
+        @unlink($tmp);
+        throw new RuntimeException('Noten konnten nicht gespeichert werden');
+    }
+    return touch_song($slug);
+}
+
+/**
  * Liefert eine Datei aus data/ mit ETag aus (beantwortet unveränderte Anfragen mit 304) und beendet das Skript.
  * "private": Die Seite ist per Basic Auth geschützt, Proxys dürfen die Antwort nicht für andere zwischenspeichern.
  * "no-cache": Der Browser darf cachen, muss aber jedes Mal nachfragen, weil sich die Datei beim Speichern ändert.

@@ -61,6 +61,26 @@ export async function loadSongs(){
 }
 
 /**
+ * Ladevorgang der Akkordbibliothek, null bis zum ersten Aufruf von loadChordLibrary().
+ * @type {?Promise<import('./chords.js').ChordLibrary>}
+ */
+let chordLibraryPromise = null;
+
+/**
+ * Lädt die Akkordbibliothek (data/chords.json) einmal je Seitenaufruf.
+ * @returns {Promise<import('./chords.js').ChordLibrary>} Akkordname (klein) → Griffe, Standardgriff zuerst
+ */
+export function loadChordLibrary(){
+  chordLibraryPromise ??= fetch(API_URL + 'chords.php').then(res => {
+    if(!res.ok) throw new Error(`Akkordbibliothek konnte nicht geladen werden (HTTP ${res.status}).`);
+    return res.json();
+  });
+  // Bei einem Fehler beim nächsten Aufruf neu versuchen.
+  void chordLibraryPromise.catch(() => { chordLibraryPromise = null; });
+  return chordLibraryPromise;
+}
+
+/**
  * Lädt die Noten eines Lieds (score.atex; data/ liegt außerhalb des Document Root, deshalb über die API).
  * @param {string} slug Slug des Lieds
  * @returns {Promise<string>} alphaTex
@@ -73,6 +93,20 @@ export async function loadScoreText(slug){
       : `Noten konnten nicht geladen werden (HTTP ${res.status}).`);
   }
   return res.text();
+}
+
+/**
+ * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor.
+ * @param {string} slug Slug des Lieds
+ * @param {string} tex Noten als alphaTex
+ * @returns {Promise<Song>} das aktualisierte Lied
+ */
+export function saveScore(slug, tex){
+  return apiWrite(`${API_URL}score.php?slug=${encodeURIComponent(slug)}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'text/plain; charset=utf-8'},
+    body: tex,
+  });
 }
 
 /**

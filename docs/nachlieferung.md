@@ -167,9 +167,10 @@ Kleine Unterschiede zur MP3 (Ein- und Ausklingen) sind normal. Aufgeführt sind 
 Die neuen `audio.mp3` (von YouTube) beginnen nicht genau dort, wo die bisherige Spur aus der GP-Datei begann. Um
 diesen Versatz müssen alle Sync-Punkte in `score.atex` verschoben werden (negativ: Audio früher). „Gemessen“ ist
 ein Vergleich der beiden Spuren und nur ein Startwert: Bei Three Little Birds und Geboren um zu leben lag die
-Messung genau um das Doppelte daneben, bei Junge und Fröhliche Weihnacht passt 0. Maßgeblich ist das Gehör: In der
-App unter Zahnrad → Lautstärke den „Audio-Versatz“ einstellen (vorübergehend, bis zum Sync-Editor), bis Synth und
-Audiospur zusammen klingen, und den Wert unter „nach Gehör“ eintragen. Sortiert nach dem gemessenen Versatz, der größte zuerst.
+Messung genau um das Doppelte daneben, bei Junge und Fröhliche Weihnacht passt 0. Maßgeblich ist das Gehör: Im
+Sync-Editor (Menü der Songansicht) mit „ms verschieben“ alle Sync-Punkte verschieben, bis Synth und Audiospur zusammen
+klingen, und speichern. Ein früher im Player eingestellter Audio-Versatz lässt sich dort mit einem Klick übernehmen.
+Sortiert nach dem gemessenen Versatz, der größte zuerst.
 
 | Lied                                            | gemessen | nach Gehör      |
 |-------------------------------------------------|---------:|-----------------|
@@ -205,7 +206,8 @@ Audiospur zusammen klingen, und den Wert unter „nach Gehör“ eintragen. Sort
 | R.E.M. – Losing My Religion                     |   +25 ms |                 |
 | Snow Patrol – Chasing Cars                      |   −18 ms |                 |
 
-- [ ] Alle Lieder nach Gehör prüfen; danach verschiebe ich die Sync-Punkte (vorher wird `score.atex` gesichert).
+- [ ] Alle Lieder nach Gehör prüfen und im Sync-Editor verschieben (die Werte „nach Gehör“ oben sind noch nicht
+  übernommen).
 
 ## Sync-Punkte passen nicht zur Audiospur (4 ❌)
 

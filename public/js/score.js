@@ -7,10 +7,16 @@
  * GP-Export werden sie ins Modell eingesetzt.
  */
 
-import {escapeHtml} from './api.js';
+import {escapeHtml, loadChordLibrary} from './api.js';
+import {normalizeChords} from './chords.js';
 
 /** @typedef {typeof import('../../types/alphatab')} AlphaTabModule */
 /** @typedef {import('../../types/alphatab').model.Score} Score */
+/** @typedef {import('../../types/alphatab').model.FlatSyncPoint} FlatSyncPoint */
+/** @typedef {import('../../types/alphatab').synth.BackingTrackSyncPoint} BackingTrackSyncPoint */
+/** @typedef {import('../../types/alphatab').midi.MidiFile} MidiFile */
+/** @typedef {import('../../types/alphatab').midi.TempoChangeEvent} TempoChangeEvent */
+/** @typedef {import('./chords.js').ChordLibrary} ChordLibrary */
 
 /**
  * Ladevorgang des alphaTab-Moduls, null bis zum ersten Aufruf von loadAlphaTab().
@@ -33,12 +39,12 @@ const MAJOR_KEYS = ['Cb', 'Gb', 'Db', 'Ab', 'Eb', 'Bb', 'F', 'C', 'G', 'D', 'A',
 const MINOR_KEYS = ['Abm', 'Ebm', 'Bbm', 'Fm', 'Cm', 'Gm', 'Dm', 'Am', 'Em', 'Bm', 'F#m', 'C#m', 'G#m', 'D#m', 'A#m'];
 
 /**
- * Klingende Dur-Tonarten je Tonhöhenklasse (Grundton mod 12), in der üblichen Schreibweise mit den wenigsten
+ * Dur-Tonarten der Griffe je Tonhöhenklasse (Grundton mod 12), in der üblichen Schreibweise mit den wenigsten
  * Vorzeichen (Db statt C#, Bb statt A#).
  */
-const SOUNDING_MAJOR_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
-/** Klingende Moll-Tonarten je Tonhöhenklasse, wie bei SOUNDING_MAJOR_KEYS (C#m statt Dbm, Bbm statt A#m). */
-const SOUNDING_MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'Bbm', 'Bm'];
+const SHAPE_MAJOR_KEYS = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+/** Moll-Tonarten der Griffe je Tonhöhenklasse, wie bei SHAPE_MAJOR_KEYS (C#m statt Dbm, Bbm statt A#m). */
+const SHAPE_MINOR_KEYS = ['Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'Bbm', 'Bm'];
 
 /** Standardstimmung als MIDI-Noten, tiefe bis hohe Saite (E2 A2 D3 G3 B3 E4). */
 const STANDARD_TUNING = [40, 45, 50, 55, 59, 64];
@@ -68,10 +74,11 @@ const INFO_FIELDS = {
 /**
  * Eckdaten eines Songs, gelesen aus den Noten (erste Spur, die kein Schlagzeug ist, erster Takt).
  * @typedef {Object} ScoreInfo
- * @property {string} key Tonart, wie notiert (mit Capo die Tonart der Griffe), z. B. "A" oder "Em"
+ * @property {string} key Tonart, wie notiert (\ks), z. B. "A" oder "Em". Das ist die klingende Tonart: alphaTab
+ *   notiert mit Capo klingend (die Saiten klingen um capo Halbtöne höher), wie Guitar Pro.
  * @property {number} capo Bund des Kapodasters, 0 ohne
- * @property {string} soundingKey Tonart, wie sie klingt (key um capo Halbtöne höher, siehe soundingKey()); ohne Capo
- *   gleich key
+ * @property {string} shapeKey Tonart der Griffe (key um capo Halbtöne tiefer, siehe shapeKey()); ohne Capo gleich
+ *   key
  * @property {string} tuning Stimmung von der tiefen zur hohen Saite, z. B. "E A D G B E"; leer ohne Saiten
  * @property {number} tempo Anfangstempo in BPM
  * @property {?number} recordedTempo Anfangstempo, wie es in der Aufnahme klingt (siehe recordingTempoFactor()),
@@ -129,7 +136,7 @@ export function readScoreInfo(alphaTab, score){
   return {
     key,
     capo,
-    soundingKey: soundingKey(key, capo),
+    shapeKey: shapeKey(key, capo),
     tuning,
     tempo: score.tempo,
     recordedTempo: factor ? Math.round(score.tempo * factor) : null,
@@ -138,16 +145,17 @@ export function readScoreInfo(alphaTab, score){
 }
 
 /**
- * Tonart, wie sie mit Kapodaster klingt: Jeder Bund hebt um einen Halbton.
- * @param {string} key notierte Tonart (Tonart der Griffe), z. B. "C" oder "F#m"
+ * Tonart der Griffe mit Kapodaster: Jeder Bund hebt um einen Halbton, die Griffe liegen also um capo Halbtöne tiefer
+ * als die klingende Tonart.
+ * @param {string} key klingende (notierte) Tonart, z. B. "Db" oder "Bbm"
  * @param {number} capo Bund des Kapodasters, 0 ohne
- * @returns {string} z. B. "Db" für C mit Capo 1; ohne Capo oder bei unbekannter Tonart unverändert key
+ * @returns {string} z. B. "C" für Db mit Capo 1; ohne Capo oder bei unbekannter Tonart unverändert key
  */
-function soundingKey(key, capo){
+function shapeKey(key, capo){
   const minor = key.endsWith('m');
   const pitchClass = PITCH_CLASSES[(minor ? key.slice(0, -1) : key).toUpperCase()];
   if(!capo || pitchClass === undefined) return key;
-  return (minor ? SOUNDING_MINOR_KEYS : SOUNDING_MAJOR_KEYS)[(pitchClass + capo) % 12];
+  return (minor ? SHAPE_MINOR_KEYS : SHAPE_MAJOR_KEYS)[((pitchClass - capo) % 12 + 12) % 12];
 }
 
 /**
@@ -188,8 +196,8 @@ export function describeScoreInfo(info, audioSeconds = null){
       + `(⚠ Audio: ${info.recordedTempo} BPM)</span>`
     : '');
   return [
-    info.soundingKey && escapeHtml(`Tonart ${info.soundingKey}`),
-    info.capo ? escapeHtml(`Capo ${info.capo}` + (info.key ? ` (Griffe ${info.key})` : '')) : null,
+    info.key && escapeHtml(`Tonart ${info.key}`),
+    info.capo ? escapeHtml(`Capo ${info.capo}` + (info.shapeKey ? ` (Griffe ${info.shapeKey})` : '')) : null,
     info.tuning && info.tuning !== 'E A D G B E' ? escapeHtml(info.tuning) : null,
     tempo,
     isSyncOutsideAudio(info, audioSeconds)
@@ -267,10 +275,194 @@ function fingerprint(score){
 }
 
 /**
+ * Sortiert Sync-Punkte wie alphaTab: nach Takt, Wiederholung und Position im Takt.
+ * @param {FlatSyncPoint[]} points Sync-Punkte (werden nicht verändert)
+ * @returns {FlatSyncPoint[]} sortierte Kopie
+ */
+export function sortSyncPoints(points){
+  return points.slice().sort((a, b) =>
+    a.barIndex - b.barIndex || a.barOccurence - b.barOccurence || a.barPosition - b.barPosition);
+}
+
+/**
+ * Multipliziert alle Tempoangaben eines Modells mit einem Faktor, gerundet auf ganze BPM (wie beim Schreiben in
+ * writeSyncAndTempo()).
+ * @param {Score} score Noten (werden verändert)
+ * @param {number} factor Faktor, 1 lässt alles unverändert
+ * @returns {void}
+ */
+export function scaleTempo(score, factor){
+  // score.tempo folgt der ersten Tempoangabe von selbst (nur ein Getter).
+  if(factor === 1) return;
+  for(const mb of score.masterBars){
+    for(const a of mb.tempoAutomations) a.value = Math.round(a.value * factor);
+  }
+}
+
+/** alphaTab: MIDI-Ticks pro Viertelnote. */
+export const QUARTER_TICKS = 960;
+
+/**
+ * Sync-Punkte der Noten so, wie die Wiedergabe sie braucht: je Abschnitt Startposition (MIDI-Tick) mit notiertem
+ * Tempo (synthBpm) und Tempo der Aufnahme (syncBpm). alphaTab fügt an jedem Tempowechsel einen Punkt ein.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Score} score Noten
+ * @returns {BackingTrackSyncPoint[]} aufsteigend nach Tick; leer, wenn die Noten keine Sync-Punkte haben
+ */
+export function playbackSyncPoints(alphaTab, score){
+  if(!score.masterBars.some(mb => mb.syncPoints?.length)) return [];
+  const points = alphaTab.midi.MidiFileGenerator.generateSyncPoints(score).sort((a, b) => a.synthTick - b.synthTick);
+  for(const [i, p] of points.entries()){
+    const next = points[i + 1];
+    // Das Tempo aus Ticks und Zeit bis zum nächsten Punkt: Das von alphaTab weicht leicht ab (bei "Geiler is schon"
+    // kam der Synth so 13 ms zu spät am nächsten Sync-Punkt an, die Audiospur sprang dort hörbar).
+    if(next && next.syncTime > p.syncTime && next.synthTick > p.synthTick){
+      p.syncBpm = (next.synthTick - p.synthTick) / QUARTER_TICKS * 60000 / (next.syncTime - p.syncTime);
+    }
+    // Der letzte Sync-Punkt (Ende der Noten) hat kein Tempo mehr: das des vorigen Abschnitts weiterverwenden.
+    else if(i > 0 && !next) p.syncBpm = points[i - 1].syncBpm;
+  }
+  return points;
+}
+
+/**
+ * Sync-Punkt am Anfang des Abschnitts, in dem ein Tick liegt (vor dem ersten Sync-Punkt: der erste).
+ * @param {BackingTrackSyncPoint[]} points Sync-Punkte aus playbackSyncPoints()
+ * @param {number} tick MIDI-Tick
+ * @returns {?BackingTrackSyncPoint} null ohne Sync-Punkte
+ */
+export function syncSegmentAt(points, tick){
+  let sp = points[0] ?? null;
+  for(const p of points){
+    if(p.synthTick <= tick) sp = p;
+    else break;
+  }
+  return sp;
+}
+
+/**
+ * Faktor, um den die Aufnahme an einer Stelle schneller ist als notiert.
+ * @param {BackingTrackSyncPoint[]} points Sync-Punkte aus playbackSyncPoints()
+ * @param {number} tick MIDI-Tick
+ * @returns {number} Tempo der Aufnahme geteilt durch das notierte Tempo; 1 ohne Sync-Punkte
+ */
+export function recordingTempoAt(points, tick){
+  const sp = syncSegmentAt(points, tick);
+  return sp && sp.synthBpm > 0 && sp.syncBpm > 0 ? sp.syncBpm / sp.synthBpm : 1;
+}
+
+/**
+ * Schreibt das Tempo der Aufnahme in das MIDI des Synths (Ereignis midiLoad von alphaTab, vor dem Laden in den
+ * Synth). So folgt der Synth der Aufnahme von selbst, und das Abspieltempo von alphaTab muss sich während der
+ * Wiedergabe nicht ändern: Jede Änderung setzt den Synth neu an die Position, das ist als Aussetzer hörbar.
+ * Zwischen erstem und letztem Sync-Punkt ersetzt je Abschnitt eine Tempoangabe mit dem Tempo der Aufnahme die
+ * notierten; davor und danach werden die notierten mit dem Faktor des ersten bzw. letzten Abschnitts multipliziert.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {MidiFile} midi MIDI von alphaTab (wird verändert)
+ * @param {BackingTrackSyncPoint[]} points Sync-Punkte aus playbackSyncPoints()
+ * @returns {void}
+ */
+export function applyRecordingTempo(alphaTab, midi, points){
+  if(!points.length) return;
+  const tempoType = alphaTab.midi.MidiEventType.TempoChange;
+  const first = points[0].synthTick;
+  const last = points[points.length - 1].synthTick;
+  for(const track of midi.tracks){
+    track.events = track.events.filter(e => {
+      if(e.type !== tempoType) return true;
+      const tick = e.tick - midi.tickShift;
+      if(tick >= first && tick < last) return false;
+      const tempo = /** @type {TempoChangeEvent} */ (e);
+      tempo.beatsPerMinute *= recordingTempoAt(points, tick);
+      return true;
+    });
+  }
+  for(const p of points.slice(0, -1)){
+    const tempo = new alphaTab.midi.TempoChangeEvent(p.synthTick + midi.tickShift, 0);
+    tempo.beatsPerMinute = p.syncBpm;
+    midi.tracks[0].addEvent(tempo);
+  }
+}
+
+/**
+ * Schreibt Sync-Punkte und Tempi in alphaTex, ohne den Rest anzufassen. Der Exporter von alphaTab kommt dafür nicht in
+ * Frage: Er schreibt die meisten Noten nicht unverändert zurück (z. B. gehen gleichnamige Griffbilder verloren).
+ * Deshalb werden nur die Zeilen "\sync (…)" ersetzt (an der Stelle der bisherigen, sonst am Ende) und in den Zeilen
+ * "\tempo …" die Zahl. Zur Sicherheit wird das Ergebnis eingelesen und mit dem Erwarteten verglichen.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {string} tex bisheriger Inhalt von score.atex
+ * @param {FlatSyncPoint[]} points neue Sync-Punkte (ersetzen alle bisherigen)
+ * @param {number} [tempoFactor] Faktor für alle Tempoangaben, gerundet auf ganze BPM; 1 lässt sie unverändert
+ * @returns {string} neues alphaTex
+ * @throws {Error} wenn das Ergebnis beim Einlesen nicht den erwarteten Noten entspricht
+ */
+export function writeSyncAndTempo(alphaTab, tex, points, tempoFactor = 1){
+  const kept = [];
+  let insertAt = -1;
+  let indent = '    ';
+  for(const line of tex.split('\n')){
+    const sync = line.match(/^(\s*)\\sync\s*\(/);
+    if(sync){
+      if(insertAt < 0){
+        insertAt = kept.length;
+        indent = sync[1];
+      }
+      continue;
+    }
+    kept.push(tempoFactor === 1 ? line
+      : line.replace(/^(\s*\\tempo\s*\(?\s*)(\d+(?:\.\d+)?)/, (all, head, bpm) => head + Math.round(bpm * tempoFactor)));
+  }
+  if(insertAt < 0){
+    insertAt = kept.length;
+    while(insertAt > 0 && kept[insertAt - 1].trim() === '') insertAt--;
+  }
+  const sorted = sortSyncPoints(points);
+  kept.splice(insertAt, 0, ...sorted.map(p => `${indent}\\sync (${p.barIndex} ${p.barOccurence} `
+    + `${Number(p.millisecondOffset.toFixed(3))}${p.barPosition ? ` ${Number(p.barPosition.toFixed(6))}` : ''})`));
+  const result = kept.join('\n');
+
+  const expected = parseScore(alphaTab, tex);
+  expected.applyFlatSyncPoints(sorted);
+  scaleTempo(expected, tempoFactor);
+  const actual = parseScore(alphaTab, result);
+  const syncKey = s => JSON.stringify(s.exportFlatSyncPoints().map(p =>
+    [p.barIndex, p.barOccurence, Math.round(p.barPosition * 1000), Math.round(p.millisecondOffset)]));
+  if(fingerprint(expected).join('\n') !== fingerprint(actual).join('\n') || syncKey(expected) !== syncKey(actual)
+    || expected.tempo !== actual.tempo){
+    throw new Error('Die Noten ließen sich nicht sicher schreiben, es wurde nichts gespeichert.');
+  }
+  return result;
+}
+
+/**
+ * Bereinigt Noten aus Guitar Pro für das Gitarrenbuch, automatisch und ohne Rückfrage: je Spur und Akkordname ein
+ * Griffbild aus der Bibliothek (siehe normalizeChords()), keine Rhythmus-Schrägstriche (alphaTab 1.8.4 stürzt bei
+ * nur Tabs daran ab, ganze Takte bleiben leer) und keine Anzeige-Angaben je Spur (Noten, Tabs, Schrägstriche wählt
+ * der Player), keine Tonart im Namen der Stimmung. Tonart und Vorzeichen bleiben wie in der Datei; Korrekturen
+ * schlägt der Editor vor.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Score} score Noten, werden geändert
+ * @param {ChordLibrary} library Akkordbibliothek
+ * @returns {void}
+ */
+function cleanImportedScore(alphaTab, score, library){
+  normalizeChords(alphaTab, score, library);
+  for(const track of score.tracks) for(const staff of track.staves){
+    staff.showStandardNotation = true;
+    staff.showTablature = staff.isStringed;
+    staff.showSlash = false;
+    staff.showNumbered = false;
+    // GP schreibt oft die Tonart in den Namen der Stimmung ("Key: C (orig. D)"); sie steht schon in den Vorzeichen.
+    if(/^\s*key\b/i.test(staff.stringTuning?.name ?? '')) staff.stringTuning.name = '';
+    for(const bar of staff.bars) for(const voice of bar.voices) for(const beat of voice.beats) beat.slashed = false;
+  }
+}
+
+/**
  * Liest eine GP-Datei für den Import: Die Angaben (Titel, Interpret, Beschreibung usw.) kommen nach song.json,
- * die Noten werden ohne diese Angaben zu alphaTex. Danach wird das alphaTex wieder eingelesen und mit dem Original
- * verglichen (siehe fingerprint()); geht dabei etwas verloren, wird der Import abgelehnt. Die Audiospur löst der
- * Server aus der Originaldatei, ihre Sync-Punkte stehen im alphaTex.
+ * die Noten werden ohne diese Angaben zu alphaTex, bereinigt mit cleanImportedScore(). Danach wird das alphaTex
+ * wieder eingelesen und mit dem Modell verglichen (siehe fingerprint()); geht dabei etwas verloren, wird der Import
+ * abgelehnt. Die Audiospur löst der Server aus der Originaldatei, ihre Sync-Punkte stehen im alphaTex.
  * @param {File} file Guitar-Pro-Datei (GP3 bis GP8)
  * @returns {Promise<{meta: Object<string, string>, tex: string}>} Angaben (title, artist, die Felder aus INFO_FIELDS,
  *   notes; leere Texte, wenn die Datei sie nicht enthält) und Noten als alphaTex
@@ -292,8 +484,11 @@ export async function readGpFile(file){
     notes: score.notices.trim(),
   };
   for(const prop of ['title', 'artist', 'notices', ...Object.values(INFO_FIELDS)]) score[prop] = '';
+  // Ohne Bibliothek (Netzfehler) behalten die Akkorde ihren eigenen meistgenutzten Griff.
+  cleanImportedScore(alphaTab, score, await loadChordLibrary().catch(() => ({})));
 
-  const tex = writeScore(alphaTab, score);
+  // Der Exporter schreibt "\staff { score tabs }" auch für die Vorgabe; die Angabe braucht es nicht.
+  const tex = writeScore(alphaTab, score).replace(/^( *\\staff) \{\n(?: *\S.*\n)*? *\}\n/gm, '$1\n');
   let differences;
   try {
     const expected = fingerprint(score);

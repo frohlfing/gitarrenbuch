@@ -198,6 +198,7 @@ header p.sub{
 .btn-danger{color:var(--danger);}
 .btn-danger:hover{border-color:var(--danger); color:var(--danger);}
 .btn-icon{min-width:43px; padding:.4rem; font-size:1.25rem; line-height:1;}
+.btn-sm{min-height:32px; padding:.25rem .6rem; font-size:.82rem;}
 .btn-row{display:flex; gap:.6rem; flex-wrap:wrap; margin:1rem 0;}
 
 /* Overlay mit Formular */
@@ -415,6 +416,29 @@ header p.sub{
   box-shadow:0 10px 30px rgba(39,43,52,.22);
   padding:.4rem 1rem 1rem;
 }
+/* Sync-Editor: fest über der Transportleiste; --sync-h (Höhe) setzt app.js */
+#songView.syncing{padding-bottom:calc(var(--bar-h) + var(--sync-h, 0px) + env(safe-area-inset-bottom) + 1rem);}
+#songView.syncing .player-panel{
+  bottom:calc(var(--bar-h) + var(--sync-h, 0px) + env(safe-area-inset-bottom) + .5rem);
+  max-height:calc(100vh - var(--bar-h) - var(--sync-h, 0px) - 6rem);
+}
+.sync-editor{
+  position:fixed; left:0; right:0; z-index:29;
+  bottom:calc(var(--bar-h) + env(safe-area-inset-bottom));
+  background:var(--card);
+  border-top:1px solid var(--rule);
+  box-shadow:0 -4px 16px rgba(39,43,52,.12);
+  padding:.45rem .7rem .3rem;
+}
+.sync-toolbar{display:flex; flex-wrap:wrap; gap:.35rem; align-items:center;}
+.sync-spacer{flex:1;}
+.sync-shift{display:inline-flex; gap:.25rem; align-items:center;}
+.sync-shift input{width:5.5rem; padding:.3rem .4rem; font:inherit; font-size:.85rem; border:1px solid var(--rule); border-radius:6px;}
+.sync-wave{display:block; width:100%; height:110px; margin-top:.4rem; border-radius:6px; cursor:pointer; touch-action:none;}
+.sync-wave:focus-visible{outline:2px solid var(--accent);}
+.sync-scroll{display:block; width:100%; margin:.25rem 0 0; accent-color:var(--accent);}
+.sync-status{display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; min-height:1.8em; font-size:.8rem; color:var(--ink-soft);}
+
 .player-panel h4{
   margin:.9rem 0 .45rem;
   font-size:.72rem;
@@ -438,6 +462,34 @@ header p.sub{
 .at-cursor-beat{background:var(--mark); width:3px;}
 .at-selection div{background:var(--accent-soft);}
 .at-highlight *{fill:var(--accent); stroke:var(--accent);}
+
+/* Griffbilder (#/akkorde): aufklappbare Gruppen je Grundton, darin je Akkord eine Karte, Standardgriff zuerst */
+.chord-sheet{padding:1rem; max-width:1200px; margin:0 auto;}
+.chord-root{margin-bottom:.8rem;}
+.chord-root summary{
+  cursor:pointer; padding:.3rem 0; font-size:1.1rem; font-weight:600;
+  border-bottom:1px solid var(--rule);
+}
+.chord-root-list{display:flex; flex-wrap:wrap; gap:.8rem; padding-top:.6rem;}
+.chord-group{
+  display:flex; flex-wrap:wrap; gap:.2rem;
+  padding:.4rem .5rem; background:var(--card); border:1px solid var(--rule); border-radius:8px;
+  break-inside:avoid;
+}
+.chord-group figure{margin:0; text-align:center; color:var(--ink);}
+.chord-group figcaption{font-size:.72rem; color:var(--ink-soft); font-family:monospace;}
+
+/* Druck: alles auf weißem Grund, ohne Bedienelemente */
+@media print{
+  body, #chordView, .songbar, .chord-group{background:#fff !important;}
+  .songbar .btn{display:none !important;}
+  .songbar{position:static; border:0; padding:0 0 .5rem;}
+  .chord-sheet{padding:0; max-width:none;}
+  .chord-root summary{list-style:none; border-color:#999;}
+  .chord-root summary::-webkit-details-marker{display:none;}
+  .chord-root-list{gap:.4rem;}
+  .chord-group{border-color:#999; page-break-inside:avoid;}
+}
 
 @media (max-width:520px){
   header{padding:1.6rem 1rem 1rem;}
