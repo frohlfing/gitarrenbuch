@@ -15,7 +15,6 @@
  * @property {string} slug Ordnername, aus Interpret + Titel gebildet
  * @property {string} title Titel
  * @property {?string} artist Interpret
- * @property {?('strumming'|'fingerpicking')} technique Spieltechnik
  * @property {string[]} tags Genres (in der Oberfläche "Genre", mehrere je Song möglich), z. B. ["Rock & Pop"]
  * @property {?string} subtitle Untertitel (wie die folgenden Felder beim Import aus der GP-Datei, vorerst ungenutzt)
  * @property {?string} album Album
@@ -31,6 +30,9 @@
  * @property {string} updated Änderungszeitpunkt (ISO 8601)
  * @property {SongFile[]} files vorhandene Dateien (berechnet die API bei jedem Lesen), z. B. ["score", "cover"]
  * @property {string[]} tracks Namen der Spuren aus der Partitur (berechnet die API bei jedem Lesen), z. B. ["Guitar"]
+ * @property {{label: string, hint: string, detail: string}[]} issues Abweichungen von der Konvention für Spuren und
+ *   Capo, die wichtigste zuerst (berechnet die API bei jedem Lesen), z. B. {label: "Spur ohne Rolle", hint: "ohne
+ *   Rolle: „Guitar“", detail: "„Guitar“"}; leer, wenn der Song ihr entspricht
  */
 
 /** Schlüssel des API-Tokens im localStorage. */

@@ -10,6 +10,7 @@ import {
 } from './api.js';
 import {formatTime} from './player.js';
 import {createScore, loadAlphaTab, parseScore, readGpFile, scoreDuration} from './score.js';
+import {trackLabel} from './tracks.js';
 
 /** @typedef {import('./api.js').Song} Song */
 
@@ -99,11 +100,15 @@ function cardHtml(s){
     ? `<div class="thumb"><img src="${escapeHtml(coverUrl(s))}" alt="" loading="lazy">`
     : `<div class="thumb placeholder" style="--h:${placeholderHue(s.slug)}">
         <span class="initial" aria-hidden="true">${escapeHtml(s.title.charAt(0).toUpperCase())}</span>`;
-  return `<a class="card" href="#/song/${encodeURIComponent(s.slug)}">
+  // Rot, wenn der Song nicht der Konvention entspricht (Capo, Spurrollen); gezeigt wird nur die wichtigste
+  // Abweichung, korrigiert wird im Editor.
+  const issue = s.issues?.[0];
+  return `<a class="card${issue ? ' card-issues' : ''}" href="#/song/${encodeURIComponent(s.slug)}">
     ${thumb}
       ${badges ? `<div class="badges">${badges}</div>` : ''}
     </div>
     <div class="body">
+      ${issue ? `<div class="issue-badge" title="${escapeHtml(issue.hint)}">&#9888; ${escapeHtml(issue.label)}</div>` : ''}
       <h3>${escapeHtml(s.title)}</h3>
       <div class="meta">${escapeHtml(s.artist || '')}</div>
       ${s.tags.length ? `<div class="tags">${s.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
@@ -153,7 +158,7 @@ function knownTracks(){
 function refreshTrackFilter(){
   const current = trackSel.value;
   trackSel.innerHTML = '<option value="">Alle Spuren</option>'
-    + knownTracks().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')
+    + knownTracks().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(trackLabel(t))}</option>`).join('')
     + `<option disabled>──────────</option>`
     + `<option value="${WITH_AUDIO}">Mit Audio</option><option value="${WITHOUT_AUDIO}">Ohne Audio</option>`;
   trackSel.value = [...trackSel.options].some(o => !o.disabled && o.value === current) ? current : '';
@@ -543,14 +548,6 @@ export function openSongForm(song, onSaved, sources = {}){
         ${field('keyInput', 'Tonart', '', 'placeholder="z. B. G oder Am"')}
         ${field('capoInput', 'Capo', '', 'inputmode="numeric" placeholder="0"')}
         ${field('tempoInput', 'Tempo (BPM)', '', 'inputmode="numeric" placeholder="120"')}`}
-      <div class="form-field">
-        <label for="techniqueInput">Spieltechnik</label>
-        <select id="techniqueInput">
-          <option value="">–</option>
-          <option value="strumming"${s.technique === 'strumming' ? ' selected' : ''}>Strumming</option>
-          <option value="fingerpicking"${s.technique === 'fingerpicking' ? ' selected' : ''}>Fingerpicking</option>
-        </select>
-      </div>
     </div>
     ${isEdit ? '' : `<div class="form-field">
       <label for="tuningInput">Stimmung</label>
@@ -613,7 +610,6 @@ export function openSongForm(song, onSaved, sources = {}){
     const payload = {
       title: byId('titleInput').value.trim(),
       artist: byId('artistInput').value.trim(),
-      technique: byId('techniqueInput').value,
       tags: byId('tagsInput').value.split(',').map(t => t.trim()).filter(Boolean),
       sources: {
         youtube: youtubeWatchUrl(byId('youtubeInput').value).trim(),

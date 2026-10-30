@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#272b34">
 <title>Gitarrenbuch</title>
 <link rel="icon" href="favicon.svg?4" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=20261029d">
+<link rel="stylesheet" href="app.css?v=20261031c">
 </head>
 <body>
 
@@ -27,6 +27,8 @@
       <option value="updated-desc">Zuletzt geändert</option>
       <option value="created-desc">Zuletzt angelegt</option>
     </select>
+    <!-- Hash-Pfad der App (Router in app.js), keine Sprungmarke -->
+    <!--suppress HtmlUnknownAnchorTarget -->
     <a class="btn" href="#/akkorde">Griffbilder</a>
     <button class="btn btn-primary" id="newSongBtn" type="button">+ Neuer Song</button>
   </div>
@@ -67,17 +69,20 @@
 <script type="importmap">
 {
   "imports": {
-    "./js/api.js": "./js/api.js?v=20261029d",
-    "./js/chords.js": "./js/chords.js?v=20261029d",
-    "./js/library.js": "./js/library.js?v=20261029d",
-    "./js/mixer.js": "./js/mixer.js?v=20261029d",
-    "./js/player.js": "./js/player.js?v=20261029d",
-    "./js/score.js": "./js/score.js?v=20261029d",
-    "./js/svg.js": "./js/svg.js?v=20261029d",
-    "./js/sync-editor.js": "./js/sync-editor.js?v=20261029d"
+    "./js/api.js": "./js/api.js?v=20261031c",
+    "./js/chordpro.js": "./js/chordpro.js?v=20261031c",
+    "./js/chords.js": "./js/chords.js?v=20261031c",
+    "./js/library.js": "./js/library.js?v=20261031c",
+    "./js/mixer.js": "./js/mixer.js?v=20261031c",
+    "./js/player.js": "./js/player.js?v=20261031c",
+    "./js/score.js": "./js/score.js?v=20261031c",
+    "./js/svg.js": "./js/svg.js?v=20261031c",
+    "./js/sync-editor.js": "./js/sync-editor.js?v=20261031c",
+    "./js/textview.js": "./js/textview.js?v=20261031c",
+    "./js/tracks.js": "./js/tracks.js?v=20261031c"
   }
 }
 </script>
-<script type="module" src="app.js?v=20261029d"></script>
+<script type="module" src="app.js?v=20261031c"></script>
 </body>
 </html>

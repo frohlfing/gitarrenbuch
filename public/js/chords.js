@@ -121,7 +121,7 @@ export function barreFret(frets){
  * @param {string} name Akkordname
  * @param {Map<string, number>} ownGrips Griffe aus der Datei mit Anzahl der Schläge
  * @param {?ChordLibrary} library Bibliothek, null für Notensysteme in anderer Stimmung
- * @returns {?string} Griff, null wenn es keinen echten Griff gibt
+ * @returns {?string} Griff, null, wenn es keinen echten Griff gibt
  */
 export function chooseGrip(name, ownGrips, library){
   const known = library?.[chordKey(name)]?.[0];
@@ -167,6 +167,26 @@ export function chordTones(name, transpose = 0){
   return {root, minor, tones};
 }
 
+/** Namen der Grundtöne beim Transponieren, wie sie die Bibliothek führt (C#, D#, F#, G#, aber Bb). */
+const ROOT_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B'];
+
+/**
+ * Transponiert einen Akkordnamen, samt Basston ("D/F#" um 2 → "E/G#").
+ * @param {string} name Akkordname, z. B. "F#m7"
+ * @param {number} semitones Halbtöne nach oben (negativ nach unten)
+ * @returns {string} transponierter Name; unlesbare Namen und 0 Halbtöne unverändert
+ */
+export function transposeChordName(name, semitones){
+  if(!(semitones % 12)) return name;
+  const shift = (letter, sign) => {
+    const pc = NOTE_CLASSES[letter.toLowerCase()] + (sign === '#' ? 1 : sign === 'b' ? -1 : 0);
+    return ROOT_NAMES[((pc + semitones) % 12 + 24) % 12];
+  };
+  return name.replace(/^(\s*)([A-Ha-h])([#b]?)([^/]*)(?:\/([A-Ha-h])([#b]?))?/,
+    (all, space, root, sign, quality, bass, bassSign) => space + shift(root, sign) + quality
+      + (bass ? '/' + shift(bass, bassSign) : ''));
+}
+
 /**
  * Grundton der Dur-Tonart zu einer Vorzeichenzahl.
  * @param {number} keySignature Kreuze positiv, Bes negativ (wie bar.keySignature)
@@ -191,6 +211,7 @@ function keySignatureOf(tonic, minor){
   return 0;
 }
 
+// noinspection JSUnusedGlobalSymbols: für den Editor, noch ohne Aufrufer
 /**
  * Erkennt die Tonart aus den Akkorden (klingend, also mit Capo gerechnet) und den gespielten Tönen und vergleicht
  * sie mit den notierten Vorzeichen. Viele GP-Dateien haben gar keine Vorzeichen, obwohl das Lied etwa in A steht.
@@ -198,11 +219,13 @@ function keySignatureOf(tonic, minor){
  * Tonart kaum schlechter passt (A-Dur mit G-Akkord, also A-Mixolydisch, wird A-Dur, nicht D-Dur). Gedacht für
  * Vorschläge im Editor; der Import ändert die Vorzeichen nicht.
  * @param {Score} score Noten
- * @returns {?{keySignature: number, minor: boolean}} bessere Vorzeichen, null wenn die notierten passen, die
+ * @returns {?{keySignature: number, minor: boolean}} bessere Vorzeichen, null, wenn die notierten passen, die
  *   Vorzeichen im Lied wechseln oder es keine Akkorde gibt
  */
 export function detectKeySignature(score){
-  const staves = score.tracks.flatMap(t => t.staves);
+  /** @type {Staff[]} */
+  const staves = [];
+  for(const track of score.tracks) staves.push(...track.staves);
   const signatures = new Set(staves.flatMap(st => st.bars.map(bar => `${bar.keySignature}/${bar.keySignatureType}`)));
   if(signatures.size !== 1) return null;
   const current = staves[0].bars[0].keySignature;

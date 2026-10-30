@@ -15,6 +15,11 @@
   --dark-soft:#363a42;
   --card:#ffffff;
   --bar-h:64px;
+  /* Von JavaScript gesetzt, hier mit Vorgabe: Größe der Noten (player.js), Höhe des Sync-Editors (app.js),
+     Griffbilder je Reihe (layoutChordDiagrams() in player.js) */
+  --scale:1;
+  --sync-h:0px;
+  --per-row:10;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -145,6 +150,14 @@ header p.sub{
 .card .thumb .badge{background:rgba(39,43,52,.8); color:#fff;}
 .badge.missing{text-decoration:line-through;}
 .card .body{padding:.65rem .8rem .8rem;}
+/* Song entspricht nicht der Konvention (Spurrollen, Capo): rot, bis er im Editor korrigiert ist */
+.card.card-issues{border:2px solid var(--danger);}
+.card.card-issues:hover{border-color:var(--danger);}
+.issue-badge{color:var(--danger); font-size:.75rem; font-weight:600; margin-bottom:.2rem; cursor:help;}
+.song-issues{
+  background:#fdecec; color:#a32020; border-bottom:2px solid var(--danger);
+  padding:.45rem .9rem; font-size:.88rem;
+}
 .card h3{
   margin:0 0 .15rem;
   font-size:1rem;
@@ -343,7 +356,7 @@ header p.sub{
 .songbar-menu{position:relative;}
 .menu{
   position:absolute; right:0; top:calc(100% + .3rem);
-  min-width:200px;
+  min-width:130px;
   background:var(--card);
   border:1px solid var(--rule);
   border-radius:8px;
@@ -356,6 +369,7 @@ header p.sub{
   background:none; border:none;
   padding:.7rem 1rem;
   cursor:pointer; color:var(--ink);
+  white-space:nowrap;
 }
 .menu button:hover{background:var(--paper);}
 .menu .danger{color:var(--danger);}
@@ -364,6 +378,75 @@ header p.sub{
 /* Eigener Stacking-Kontext: alphaTab gibt Cursor und Auswahl hohe z-index-Werte, die sonst über Kopfzeile und Overlay lägen. */
 .score-wrap{position:relative; z-index:0; background:var(--card); margin:.6rem auto 0; max-width:1300px; border-radius:6px;}
 .score-wrap > div{min-height:40vh;}
+/* Eingeklappt statt ausgeblendet: alphaTab braucht die Breite des Containers zum Zeichnen. */
+.score-wrap.collapsed{height:0; overflow:hidden; visibility:hidden; margin:0;}
+.score-wrap.collapsed > div{min-height:0;}
+
+/* Umschalter Noten | Text & Akkorde in der Kopfzeile */
+.view-switch{display:flex; border:1px solid var(--rule); border-radius:6px; overflow:hidden; flex:none;}
+.view-switch button{
+  font:inherit; font-size:.85rem; padding:.45rem .7rem; border:0; background:var(--card); color:var(--ink);
+  cursor:pointer; min-height:43px;
+}
+.view-switch button + button{border-left:1px solid var(--rule);}
+.view-switch button[aria-pressed="true"]{background:var(--accent); color:#fff;}
+/* Kopfzeile der Liedansicht: Ansicht und Spuren; auf schmalen Bildschirmen die Ansicht als Dropdown */
+.songbar-controls{display:flex; align-items:center; gap:.5rem; flex:none;}
+.songbar-controls:empty{display:none;}
+.view-select{display:none; font:inherit; font-size:.9rem; padding:.4rem .5rem; min-height:43px; border:1px solid var(--rule); border-radius:6px; background:var(--card); color:var(--ink);}
+.tracks-menu{position:relative;}
+.tracks-btn{white-space:nowrap;}
+.tracks-pop{
+  position:absolute; right:0; top:calc(100% + .3rem); z-index:40; min-width:190px;
+  background:var(--card); border:1px solid var(--rule); border-radius:8px; box-shadow:0 10px 24px rgba(39,43,52,.16);
+  padding:.4rem .2rem; display:flex; flex-direction:column;
+}
+.tracks-pop label{display:flex; align-items:center; gap:.5rem; padding:.45rem .7rem; white-space:nowrap; cursor:pointer;}
+.tracks-pop label:hover{background:var(--paper);}
+@media (max-width:820px){
+  .view-switch{display:none;}
+  .view-select{display:block;}
+}
+
+/* Text & Akkorde: je Silbe ein Block mit Akkord darüber */
+/* Pfeil statt Textcursor: ein Klick springt an die Stelle, wie in den Noten von alphaTab */
+.text-view{background:var(--card); margin:.6rem auto 0; max-width:900px; border-radius:6px; padding:1rem 1.2rem 2rem;
+  cursor:default;}
+/* Griffbilder über Noten bzw. Text, für alle Ansichten gleich; darunter schließt die Ansicht ohne Lücke an.
+   Je Reihe gleich viele (--per-row, layoutChordDiagrams() in player.js), sonst bliebe z. B. eines allein. */
+.chord-strip{
+  display:grid; grid-template-columns:repeat(var(--per-row), auto); justify-content:center; gap:.2rem;
+  color:var(--ink); background:var(--card);
+  margin:.6rem auto 0; max-width:1300px; padding:.8rem 1.2rem .6rem; border-radius:6px 6px 0 0;
+  border-bottom:1px solid var(--rule);
+}
+.chord-strip.narrow{max-width:900px;}
+/* Größe (Einstellungen) nur für den Inhalt: Leiste und Blatt behalten Breite und Hintergrund */
+.chord-strip > *, .text-view > *{zoom:var(--scale);}
+.chord-strip:not([hidden]) ~ .score-wrap, .chord-strip:not([hidden]) ~ .text-view{margin-top:0; border-radius:0 0 6px 6px;}
+/* Etwas größer als früher die Griffbilder von alphaTab (Saitenabstand 12 px statt 16; zehn passen in eine Reihe) */
+.chord-strip .chord-diagram{width:86px; height:auto;}
+/* Akkordname gut lesbar (in SVG-Einheiten, verkleinert etwa 15 px) */
+.chord-strip .chord-diagram text:first-child{font-size:19px;}
+.tv-section{margin-top:1.1rem;}
+.tv-section h3{margin:0 0 .3rem; font-size:.85rem; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em;}
+.tv-line{display:flex; flex-wrap:wrap; align-items:flex-end; margin-bottom:.35rem; font-size:1.1rem; line-height:1.3;}
+.tv-part{display:inline-flex; flex-direction:column; white-space:pre;}
+/* Silbe unter der Maus markieren (ein Klick springt dorthin) */
+.tv-part[data-t]:hover .tv-syl{text-decoration:underline dotted var(--ink-soft);}
+/* Wird eine Silbe mitten im Wort durch einen breiten Akkord gedehnt, füllt ein Strich die Lücke ("Jun — ge"). */
+.tv-stretch .tv-syl{display:flex;}
+.tv-stretch .tv-syl::after{content:""; flex:1; border-bottom:1px solid var(--ink-soft); margin:0 .05em .35em;}
+.tv-chord{color:var(--accent-dark); font-weight:600; font-size:.95rem; min-height:1.25em; padding-right:.35em;}
+/* Beim Abspielen: aktueller Takt hinterlegt, aktuelle Silbe kräftig */
+.tv-now-bar{background:var(--mark-soft);}
+.tv-now-syl .tv-syl{background:var(--mark); color:#fff; border-radius:3px;}
+.tv-barline{color:var(--ink-soft); font-weight:400; margin-right:.15em;}
+/* Takt ohne eigene Silbe: nur Taktstrich und Akkord, etwas Abstand zum nächsten */
+.tv-empty .tv-chord{padding-right:.8em;}
+/* Taktzeile (Abschnitt ohne Text): nur die Akkordzeile, die Takte weiter auseinander */
+.tv-barrow .tv-syl{display:none;}
+.tv-barrow .tv-empty .tv-chord{padding-right:1.6em;}
 
 .transport{
   position:fixed; left:0; right:0; bottom:0; z-index:30;
@@ -417,10 +500,10 @@ header p.sub{
   padding:.4rem 1rem 1rem;
 }
 /* Sync-Editor: fest über der Transportleiste; --sync-h (Höhe) setzt app.js */
-#songView.syncing{padding-bottom:calc(var(--bar-h) + var(--sync-h, 0px) + env(safe-area-inset-bottom) + 1rem);}
+#songView.syncing{padding-bottom:calc(var(--bar-h) + var(--sync-h) + env(safe-area-inset-bottom) + 1rem);}
 #songView.syncing .player-panel{
-  bottom:calc(var(--bar-h) + var(--sync-h, 0px) + env(safe-area-inset-bottom) + .5rem);
-  max-height:calc(100vh - var(--bar-h) - var(--sync-h, 0px) - 6rem);
+  bottom:calc(var(--bar-h) + var(--sync-h) + env(safe-area-inset-bottom) + .5rem);
+  max-height:calc(100vh - var(--bar-h) - var(--sync-h) - 6rem);
 }
 .sync-editor{
   position:fixed; left:0; right:0; z-index:29;
@@ -449,13 +532,13 @@ header p.sub{
 .player-panel .panel-row{display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;}
 .player-panel output{display:inline-block; min-width:3.2em; text-align:right; font-variant-numeric:tabular-nums;}
 /* Lautstärken untereinander: Beschriftung, Regler, Wert in festen Spalten */
-.player-panel .mix-grid{display:grid; grid-template-columns:auto minmax(0, 14rem) auto; gap:.4rem .6rem; align-items:center;}
+.player-panel .mix-grid{display:grid; grid-template-columns:auto minmax(0, 14rem) auto auto; gap:.4rem .6rem; align-items:center;}
+.player-panel .mix-grid label{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:9rem;}
+/* Überschriften und Hinweise im Raster über alle Spalten, damit alle Regler untereinander stehen */
+.player-panel .mix-grid h4, .player-panel .mix-grid .hint{grid-column:1 / -1;}
 .player-panel .mix-grid input[type=range]{width:100%;}
 .player-panel input[type=number]{width:5rem; padding:.4rem .5rem;}
 .player-panel select{padding:.4rem .5rem; font-size:.9rem;}
-.track-list{list-style:none; margin:0; padding:0;}
-.track-list li{display:flex; align-items:center; gap:.4rem; padding:.3rem 0; border-bottom:1px dotted var(--rule);}
-.track-list label{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 
 /* alphaTab: Markierungen beim Abspielen und Auswahl */
 .at-cursor-bar{background:var(--mark-soft);}
@@ -499,6 +582,8 @@ header p.sub{
   .controls .btn{flex:1 1 40%;}
   .grid{grid-template-columns:repeat(auto-fill, minmax(140px,1fr)); gap:.8rem; padding:0 1rem;}
   .card .thumb .initial{font-size:3.5rem;}
-  .score-wrap{margin-top:0; border-radius:0;}
+  .score-wrap, .chord-strip{margin-top:0; border-radius:0;}
+  .text-view{margin-top:0; border-radius:0; padding:.8rem 1rem 1.5rem;}
+  .view-switch button{padding:.4rem .5rem; font-size:.8rem;}
   .transport{gap:.3rem; padding-left:.4rem; padding-right:.4rem;}
 }

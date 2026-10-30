@@ -80,7 +80,13 @@ const INFO_FIELDS = {
  * @property {string} shapeKey Tonart der Griffe (key um capo Halbtöne tiefer, siehe shapeKey()); ohne Capo gleich
  *   key
  * @property {string} tuning Stimmung von der tiefen zur hohen Saite, z. B. "E A D G B E"; leer ohne Saiten
+ * @property {boolean} standardTuning ob es die Standardstimmung ist, genau in dieser Lage (E2 bis E4 bei sechs
+ *   Saiten); true ohne Saiten
+ * @property {{name: string, changed: boolean}[]} tuningStrings Saiten von tief nach hoch: Ton ("D") und ob er von der
+ *   Standardstimmung abweicht; mit Oktave ("E3"), wenn sich nur die Oktaven unterscheiden
  * @property {number} tempo Anfangstempo in BPM
+ * @property {number} tempoMin niedrigstes Tempo im Song (Anfangstempo und alle Tempowechsel), in BPM
+ * @property {number} tempoMax höchstes Tempo im Song, in BPM
  * @property {?number} recordedTempo Anfangstempo, wie es in der Aufnahme klingt (siehe recordingTempoFactor()),
  *   auf eine ganze Zahl gerundet; null ohne Sync-Punkte
  * @property {?number} lastSyncMs Position des letzten Sync-Punkts in der Audiospur (ms); null ohne Sync-Punkte
@@ -127,9 +133,15 @@ export function readScoreInfo(alphaTab, score){
   const bar = staff?.bars[0];
   const keys = bar?.keySignatureType === alphaTab.model.KeySignatureType.Minor ? MINOR_KEYS : MAJOR_KEYS;
   // alphaTab führt die Saiten von der höchsten zur tiefsten, üblich ist die Schreibweise von tief nach hoch.
-  const tuning = staff?.isStringed
-    ? staff.tuning.slice().reverse().map(p => alphaTab.model.Tuning.getTextForTuning(p, false)).join(' ')
-    : '';
+  const stringed = Boolean(staff?.isStringed && staff.tuning.length);
+  /** @type {number[]} Tonhöhen der Saiten (MIDI), höchste zuerst; leer ohne Saiten */
+  const pitches = stringed ? staff.tuning : [];
+  const tuning = pitches.slice().reverse().map(p => alphaTab.model.Tuning.getTextForTuning(p, false)).join(' ');
+  const preset = stringed ? alphaTab.model.Tuning.findTuning(pitches) : null;
+  const tuningStrings = stringed ? compareTuning(alphaTab, pitches) : [];
+  // Das Tempo steht immer in Vierteln: alphaTab rechnet beim GP-Import andere Bezugsnoten (Achtel, punktierte
+  // Viertel, …) um, und alphaTex kennt nur Viertel.
+  const tempos = [score.tempo, ...score.masterBars.flatMap(mb => mb.tempoAutomations.map(a => a.value))];
   const factor = recordingTempoFactor(alphaTab, score);
   const key = bar ? (keys[bar.keySignature + 7] ?? '') : '';
   const capo = staff?.capo || 0;
@@ -138,10 +150,28 @@ export function readScoreInfo(alphaTab, score){
     capo,
     shapeKey: shapeKey(key, capo),
     tuning,
+    standardTuning: !stringed || Boolean(preset?.isStandard),
+    tuningStrings,
     tempo: score.tempo,
+    tempoMin: Math.min(...tempos),
+    tempoMax: Math.max(...tempos),
     recordedTempo: factor ? Math.round(score.tempo * factor) : null,
     lastSyncMs: lastSyncMs(score),
   };
+}
+
+/**
+ * Vergleicht eine Stimmung mit der Standardstimmung für ebenso viele Saiten.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {number[]} tuning MIDI-Tonhöhen wie in alphaTab (höchste Saite zuerst)
+ * @returns {{name: string, changed: boolean}[]} Saiten von tief nach hoch (siehe ScoreInfo.tuningStrings)
+ */
+function compareTuning(alphaTab, tuning){
+  const standard = alphaTab.model.Tuning.getDefaultTuningFor(tuning.length)?.tunings ?? [];
+  const name = (p, octave) => alphaTab.model.Tuning.getTextForTuning(p, octave);
+  // Nur die Oktaven anders (z. B. alles eine Oktave höher): Ohne Oktave sähe es wie die Standardstimmung aus.
+  const octaves = tuning.every((p, i) => standard[i] !== undefined && (p - standard[i]) % 12 === 0);
+  return tuning.map((p, i) => ({name: name(p, octaves), changed: p !== standard[i]})).reverse();
 }
 
 /**
@@ -185,20 +215,25 @@ export function isSyncOutsideAudio(info, audioSeconds){
  * @param {ScoreInfo} info Eckdaten aus readScoreInfo()
  * @param {?number} [audioSeconds] Länge der Audiospur, sobald sie geladen ist; dann wird auch geprüft, ob die
  *   Sync-Punkte hineinpassen (isSyncOutsideAudio())
- * @returns {string} z. B. "Tonart Bm · Capo 2 (Griffe Am) · 84 BPM": die klingende Tonart, mit Capo dahinter die
- *   Tonart der Griffe; Standardstimmung und Capo 0 werden weggelassen; passt das
- *   Tempo nicht zur Aufnahme (isTempoMismatch()), folgt das Tempo der Audiospur hervorgehoben:
- *   "105 BPM<span class="tempo-warn">(⚠ Audio: 211 BPM)</span>"
+ * @returns {string} z. B. "Tonart Bm · <strong>Capo 2</strong> (Griffe Am) · 84 BPM": die klingende Tonart, mit
+ *   Capo (fett) dahinter die Tonart der Griffe; Standardstimmung und Capo 0 werden weggelassen, eine andere Stimmung
+ *   steht mit ihren Saiten da, die abweichenden hervorgehoben ("Stimmung <strong>D</strong> A D G B E"); wechselt das
+ *   Tempo, steht der Bereich da ("98–125 BPM"); passt das Tempo nicht zur Aufnahme (isTempoMismatch()), folgt das
+ *   Tempo der Audiospur hervorgehoben: "105 BPM<span class="tempo-warn">(⚠ Audio: 211 BPM)</span>"
  */
 export function describeScoreInfo(info, audioSeconds = null){
-  const tempo = info.tempo && `${info.tempo} BPM` + (isTempoMismatch(info)
+  const min = Math.round(info.tempoMin);
+  const max = Math.round(info.tempoMax);
+  const tempo = info.tempo && (min === max ? `${min} BPM` : `${min}–${max} BPM`) + (isTempoMismatch(info)
     ? '<span class="tempo-warn" title="Das notierte Tempo passt nicht zur Audiospur">'
       + `(⚠ Audio: ${info.recordedTempo} BPM)</span>`
     : '');
   return [
     info.key && escapeHtml(`Tonart ${info.key}`),
-    info.capo ? escapeHtml(`Capo ${info.capo}` + (info.shapeKey ? ` (Griffe ${info.shapeKey})` : '')) : null,
-    info.tuning && info.tuning !== 'E A D G B E' ? escapeHtml(info.tuning) : null,
+    // Den Capo übersieht man leicht, deshalb fett.
+    info.capo ? `<strong>Capo ${info.capo}</strong>` + (info.shapeKey ? escapeHtml(` (Griffe ${info.shapeKey})`) : '') : null,
+    info.standardTuning ? null : 'Stimmung ' + info.tuningStrings
+      .map(s => s.changed ? `<strong>${escapeHtml(s.name)}</strong>` : escapeHtml(s.name)).join(' '),
     tempo,
     isSyncOutsideAudio(info, audioSeconds)
       ? '<span class="tempo-warn" title="mindestens ein Sync-Punkt liegt außerhalb der Audiospur">'
@@ -368,7 +403,8 @@ export function applyRecordingTempo(alphaTab, midi, points){
   const first = points[0].synthTick;
   const last = points[points.length - 1].synthTick;
   for(const track of midi.tracks){
-    track.events = track.events.filter(e => {
+    // events ist schreibgeschützt (readonly): die Liste an Ort und Stelle ersetzen.
+    const kept = track.events.filter(e => {
       if(e.type !== tempoType) return true;
       const tick = e.tick - midi.tickShift;
       if(tick >= first && tick < last) return false;
@@ -376,6 +412,8 @@ export function applyRecordingTempo(alphaTab, midi, points){
       tempo.beatsPerMinute *= recordingTempoAt(points, tick);
       return true;
     });
+    track.events.length = 0;
+    for(const e of kept) track.events.push(e);
   }
   for(const p of points.slice(0, -1)){
     const tempo = new alphaTab.midi.TempoChangeEvent(p.synthTick + midi.tickShift, 0);
@@ -438,8 +476,10 @@ export function writeSyncAndTempo(alphaTab, tex, points, tempoFactor = 1){
  * Bereinigt Noten aus Guitar Pro für das Gitarrenbuch, automatisch und ohne Rückfrage: je Spur und Akkordname ein
  * Griffbild aus der Bibliothek (siehe normalizeChords()), keine Rhythmus-Schrägstriche (alphaTab 1.8.4 stürzt bei
  * nur Tabs daran ab, ganze Takte bleiben leer) und keine Anzeige-Angaben je Spur (Noten, Tabs, Schrägstriche wählt
- * der Player), keine Tonart im Namen der Stimmung. Tonart und Vorzeichen bleiben wie in der Datei; Korrekturen
- * schlägt der Editor vor.
+ * der Player); als Name der Stimmung nur die Stimmung selbst (GP-Dateien haben dort oft Notizen wie "Key: C (orig.
+ * D)"); kein Systemtrenner (die schrägen Doppelstriche zwischen den Notenzeilen). Alles andere bleibt wie in der
+ * Datei: Tonart und Vorzeichen, Spurnamen, Capo je Spur. Weicht das von der Konvention ab (Spurrollen, ein Capo),
+ * markiert die Oberfläche den Song (read_score_issues() in api/lib/crud.php); korrigiert wird im Editor.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @param {ChordLibrary} library Akkordbibliothek
@@ -447,13 +487,14 @@ export function writeSyncAndTempo(alphaTab, tex, points, tempoFactor = 1){
  */
 function cleanImportedScore(alphaTab, score, library){
   normalizeChords(alphaTab, score, library);
+  if(score.stylesheet) score.stylesheet.useSystemSignSeparator = false;
   for(const track of score.tracks) for(const staff of track.staves){
     staff.showStandardNotation = true;
     staff.showTablature = staff.isStringed;
     staff.showSlash = false;
     staff.showNumbered = false;
-    // GP schreibt oft die Tonart in den Namen der Stimmung ("Key: C (orig. D)"); sie steht schon in den Vorzeichen.
-    if(/^\s*key\b/i.test(staff.stringTuning?.name ?? '')) staff.stringTuning.name = '';
+    // Name der bekannten Stimmung zu den Tonhöhen ("Guitar Standard Tuning"), sonst keiner.
+    if(staff.stringTuning) staff.stringTuning.name = alphaTab.model.Tuning.findTuning(staff.tuning)?.name ?? '';
     for(const bar of staff.bars) for(const voice of bar.voices) for(const beat of voice.beats) beat.slashed = false;
   }
 }
@@ -488,7 +529,7 @@ export async function readGpFile(file){
   cleanImportedScore(alphaTab, score, await loadChordLibrary().catch(() => ({})));
 
   // Der Exporter schreibt "\staff { score tabs }" auch für die Vorgabe; die Angabe braucht es nicht.
-  const tex = writeScore(alphaTab, score).replace(/^( *\\staff) \{\n(?: *\S.*\n)*? *\}\n/gm, '$1\n');
+  const tex = writeScore(alphaTab, score).replace(/^( *\\staff) \{\n(?: *\S.*\n)*? *}\n/gm, '$1\n');
   let differences;
   try {
     const expected = fingerprint(score);

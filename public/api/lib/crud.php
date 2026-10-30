@@ -26,13 +26,6 @@ class ConflictException extends RuntimeException
 }
 
 /**
- * Erlaubte Werte für das Feld technique (null = nicht festgelegt).
- *
- * @var string[]
- */
-const SONG_TECHNIQUES = ['strumming', 'fingerpicking'];
-
-/**
  * Erlaubte Schlüssel in sources (Herkunft des Rohmaterials).
  *
  * @var string[]
@@ -157,12 +150,104 @@ function read_track_names(string $slug): array
 }
 
 /**
- * Ergänzt $song um die berechneten Felder files (welche Dateien im Liedordner vorhanden sind) und tracks.
+ * Rollen der Spuren: interner Name (so steht er in den Noten, ohne Groß-/Kleinschreibung) → Anzeige. Dieselbe Liste
+ * steht als TRACK_ROLES in js/tracks.js.
+ *
+ * @var array<string, string>
+ */
+const TRACK_ROLES = [
+    'vocal' => 'Gesang',
+    'strumming' => 'Schlagbegleitung',
+    'picking' => 'Zupfbegleitung',
+    'fingerstyle' => 'Fingerstyle',
+];
+
+/**
+ * Liest die Spuren aus alphaTex, so weit die Konventionsprüfung sie braucht.
+ *
+ * @param string $tex Inhalt von score.atex
+ * @return array<int, array{name: string, role: ?string, capo: int}> je Spur Name, Rolle (siehe TRACK_ROLES) und
+ *               Capo (der erste im Abschnitt der Spur, 0 ohne)
+ */
+function read_score_tracks(string $tex): array
+{
+    $tracks = [];
+    // Der Exporter von alphaTab beginnt jede Spur mit "\track" am Zeilenanfang.
+    foreach (preg_split('/^(?=\\\\track\b)/m', $tex) as $part) {
+        if (!preg_match('/^\\\\track\s*\(?\s*"((?:[^"\\\\]|\\\\.)*)"/', $part, $name)) {
+            continue;
+        }
+        $role = strtolower(trim(stripslashes($name[1])));
+        preg_match('/\\\\capo\s+(\d+)/', $part, $capo);
+        $tracks[] = [
+            'name' => stripslashes($name[1]),
+            'role' => array_key_exists($role, TRACK_ROLES) ? $role : null,
+            'capo' => (int) ($capo[1] ?? 0),
+        ];
+    }
+    return $tracks;
+}
+
+/**
+ * Prüft, ob ein Song der Konvention aus "Spuren, Capo, Text und Akkorde" (README) entspricht. Abweichungen
+ * korrigiert der Editor; bis dahin markiert die Oberfläche den Song rot und zeigt nur die wichtigste. Geprüft wird
+ * nur, womit die App nicht von selbst zurechtkommt: ungleicher Capo, Sprungzeichen (D.S., D.C., Coda, Fine; im
+ * Gitarrenbuch ausgeschrieben, die Ansicht "Text & Akkorde" kennt sie nicht), dann Spuren ohne Rolle. Wo Text und Akkorde
+ * stehen, zählt nicht: Ohne Gesangs- bzw. Begleitspur nimmt die App die Spur mit dem meisten Text bzw. den meisten
+ * Akkorden (lyricsTrack(), chordsTrack() in js/tracks.js).
+ *
+ * @param string $slug Slug des Lieds
+ * @return array<int, array{label: string, hint: string, detail: string}> Abweichungen, die wichtigste zuerst: kurze
+ *               Bezeichnung (z. B. "Spur ohne Rolle", auf der Kachel), Erklärung (Tooltip der Kachel, z. B. "ohne Rolle:
+ *               „Guitar“") und die betroffenen Spuren (im Song hinter der Bezeichnung, z. B. "„Guitar“"); leer, wenn
+ *               alles passt oder es keine Noten gibt
+ */
+function read_score_issues(string $slug): array
+{
+    $path = song_dir($slug) . '/' . SONG_FILES['score'];
+    if (!is_file($path)) {
+        return [];
+    }
+    $tex = file_get_contents($path);
+    $tracks = read_score_tracks($tex);
+    $issues = [];
+
+    if (count(array_unique(array_column($tracks, 'capo'))) > 1) {
+        $detail = implode(', ', array_map(fn(array $t) => "„{$t['name']}“ {$t['capo']}", $tracks));
+        $issues[] = [
+            'label' => 'Capo ungleich',
+            'hint' => "Capo nicht in allen Spuren gleich: $detail",
+            'detail' => $detail,
+        ];
+    }
+    if (preg_match_all('/\\\\jump\s+(\w+)/', $tex, $m)) {
+        $detail = implode(', ', array_unique($m[1]));
+        $issues[] = [
+            'label' => 'Sprungzeichen',
+            'hint' => "Sprungzeichen ausschreiben: $detail",
+            'detail' => $detail,
+        ];
+    }
+    $unnamed = array_filter($tracks, fn(array $t) => $t['role'] === null);
+    if ($unnamed) {
+        $detail = implode(', ', array_map(fn(array $t) => "„{$t['name']}“", $unnamed));
+        $issues[] = [
+            'label' => count($unnamed) === 1 ? 'Spur ohne Rolle' : 'Spuren ohne Rolle',
+            'hint' => "ohne Rolle: $detail",
+            'detail' => $detail,
+        ];
+    }
+    return $issues;
+}
+
+/**
+ * Ergänzt $song um die berechneten Felder files (welche Dateien im Liedordner vorhanden sind), tracks und issues.
  *
  * @param string $slug Slug des Lieds
  * @param array $song Inhalt von song.json
  * @return array $song mit files (Liste der Schlüssel aus SONG_FILES, deren Datei vorhanden ist, z. B.
- *               ["score", "audio", "cover"]), tracks (Spurnamen, siehe read_track_names()) und sources als Objekt
+ *               ["score", "audio", "cover"]), tracks (Spurnamen, siehe read_track_names()), issues (Abweichungen
+ *               von der Konvention, siehe read_score_issues()) und sources als Objekt
  */
 function with_file_flags(string $slug, array $song): array
 {
@@ -170,6 +255,7 @@ function with_file_flags(string $slug, array $song): array
     $song['sources'] = (object) ($song['sources'] ?? []);
     $song['files'] = array_keys(array_filter(SONG_FILES, fn(string $name) => is_file($dir . '/' . $name)));
     $song['tracks'] = read_track_names($slug);
+    $song['issues'] = read_score_issues($slug);
     return $song;
 }
 
@@ -256,9 +342,6 @@ function validate_song_input(array $data): array
             $errors[] = "$field muss ein Text sein";
         }
     }
-    if (!empty($data['technique']) && !in_array($data['technique'], SONG_TECHNIQUES, true)) {
-        $errors[] = 'technique muss ' . implode(' oder ', SONG_TECHNIQUES) . ' sein';
-    }
     if (isset($data['tags']) && !is_array($data['tags'])) {
         $errors[] = 'tags muss ein Array sein';
     }
@@ -280,7 +363,7 @@ function validate_song_input(array $data): array
  * jedem Öffnen abgefragt wird. Ohne YouTube-Quelle ist sie null.
  *
  * @param array $data bereits validierte Request-Daten (siehe validate_song_input())
- * @return array title, artist, technique, tags, die Felder aus SONG_INFO_FIELDS, notes, sources, youtubeSeconds
+ * @return array title, artist, tags, die Felder aus SONG_INFO_FIELDS, notes, sources, youtubeSeconds
  */
 function normalize_song_fields(array $data): array
 {
@@ -308,7 +391,6 @@ function normalize_song_fields(array $data): array
     return [
         'title' => trim((string) ($data['title'] ?? '')),
         'artist' => $optionalText('artist'),
-        'technique' => !empty($data['technique']) ? (string) $data['technique'] : null,
         'tags' => $tags,
         ...$info,
         'notes' => $optionalText('notes'),

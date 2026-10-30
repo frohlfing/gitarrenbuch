@@ -4,6 +4,7 @@
  */
 
 import {escapeHtml, loadAudio, loadChordLibrary, loadScoreText} from './js/api.js';
+import {exportChordProFile} from './js/chordpro.js';
 import {chordDiagramSvg} from './js/svg.js';
 import {deleteSongUI, findSong, initLibrary, openImportForm, openSongForm} from './js/library.js';
 import {Player} from './js/player.js';
@@ -29,16 +30,21 @@ const newSongBtn = document.getElementById('newSongBtn');
 let player = null;
 
 /**
- * Sync-Editor der Liedansicht, null wenn er geschlossen ist.
+ * Sync-Editor der Liedansicht, null, wenn er geschlossen ist.
  * @type {?SyncEditor}
  */
 let syncEditor = null;
 
 /**
- * Beobachtet die Höhe des Sync-Editors, null wenn er geschlossen ist.
+ * Beobachtet die Höhe des Sync-Editors, null, wenn er geschlossen ist.
  * @type {?ResizeObserver}
  */
 let syncResize = null;
+
+/** Hash der Liederliste (die Seiten sind Hash-Pfade, keine Sprungmarken). */
+const LIST_HASH = '#/';
+/** Hash der Seite mit den Griffbildern. */
+const CHORDS_HASH = '#/akkorde';
 
 /**
  * Hash der Liedansicht.
@@ -93,7 +99,7 @@ async function showChordLibrary(){
   window.scrollTo(0, 0);
   chordView.innerHTML = `
     <div class="songbar">
-      <a class="btn btn-icon" href="#/" aria-label="Zur Songliste">&larr;</a>
+      <a class="btn btn-icon" href="${LIST_HASH}" aria-label="Zur Songliste">&larr;</a>
       <div class="songbar-titles">
         <h2>Griffbilder</h2>
         <div class="songbar-meta">Alle Akkorde aus den Songs nach Grundton, Standardgriff zuerst</div>
@@ -154,7 +160,24 @@ async function downloadGpFile(song){
   // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
   const tex = await loadScoreText(song.slug);
   const audio = song.files.includes('audio') ? await loadAudio(song.slug) : null;
-  const file = await exportGpFile(song, tex, audio);
+  downloadFile(await exportGpFile(song, tex, audio));
+}
+
+/**
+ * Lädt Text und Akkorde des Lieds als ChordPro-Datei (.cho) herunter.
+ * @param {Song} song Lied
+ * @returns {Promise<void>}
+ */
+async function downloadChordProFile(song){
+  downloadFile(await exportChordProFile(song, await loadScoreText(song.slug)));
+}
+
+/**
+ * Bietet eine im Browser erzeugte Datei zum Download an.
+ * @param {File} file Datei
+ * @returns {void}
+ */
+function downloadFile(file){
   const link = document.createElement('a');
   link.href = URL.createObjectURL(file);
   link.download = file.name;
@@ -177,11 +200,12 @@ function showSong(song){
 
   songView.innerHTML = `
     <div class="songbar">
-      <a class="btn btn-icon" href="#/" aria-label="Zur Songliste">&larr;</a>
+      <a class="btn btn-icon" href="${LIST_HASH}" aria-label="Zur Songliste">&larr;</a>
       <div class="songbar-titles">
         <h2>${escapeHtml(song.title)}</h2>
         <div class="songbar-meta" id="songMeta">${escapeHtml(song.artist ?? '')}</div>
       </div>
+      <div class="songbar-controls" id="songControls"></div>
       <div class="songbar-menu">
         <button class="btn btn-icon" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
         <div class="menu" id="menu" hidden>
@@ -189,11 +213,17 @@ function showSong(song){
           <button type="button" id="syncBtn"${song.files.includes('score') && song.files.includes('audio') ? '' : ' hidden'}
             title="Sync-Punkte an der Audiospur ausrichten">Sync-Editor</button>
           <button type="button" id="exportBtn"${song.files.includes('score') ? '' : ' hidden'}
-            title="Als Guitar-Pro-Datei (.gp) mit Audiospur und Sync-Punkten">Exportieren</button>
+            title="Notation mit Audiospur als Guitar-Pro-Datei (.gp)">GP-Export</button>
+          <button type="button" id="chordProBtn"${song.files.includes('score') ? '' : ' hidden'}
+            title="Text und Akkorde als ChordPro-Datei (.cho)">CHO-Export</button>
           <button type="button" id="deleteBtn" class="danger">Löschen</button>
         </div>
       </div>
     </div>
+    ${song.issues?.length ? `
+      <div class="song-issues">
+        <strong>&#9888; ${escapeHtml(song.issues[0].label)}:</strong> ${escapeHtml(song.issues[0].detail)}
+      </div>` : ''}
     <div id="playerRoot"></div>
     <div id="syncRoot"></div>
   `;
@@ -217,9 +247,13 @@ function showSong(song){
     setMenu(false);
     downloadGpFile(current()).catch(err => alert('Export fehlgeschlagen: ' + err.message));
   });
+  document.getElementById('chordProBtn').addEventListener('click', () => {
+    setMenu(false);
+    downloadChordProFile(current()).catch(err => alert('Export fehlgeschlagen: ' + err.message));
+  });
   document.getElementById('deleteBtn').addEventListener('click', async () => {
     setMenu(false);
-    if(await deleteSongUI(song)) location.hash = '#/';
+    if(await deleteSongUI(song)) location.hash = LIST_HASH;
   });
 
   const root = document.getElementById('playerRoot');
@@ -227,7 +261,8 @@ function showSong(song){
     root.innerHTML = `<p class="empty">Keine Noten vorhanden. Noten kommen über „+ Neuer Song“ in der Songliste.</p>`;
     return;
   }
-  player = new Player(root);
+  // Ansicht (Noten, Tabs, Noten + Tabs, Chords) und Spuren stellt der Player in die Kopfzeile.
+  player = new Player(root, document.getElementById('songControls'));
   // Tonart, Capo usw. stehen nur in den Noten und kommen deshalb erst nach dem Laden in die Kopfzeile.
   // Element vorher merken: Ist bis dahin schon ein anderes Lied offen, trifft die Antwort nur das alte, entfernte.
   const metaEl = document.getElementById('songMeta');
@@ -301,7 +336,7 @@ function closeSyncEditor(){
  * @returns {void}
  */
 function route(){
-  if(location.hash === '#/akkorde'){
+  if(location.hash === CHORDS_HASH){
     void showChordLibrary();
     return;
   }
@@ -312,7 +347,7 @@ function route(){
   }
   const song = findSong(decodeURIComponent(m[1]));
   if(song) showSong(song);
-  else location.replace('#/');
+  else location.replace(LIST_HASH);
 }
 
 /**
