@@ -3,11 +3,13 @@
  * (#/akkorde). Die eigentliche Arbeit steckt in den ES-Modulen unter js/.
  */
 
-import {escapeHtml, loadAudio, loadChordLibrary, loadScoreText} from './js/api.js';
+import {coverUrl, escapeHtml, loadAudio, loadChordLibrary, loadScoreText} from './js/api.js';
 import {exportChordProFile} from './js/chordpro.js';
 import {chordDiagramSvg} from './js/svg.js';
-import {deleteSongUI, findSong, initLibrary, openImportForm, openSongForm} from './js/library.js';
-import {Player} from './js/player.js';
+import {
+  closeOverlay, deleteSongUI, findSong, initLibrary, openImportForm, openOverlay, openSongForm,
+} from './js/library.js';
+import {Player, SCALES} from './js/player.js';
 import {describeScoreInfo, exportGpFile} from './js/score.js';
 import {SyncEditor} from './js/sync-editor.js';
 
@@ -198,18 +200,28 @@ function showSong(song){
   document.title = `${song.title} – Gitarrenbuch`;
   window.scrollTo(0, 0);
 
+  // Oben der Kopf mit Cover und Eckdaten (scrollt weg), darunter die Leiste, die beim Spielen stehen bleibt.
   songView.innerHTML = `
+    <div class="songhead">
+      ${song.files.includes('cover') ? `<img class="songhead-cover" src="${escapeHtml(coverUrl(song))}" alt="">` : ''}
+      <div class="songhead-text">
+        <h2>${escapeHtml(song.title)}${song.artist
+          ? ` <span class="songhead-artist">– ${escapeHtml(song.artist)}</span>` : ''}</h2>
+        <div class="songhead-info" id="songMeta"></div>
+        ${song.issues?.length ? `
+          <div class="song-issues">
+            <strong>&#9888; ${escapeHtml(song.issues[0].label)}:</strong> ${escapeHtml(song.issues[0].detail)}
+          </div>` : ''}
+      </div>
+    </div>
     <div class="songbar">
       <a class="btn btn-icon" href="${LIST_HASH}" aria-label="Zur Songliste">&larr;</a>
-      <div class="songbar-titles">
-        <h2>${escapeHtml(song.title)}</h2>
-        <div class="songbar-meta" id="songMeta">${escapeHtml(song.artist ?? '')}</div>
-      </div>
       <div class="songbar-controls" id="songControls"></div>
       <div class="songbar-menu">
         <button class="btn btn-icon" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
         <div class="menu" id="menu" hidden>
           <button type="button" id="editBtn">Bearbeiten</button>
+          <button type="button" id="displayBtn"${song.files.includes('score') ? '' : ' hidden'}>Darstellung</button>
           <button type="button" id="syncBtn"${song.files.includes('score') && song.files.includes('audio') ? '' : ' hidden'}
             title="Sync-Punkte an der Audiospur ausrichten">Sync-Editor</button>
           <button type="button" id="exportBtn"${song.files.includes('score') ? '' : ' hidden'}
@@ -220,10 +232,6 @@ function showSong(song){
         </div>
       </div>
     </div>
-    ${song.issues?.length ? `
-      <div class="song-issues">
-        <strong>&#9888; ${escapeHtml(song.issues[0].label)}:</strong> ${escapeHtml(song.issues[0].detail)}
-      </div>` : ''}
     <div id="playerRoot"></div>
     <div id="syncRoot"></div>
   `;
@@ -267,10 +275,13 @@ function showSong(song){
   // Element vorher merken: Ist bis dahin schon ein anderes Lied offen, trifft die Antwort nur das alte, entfernte.
   const metaEl = document.getElementById('songMeta');
   const showMeta = (info, audioSeconds = null) => {
-    metaEl.innerHTML = [escapeHtml(song.artist ?? ''), describeScoreInfo(info, audioSeconds)]
-      .filter(Boolean).join(' · ');
+    metaEl.innerHTML = describeScoreInfo(info, audioSeconds).map(line => `<div>${line}</div>`).join('');
   };
   const songPlayer = player;
+  document.getElementById('displayBtn').addEventListener('click', () => {
+    setMenu(false);
+    openDisplayDialog(songPlayer);
+  });
   document.getElementById('syncBtn').addEventListener('click', () => {
     setMenu(false);
     void openSyncEditor(current(), songPlayer, showMeta);
@@ -281,6 +292,33 @@ function showSong(song){
     void songPlayer.audioDuration.then(seconds => { if(seconds) showMeta(info, seconds); });
   }).catch(err => {
     root.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+  });
+}
+
+/**
+ * Dialog "Darstellung" aus dem Menü: Skalierung von Noten und Chords. Gilt für alle Songs und wird mit OK
+ * übernommen.
+ * @param {Player} songPlayer Player der Liedansicht
+ * @returns {void}
+ */
+function openDisplayDialog(songPlayer){
+  const {scale} = songPlayer.display;
+  openOverlay(`
+    <h2>Darstellung</h2>
+    <div class="form-field">
+      <label for="displayScale">Skalierung</label>
+      <select id="displayScale">
+        ${SCALES.map(s => `<option value="${s}"${s === scale ? ' selected' : ''}>${Math.round(s * 100)} %</option>`)
+          .join('')}
+      </select>
+    </div>
+    <button class="btn btn-primary" id="displayOk" type="button">OK</button>
+  `, true);
+  document.getElementById('displayOk').addEventListener('click', () => {
+    songPlayer.setDisplay({
+      scale: Number(/** @type {HTMLSelectElement} */ (document.getElementById('displayScale')).value),
+    });
+    closeOverlay();
   });
 }
 

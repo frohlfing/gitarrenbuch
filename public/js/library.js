@@ -259,9 +259,11 @@ function loadViewState(){
 /**
  * Öffnet das Overlay mit Schließen-Button und dem übergebenen Inhalt.
  * @param {string} html Inhalt des Sheets
+ * @param {boolean} [small] schmales Sheet für kurze Dialoge (z. B. "Darstellung")
  * @returns {void}
  */
-export function openOverlay(html){
+export function openOverlay(html, small = false){
+  sheet.classList.toggle('sheet-small', small);
   sheet.innerHTML = `<button class="close" id="closeBtn" type="button" aria-label="Schließen">&times;</button>${html}`;
   overlay.classList.add('open');
   document.getElementById('closeBtn').addEventListener('click', closeOverlay);

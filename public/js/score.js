@@ -211,15 +211,15 @@ export function isSyncOutsideAudio(info, audioSeconds){
 }
 
 /**
- * Kurzinfo für die Kopfzeile eines Songs, als HTML.
+ * Eckdaten für den Kopf eines Songs, als HTML, je Angabe ein Eintrag (der Kopf zeigt sie untereinander).
  * @param {ScoreInfo} info Eckdaten aus readScoreInfo()
  * @param {?number} [audioSeconds] Länge der Audiospur, sobald sie geladen ist; dann wird auch geprüft, ob die
  *   Sync-Punkte hineinpassen (isSyncOutsideAudio())
- * @returns {string} z. B. "Tonart Bm · <strong>Capo 2</strong> (Griffe Am) · 84 BPM": die klingende Tonart, mit
- *   Capo (fett) dahinter die Tonart der Griffe; Standardstimmung und Capo 0 werden weggelassen, eine andere Stimmung
- *   steht mit ihren Saiten da, die abweichenden hervorgehoben ("Stimmung <strong>D</strong> A D G B E"); wechselt das
- *   Tempo, steht der Bereich da ("98–125 BPM"); passt das Tempo nicht zur Aufnahme (isTempoMismatch()), folgt das
- *   Tempo der Audiospur hervorgehoben: "105 BPM<span class="tempo-warn">(⚠ Audio: 211 BPM)</span>"
+ * @returns {string[]} z. B. ["Tonart Bm", "<strong>Capo 2</strong> (Griffe Am)", "84 BPM"]: die klingende Tonart,
+ *   mit Capo (fett) dahinter die Tonart der Griffe; Standardstimmung und Capo 0 werden weggelassen, eine andere
+ *   Stimmung steht mit ihren Saiten da, die abweichenden hervorgehoben ("Stimmung <strong>D</strong> A D G B E");
+ *   wechselt das Tempo, steht der Bereich da ("98–125 BPM"); passt das Tempo nicht zur Aufnahme (isTempoMismatch()),
+ *   folgt das Tempo der Audiospur hervorgehoben: "105 BPM<span class="tempo-warn">(⚠ Audio: 211 BPM)</span>"
  */
 export function describeScoreInfo(info, audioSeconds = null){
   const min = Math.round(info.tempoMin);
@@ -239,7 +239,7 @@ export function describeScoreInfo(info, audioSeconds = null){
       ? '<span class="tempo-warn" title="mindestens ein Sync-Punkt liegt außerhalb der Audiospur">'
         + '(⚠ Sync-Punkte passen nicht zur Audiospur)</span>'
       : null,
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean);
 }
 
 /**

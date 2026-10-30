@@ -55,6 +55,8 @@ import {chordsTrack, lyricsTrack, mergeChords} from './tracks.js';
  * @property {{name: string, lines: TextLine[]}[]} sections Abschnitte in Abspielreihenfolge (name leer vor dem
  *   ersten Marker)
  * @property {{name: string, grip: string}[]} chords Griffbilder der Akkorde in der Reihenfolge des ersten Anschlags
+ * @property {{t: number, name: string}[]} chordTimes alle Akkordwechsel in Abspielreihenfolge (t in Ticks wie das MIDI),
+ *   z. B. für die Anzeige des aktuellen Akkords
  * @property {string} lyricsTrack Name der Spur, aus der der Text kommt (leer ohne Text)
  * @property {string} chordsTrack Name der ersten Begleitspur, die bei verschiedenen Akkorden gewinnt (leer ohne
  *   Akkorde)
@@ -281,14 +283,16 @@ export function buildTextModel(score){
   return {
     sections: out.map(({name, lines}) => ({name, lines})),
     chords: [...grips].map(([name, grip]) => ({name, grip})),
+    chordTimes: chords,
     lyricsTrack: syllables.length ? textTrack.name : '',
     chordsTrack: chords.length ? chordTrack.name : '',
   };
 }
 
+// noinspection JSUnusedGlobalSymbols: für Leadsheet und Druck, noch ohne Aufrufer
 /**
- * Griffbilder der Akkordspur in der Reihenfolge des ersten Anschlags, für alle Ansichten des Players (statt der von
- * alphaTab, damit sie überall gleich aussehen).
+ * Alle Griffbilder des Songs in der Reihenfolge des ersten Anschlags. Für Leadsheet und Druck gedacht; der Player
+ * zeigt nur den aktuellen Akkord (seit 31.10.2026).
  * @param {TextModel} model Inhalt aus buildTextModel()
  * @returns {string} HTML, leer ohne Griffbilder
  */

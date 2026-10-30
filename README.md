@@ -647,7 +647,7 @@ von selbst zurechtkommt: zuerst "Capo ungleich" (Capo nicht in allen Spuren glei
 (`\jump` in den Noten: D.S., D.C., Coda, Fine; im Gitarrenbuch werden sie ausgeschrieben, die Ansicht "Chords" kennt
 sie nicht), dann "Spur ohne Rolle" (Hinweis "ohne Rolle: „Guitar“"). Wo Text und Akkorde stehen, zählt nicht: Dafür gibt es die Ersatzregeln, und wird eine Spur im Editor zur Gesangs- oder Begleitspur, wandern Text bzw.
 Akkorde dorthin. Solche Songs haben in der Übersicht einen roten Rahmen mit der wichtigsten Abweichung, z. B. "⚠ Spur
-ohne Rolle" (Tooltip mit dem Hinweis); im Song steht sie mit Hinweis in einem roten Streifen unter der Kopfzeile. Die
+ohne Rolle" (Tooltip mit dem Hinweis); im Song steht sie mit Hinweis rot im Kopf unter den Eckdaten. Die
 Rollen stehen deshalb zweimal (`TRACK_ROLES` in `js/tracks.js` und `api/lib/crud.php`). Stand 29.10.2026 haben 41
 der 42 Songs Spuren ohne Rolle ("Redemption Song" hat nur die Spur "Vocal"); umgebaut wird mit dem Editor. `assignTrackRoles()` schlägt dafür Rollen nach dem Spurnamen vor ("Voice",
 "Rhythm Guitar", "Fingerpicking", …).
@@ -661,6 +661,10 @@ No Capo" (ohne Capo, A F#m D E), eine Kopie derselben Begleitung; sie ist gelös
 `data/backup/ben-e-king-stand-by-me/score-vor-spurloeschung.atex`).
 
 ### Akkorde und Griffbilder
+
+**Begriffe:** Ein **Akkordgriff**, kurz **Griff**, ist die Schreibweise von der tiefen E-Saite aus, z. B. `xx023x`
+("x" = nicht gespielt). **Akkordname mit Griff** ist beides zusammen, z. B. "D5: xx023x". Das **Griffbild** ist die
+Zeichnung des Griffs (`chordDiagramSvg()` in `js/svg.js`).
 
 Die **Akkordbibliothek** `data/chords.json` (`api/chords.php`, `js/chords.js`) enthält alle Akkorde aus den Songs
 mit ihren Griffen in Standardstimmung, z. B. `"c": ["x32010", "xxx553"]`. Schlüssel ist der Akkordname in
@@ -684,14 +688,15 @@ dem ersten Takt drängte sich dort mit Tempo, Abschnitt und Akkordnamen) und die
 fett; unterscheiden sich nur die Oktaven, mit Oktaven ("Johnny Walker" steht auf E3 A3 D4 G4 B4 E5, eine Oktave über
 der Standardstimmung; das passt noch nicht in die Kopfzeile, offen). Wechselt das Tempo, steht der Bereich in der
 Kopfzeile ("89–96 BPM"). Das Tempo zählt immer in Vierteln: alphaTab rechnet beim GP-Import andere Bezugsnoten
-(Achtel, punktierte Viertel, …) um, alphaTex kennt nur Viertel; Kommazahlen (`\tempo 88.7`) sind erlaubt. Die
-Griffbilder stehen in einer eigenen Leiste über Noten bzw. Text, in allen Ansichten gleich (`renderChordDiagrams()`
-in `js/textview.js`, Griffbilder der Akkorde in der Reihenfolge des ersten Anschlags, 86 px breit, etwas größer als
-früher die von alphaTab); ein- und ausblenden unter Einstellungen → Darstellung. Sie verteilen sich gleichmäßig auf
-die Reihen (`layoutChordDiagrams()`): Passen höchstens m in eine Reihe, braucht es n = ⌈k / m⌉ Reihen für alle k,
-und jede bekommt ⌈k / n⌉ ("Losing My Religion": 12 bei 700 px Fensterbreite als 6 + 6, nicht als volle Reihe plus
-Rest); neu berechnet bei Größe, Ansicht und Fensterbreite. Die Größe (Einstellungen) wirkt in Leiste und "Chords" nur auf den Inhalt
-(`--scale` in `app.css`); Leiste und Blatt behalten ihre Breite und ihren Hintergrund. Der Hinweis "Noten werden gezeichnet" steht darunter, damit die Leiste beim Umschalten nicht springt.
+(Achtel, punktierte Viertel, …) um, alphaTex kennt nur Viertel; Kommazahlen (`\tempo 88.7`) sind erlaubt.
+
+**Griffbilder** zeigt der Player seit 31.10.2026 nur noch für den Akkord, der gerade klingt (siehe "Leiste" unten).
+Alle Griffbilder eines Songs auf einmal (`renderChordDiagrams()` in `js/textview.js`, in der Reihenfolge des ersten
+Anschlags) bleiben für Leadsheet und Druck; Erfahrungen aus der früheren Griffbild-Leiste über den Noten: 86 px
+breit (etwas größer als die von alphaTab), Akkordname im SVG auf 19 Einheiten, je Reihe gleich viele (passen
+höchstens m in eine Reihe, braucht es n = ⌈k / m⌉ Reihen für alle k, jede bekommt ⌈k / n⌉). Die Skalierung (Menü →
+Darstellung) wirkt in "Chords" nur auf den Inhalt (`--scale` in `app.css`); das Blatt behält Breite und
+Hintergrund.
 
 Den **Systemtrenner** aus Guitar Pro (zwei schräge Striche zwischen den Notenzeilen, `\useSystemSignSeparator`)
 entfernt der Import; aus den 40 Songs, die ihn hatten, ist er am 30.10.2026 entfernt (Sicherung
@@ -703,7 +708,7 @@ zwischen den Angaben über den Noten (`EFFECT_GAP`, 8 px statt 2: Tempo, Abschni
 **Reihenfolge der Spuren und Liedtext** (`orderTracks()`, `applyLyrics()` in `js/player.js`): Oben steht die
 Begleitung (Schlag-, dann Zupfbegleitung; ohne Rollen die erste Begleitspur), unten die Spur mit dem Text
 (`lyricsTrack()`), dazwischen die übrigen wie in der Datei. So stehen die Akkorde oben und der Text unten wie auf
-einem Leadsheet; die Reihenfolge in der Datei bleibt. Das Menü "Spuren ▾" und das Mischpult zeigen die Spuren in
+einem Leadsheet; die Reihenfolge in der Datei bleibt. Die Spur-Checkboxen und der Lautstärke-Dialog zeigen die Spuren in
 derselben Reihenfolge. Den Text zeigt nur eine Spur: die Spur mit dem Text, wenn sie
 angezeigt wird, sonst die angezeigte Spur mit dem meisten Text. In vielen Songs steht derselbe Text in mehreren
 Spuren. Text an eine andere Spur zu hängen, ginge wie bei den Akkorden nur, wo sie zur selben Zeit einen Schlag hat;
@@ -774,8 +779,11 @@ keinen.
 ### Notenansicht und Wiedergabe
 
 alphaTab zeichnet Noten und Tabs und spielt sie mit dem eingebauten Synthesizer und einem SoundFont ab. Die 
-Abspielleiste steht fest am unteren Rand: Abspielen, zum Anfang, Positionsregler, Tempo (30 bis 100 % in 
-Zehnerschritten) und Loop. Beim Abspielen folgt die Ansicht dem Cursor, und der Bildschirm bleibt an (für das 
+Abspielleiste steht fest am unteren Rand: Abspielen, Positionsregler, Geschwindigkeit, Wiederholen (⟳) und
+Lautstärke (Lautsprecher). Die **Geschwindigkeit** ist ein Knopf mit dem Material-Symbol "directions_run" (Läufer);
+unter 100 % steht der Wert daneben ("50 %"). Ein Klick öffnet darüber die Liste: 25 %, dann 50 bis 100 % in
+Zehnerschritten (ein früher gespeichertes 30 oder 40 % springt auf den nächsten Wert); ein Klick daneben schließt
+sie. Beim Abspielen folgt die Ansicht dem Cursor, und der Bildschirm bleibt an (für das 
 Smartphone am Notenständer). Gescrollt wird mit eigenem Handler (`scrollToSystem()` in `js/player.js`): beim Wechsel
 in eine neue Notenzeile, die Zeile knapp unter der festen Kopfzeile; in der ersten Zeile ganz nach oben, damit
 Hinweise und Griffbilder zu sehen sind (alphaTab scrollte auch dort hin, schon beim Laden). Die Seite springt immer,
@@ -784,8 +792,7 @@ auch beim Abspielen, statt gleitend zu scrollen. Die aktuelle Zeile kommt dabei 
 "Noten werden gezeichnet" erscheint erst nach 0,4 s (`RENDER_STATUS_DELAY`), sonst blitzt es beim Umschalten auf.
 
 Die Ansicht **Chords** (Umschalter in der Kopfzeile, siehe unten) zeigt statt der Noten den Songtext mit den Akkorden
-(`js/textview.js`); die Wiedergabe läuft weiter. Darüber steht die Griffbild-Leiste wie in den Notenansichten;
-je Abschnitt folgen die Zeilen, jeder Akkord genau über seiner Silbe (je Silbe ein Block, deshalb auch in
+(`js/textview.js`); die Wiedergabe läuft weiter. Je Abschnitt folgen die Zeilen, jeder Akkord genau über seiner Silbe (je Silbe ein Block, deshalb auch in
 Proportionalschrift und mit Umbruch auf dem Smartphone). Text und Akkorde kommen aus den Spuren nach "Spuren, Capo,
 Text und Akkorde" (Akkorde aus allen Spuren zusammengetragen, `mergeChords()`), in Abspielreihenfolge mit Wiederholungen und Strophen (ohne Sprünge wie D.S. al Coda).
 Zeilen enden an Satzzeichen, längeren Pausen und Abschnitten, nie mitten im Wort; ein Auftakt gehört zum folgenden
@@ -877,27 +884,56 @@ Guitar Pro notiert alphaTab mit Capo klingend, jeder Bund hebt die Saiten um ein
 liegt um so viele Halbtöne tiefer, wie der Capo Bünde hat (`shapeKey()` in `js/score.js`). Wer nachträglich einen
 Capo setzt (z. B. weil die Aufnahme höher klingt als notiert), muss auch `\ks` mit anheben.
 
-In der **Kopfzeile** stehen die Ansicht und die Spuren:
+Oben steht der **Kopf** des Songs (scrollt beim Herunterscrollen weg): links das Cover (120 px, auf dem Handy
+80 px; ohne Cover keins), daneben "Titel – Interpret" und darunter Zeile für Zeile die Eckdaten aus den Noten
+(Tonart, Capo und Stimmung, wenn vorhanden bzw. abweichend, BPM, Warnungen; `describeScoreInfo()` liefert je Angabe
+einen Eintrag), zuletzt rot die wichtigste Abweichung von der Konvention ("⚠ Spuren ohne Rolle: …").
 
+Darunter die **Leiste**, die beim Abspielen oben stehen bleibt (`.songbar`, sticky):
+
+- **←** zurück zur Liste, **⋮** rechts das Menü (Bearbeiten, Darstellung, Sync-Editor, Exporte, Löschen).
+  **Darstellung** öffnet einen kleinen Dialog mit der Skalierung (50 bis 150 %, gilt für Noten und Chords),
+  übernommen mit OK, für alle Songs gemerkt (`openDisplayDialog()` in `app.js`, `Player.setDisplay()`).
+- **Aktueller Akkord** links neben ⋮, immer zu sehen: der Akkord, der gerade klingt, darunter sein Griff als Text
+  ("x x 0 2 3 1"), daneben das Griffbild (oben ohne den Namen, der daneben steht). Die Leiste der Liedansicht ist ein Raster (`#songView .songbar` in `app.css`): Das
+  Griffbild (72 px hoch) reicht über beide Zeilen, Schaltflächen und Spur-Checkboxen, die in ihrer Spalte umbrechen.
+  Die Bundangabe bei Griffen in höheren Lagen ist dort vergrößert (rund 15 px, `.fret-label`), links bekommt sie
+  zusätzlich Platz (`CHORD_NOW_FRET_SPACE`); verkleinert wäre sie nur etwa 6 px.
+  Ragt die Ansichtswahl in seine Spalte, fällt das Griffbild weg, und Name und Griff stehen in einer Zeile
+  ("Dm x x 0 2 3 1"; Griff von der tiefen E-Saite aus, x = nicht gespielt). Folgt beim Abspielen und Springen,
+  vor dem ersten Akkord steht der erste (`showCurrentChord()`, `fitChordNow()`, Zeiten aus `chordTimes` des
+  Text-Modells, dieselben wie in "Chords").
 - **Ansicht**: Noten, Tabs, Noten + Tabs oder Chords ("Text & Akkorde"), auf dem Desktop als Knopfleiste, unter 820 px
   Breite als Dropdown. Die Wahl gilt für alle Songs. Noten und Tabs gelten für alle Spuren; was GP je Spur gespeichert
   hatte (39 der 75 Spuren auf "nur Tabs", bei "Noten + Tabs" fehlten deshalb die Noten), steht seit 29.10.2026 nicht
   mehr in den Noten und zählt auch beim Import nicht. In "Chords" werden die Noten nur eingeklappt (alphaTab braucht
   die Breite zum Zeichnen) und die Seite folgt beim Abspielen nicht dem Cursor.
-- **Spuren ▾** (nicht in "Chords"): welche Spuren angezeigt werden, je Song gemerkt.
+- Darunter eine Zeile **Checkboxen** für die **Spuren** (bricht auf schmalen Bildschirmen um): welche angezeigt
+  werden, je Song gemerkt, in der Reihenfolge der Anzeige; eine Spur bleibt immer an; nur in den Notenansichten und
+  nur bei mehr als einer Spur.
 
-Das **Zahnrad** öffnet die Einstellungen, ein kleines Mischpult, alle Regler untereinander:
+Verworfen (31.10.2026): Spuren als Umschalt-Schaltflächen neben der Ansicht bzw. als Menü "Spuren ▾", Titel und
+Eckdaten in einer Zeile in der Leiste, Größe und Loop-Bereich im Einstellungsfeld (Zahnrad), "M" für stumm, eine
+Griffbild-Leiste mit allen Griffbildern über den Noten (ein/aus per Checkbox, Menüeintrag oder ×, ein- und
+ausklappbar, eingeklappt klebend unter der Leiste).
 
-- **Lautstärke**: je Spur ein Regler und M (stumm), dazu die Audiospur, wenn der Song eine `audio.mp3` hat. Mit
+Der **Lautsprecher** rechts in der Abspielleiste öffnet den **Lautstärke-Dialog** (`renderVolumeDialog()` in
+`js/player.js`, `.volume-dialog` in `app.css`), alle Regler untereinander, ohne Überschriften. Je Eintrag eine
+Checkbox: **Haken = zu hören**, ohne Haken stumm; was nicht zu hören ist, steht blass da (vorher hob ein "M" das
+Stumme hervor, also genau umgekehrt). Ein Klick daneben schließt den Dialog wieder.
+
+- **Spuren**: je Spur Checkbox und Regler, dazu die Audiospur, wenn der Song eine `audio.mp3` hat. Mit
   Audiospur beginnen die Spuren bei 50 % (der Synth klingt bei gleicher Einstellung deutlich lauter als eine
   Aufnahme), sonst bei 100 %. Je Song gemerkt (`gitarrenbuch_mix_<slug>`). Stumm und Solo aus der Datei gelten nicht;
   Solo gibt es nicht mehr. Ein Audio-Versatz aus der Zeit vor dem Sync-Editor wirkt weiter und wird hier genannt,
   bis er im Sync-Editor in die Sync-Punkte übernommen ist.
-- **Schläge**: Metronom und Vorzähler mit eigenem Regler; M heißt aus (Vorgabe).
-- **Loop-Bereich**: von Takt bis Takt, oder in den Notenansichten im Notenblatt über die Takte ziehen.
-- **Darstellung**: Größe (gilt für Noten und Chords) und Griffbilder ein/aus.
+- Mit etwas Abstand darunter **Metronom** und **Vorzähler** mit eigenem Regler; vorgegeben ohne Haken (aus).
 
-Ansicht, Größe, Griffbilder, Metronom und Vorzähler gelten für alle Songs und werden im Browser gemerkt, Spuren und Lautstärken je
+Den **Loop-Bereich** wählt man in den Notenansichten mit der Maus (bzw. dem Finger) im Notenblatt; ⟳ in der
+Abspielleiste schaltet das Wiederholen ein. Die Eingabe "von Takt bis Takt" im Einstellungsfeld ist am 31.10.2026
+weggefallen.
+
+Ansicht, Größe, Metronom und Vorzähler gelten für alle Songs und werden im Browser gemerkt, Spuren und Lautstärken je
 Song. Hinweis: Das alphaTab-Ereignis `midiLoaded` ruft sich in 1.8.4 endlos selbst auf; die Lautstärken werden
 deshalb nach `midiLoad` und `playerReady` gesetzt.
 
@@ -949,7 +985,7 @@ schreibt nur 6 der 42 Songs unverändert zurück (siehe "Offene Punkte"). "Schli
 - ✅ Import von GP3 bis GP8 per Drag & Drop, Angaben aus der Datei übernommen
 - ✅ Cover von Deezer bzw. iTunes, auswählbar, eigenes Bild möglich
 - ✅ Notenansicht und Wiedergabe mit alphaTab (Tempo, Loop, Spuren, Metronom, Vorzähler, Darstellung); Bedienung
-  umgebaut (29.10.2026): Ansicht und Spuren in der Kopfzeile, Mischpult je Spur im Einstellungsfeld
+  umgebaut (29.10.2026): Ansicht und Spuren in der Kopfzeile, Lautstärke je Spur im Lautstärke-Dialog
 - ✅ Prototyp für Synth und Audiospur im Gleichlauf (26.10.2026, aufgegangen in `js/mixer.js`)
 - ✅ Audiospur einer GP8-Datei beim Import herauslösen (`audio.mp3`, Sync-Punkte in den Noten)
 - ✅ Akkorddateien (ChordPro, Text) im Formular als Rohmaterial hochladen
@@ -1281,6 +1317,9 @@ Punkt 8; die MPL-2.0 erlaubt das, die geänderte Datei bleibt unter MPL-2.0):
 | TinySoundFont, SFZero u. a. (in alphaTab enthalten) | MIT                       | Kopf von `alphaTab.mjs`      |
 | Notenschrift Bravura (Steinberg)                    | SIL Open Font License 1.1 | `font/Bravura-OFL.txt`       |
 | SoundFont Sonivox (Sonic Network)                   | Apache 2.0                | `soundfont/LICENSE`          |
+
+Dazu im Code (`js/player.js`, `RUN_ICON`) der Pfad des Symbols "directions_run" aus Google Material Icons
+(Apache 2.0).
 
 Alle vier Lizenzen sind mit der GPL-3.0 vereinbar: Die MPL-2.0 erlaubt die Verbindung mit der GPL ausdrücklich
 (alphaTab trägt nicht den Vermerk "Incompatible With Secondary Licenses"), MIT und Apache 2.0 lassen sich in

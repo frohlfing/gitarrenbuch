@@ -1,10 +1,10 @@
 /**
  * alphaTab-Wrapper: Noten und Tabs anzeigen und mit dem Synthesizer abspielen, bei vorhandener audio.mp3 zusammen
  * mit der Audiospur (siehe mixer.js). In der Kopfzeile wählt man die Ansicht (Noten, Tabs, Noten + Tabs oder Chords,
- * d. h. "Text & Akkorde", siehe textview.js) und die angezeigten Spuren. Das Einstellungsfeld ist ein kleines
- * Mischpult (Lautstärke und Stumm je Spur, Audiospur, Metronom und Vorzähler), dazu Loop-Bereich, Größe und
- * Griffbilder; es gilt in allen Ansichten, die Wiedergabe läuft auch in "Chords" weiter. Die Griffbilder stehen für
- * alle Ansichten gleich über den Noten bzw. dem Text (renderChordDiagrams() in textview.js), nicht die von alphaTab.
+ * d. h. "Text & Akkorde", siehe textview.js) und die angezeigten Spuren, daneben steht der aktuelle Akkord. Der
+ * Lautsprecher in der Abspielleiste öffnet den Lautstärke-Dialog (Lautstärke und hörbar ja/nein je Spur, Audiospur,
+ * Metronom und Vorzähler); er gilt in allen Ansichten, die Wiedergabe läuft auch in "Chords" weiter. Den
+ * Loop-Bereich wählt man mit der Maus im Notenblatt.
  *
  * alphaTab (rund 1 MB) und der SoundFont werden erst geladen, wenn ein Lied geöffnet wird.
  */
@@ -14,7 +14,9 @@ import {Mixer} from './mixer.js';
 import {
   applyRecordingTempo, applySongMeta, loadAlphaTab, parseScore, playbackSyncPoints, readScoreInfo, recordingTempoAt,
 } from './score.js';
-import {buildTextModel, renderChordDiagrams, renderTextView} from './textview.js';
+import {parseGrip} from './chords.js';
+import {chordDiagramSvg} from './svg.js';
+import {buildTextModel, renderTextView} from './textview.js';
 import {chordsTrack, lyricsTrack, mergeChords, trackLabel, trackRole} from './tracks.js';
 
 /** @typedef {typeof import('../../types/alphatab')} AlphaTabModule */
@@ -47,14 +49,14 @@ const OFFSET_KEY_PREFIX = 'gitarrenbuch_audio_offset_';
  * Liest die Player-Einstellungen, ergänzt um Vorgaben. Einstellungen aus der Zeit vor dem Umbau der Bedienung
  * (29.10.2026: stave, metronome, countIn, synthVolume, audioVolume, barStyle, layout) werden übernommen bzw.
  * verworfen.
- * @returns {{speed: number, view: string, staves: string, scale: number, diagrams: boolean, metronomeVolume: number,
+ * @returns {{speed: number, view: string, staves: string, scale: number, metronomeVolume: number,
  *   countInVolume: number, metronomeMute: boolean, countInMute: boolean}} view: Ansicht (siehe VIEWS); staves: die
  *   zuletzt gewählte Notenansicht ("score", "tab" oder "both"), gilt auch für die eingeklappten Noten in "chords";
- *   diagrams: Griffbilder anzeigen; Lautstärken von 0 bis 1
+ *   Lautstärken von 0 bis 1
  */
 function loadPrefs(){
   const defaults = {
-    speed: 1, view: 'both', staves: 'both', scale: window.innerWidth < 600 ? 0.75 : 1, diagrams: true,
+    speed: 1, view: 'both', staves: 'both', scale: window.innerWidth < 600 ? 0.75 : 1,
     metronomeVolume: 1, countInVolume: 1, metronomeMute: true, countInMute: true,
   };
   /** @type {Object<string, *>} Einstellungen aus dem Browser, auch in alter Form (stave, metronome, countIn) */
@@ -68,7 +70,10 @@ function loadPrefs(){
   }
   if(typeof saved.metronome === 'boolean') saved.metronomeMute = !saved.metronome;
   if(typeof saved.countIn === 'boolean') saved.countInMute = !saved.countIn;
-  for(const old of ['stave', 'metronome', 'countIn', 'synthVolume', 'audioVolume', 'barStyle', 'layout']) delete saved[old];
+  // Griffbild-Leiste (diagrams, diagramsCollapsed) gibt es seit 31.10.2026 nicht mehr, nur den aktuellen Akkord.
+  const gone = ['stave', 'metronome', 'countIn', 'synthVolume', 'audioVolume', 'barStyle', 'layout', 'diagrams',
+    'diagramsCollapsed'];
+  for(const old of gone) delete saved[old];
   return Object.assign(defaults, saved);
 }
 
@@ -164,7 +169,7 @@ const PLAYER_STATE_PLAYING = 1;
 const SPEED_CHANGE_MIN = 0.03;
 
 /** Wählbare Abspieltempi (Faktor). */
-const SPEEDS = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+const SPEEDS = [0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
 /**
  * Abstand unter jeder Notenzeile außer der letzten, wenn mehrere Spuren angezeigt werden (px, bei Größe 100 %): Dann
  * muss man sehen, wo eine Zeile mit allen Spuren endet. Den Systemtrenner (zwei schräge Striche zwischen den Zeilen)
@@ -189,6 +194,26 @@ const LYRICS_FONT_SIZE = 13;
 /** Schriftgröße der Abschnittsnamen über den Noten (px, bei Größe 100 %). */
 const SECTION_FONT_SIZE = 13;
 
+/** So viel vom oberen Rand des Griffbilds (Platz für den Namen) schneidet der aktuelle Akkord ab (SVG-Einheiten). */
+const CHORD_NOW_CROP = 22;
+/** Zusätzlicher Platz links im Griffbild des aktuellen Akkords für die vergrößerte Bundangabe (SVG-Einheiten). */
+const CHORD_NOW_FRET_SPACE = 20;
+
+/**
+ * Material-Symbol "directions_run" (Google Material Icons, Apache 2.0) für den Knopf der Geschwindigkeit, in
+ * currentColor.
+ */
+const RUN_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">'
+  + '<path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 '
+  + '.6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2'
+  + 'v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></svg>';
+
+/** Lautsprecher-Symbol für den Knopf des Lautstärke-Dialogs (in currentColor). */
+const SPEAKER_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" '
+  + 'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+  + '<path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/>'
+  + '<path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+
 /** Mindestabstand der aktuellen Zeile zur festen Kopfzeile beim Mitscrollen (px). */
 const SCROLL_GAP = 16;
 /**
@@ -200,7 +225,7 @@ const SCROLL_POSITION = 0.12;
 const RENDER_STATUS_DELAY = 400;
 
 /** Wählbare Größen der Notendarstellung (Faktor). */
-const SCALES = [0.5, 0.6, 0.75, 0.9, 1, 1.25, 1.5];
+export const SCALES = [0.5, 0.6, 0.75, 0.9, 1, 1.25, 1.5];
 
 /**
  * Notenansicht mit Transportleiste und Einstellungsfeld für ein Lied.
@@ -281,6 +306,8 @@ export class Player {
    * @type {?Track}
    */
   accompaniment = null;
+  /** Akkord, den die eingeklappte Griffbild-Leiste gerade zeigt (siehe showCurrentChord()); null für keinen. */
+  currentChord = null;
   /** Zeitgeber für die verzögerte Meldung "Noten werden gezeichnet" (siehe RENDER_STATUS_DELAY). */
   renderStatusTimer = 0;
   /**
@@ -298,7 +325,7 @@ export class Player {
   constructor(root, controls){
     /** Element, in das gerendert wird. */
     this.root = root;
-    /** Element in der Kopfzeile mit Ansicht und Spuren. */
+    /** Element in der Leiste mit der Ansichtswahl. */
     this.controls = controls;
     controls.innerHTML = `
       <div class="view-switch" role="group" aria-label="Ansicht">
@@ -307,37 +334,53 @@ export class Player {
       <select class="view-select" aria-label="Ansicht">
         ${VIEWS.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}
       </select>
-      <div class="tracks-menu">
-        <button class="btn tracks-btn" type="button" aria-expanded="false">Spuren &#9662;</button>
-        <div class="tracks-pop" hidden></div>
-      </div>
     `;
+    /**
+     * Spurwahl als Zeile mit Checkboxen unter den Schaltflächen der Leiste (eigene Zeile der Leiste, bricht auf
+     * schmalen Bildschirmen um); nur in den Notenansichten zu sehen.
+     */
+    this.trackChecks = document.createElement('div');
+    this.trackChecks.className = 'track-checks';
+    this.trackChecks.hidden = true;
+    (controls.closest('.songbar') ?? controls).append(this.trackChecks);
     controls.addEventListener('click', e => this.onControlsClick(/** @type {HTMLElement} */ (e.target)));
-    controls.addEventListener('change', e => this.onControlsChange(/** @type {HTMLInputElement} */ (e.target)));
-    /** Schließt das Spuren-Menü bei einem Klick außerhalb. */
-    this.onDocumentClick = e => {
-      if(!/** @type {Element} */ (e.target).closest('.tracks-menu')) this.toggleTracksMenu(false);
-    };
-    document.addEventListener('click', this.onDocumentClick);
+    for(const el of [controls, this.trackChecks]){
+      el.addEventListener('change', e => this.onControlsChange(/** @type {HTMLInputElement} */ (e.target)));
+    }
+    /**
+     * Aktueller Akkord in der Leiste links neben dem Menü: mit kleinem Griffbild, wenn Platz ist, sonst als Text
+     * ("Dm x x 0 2 3 1", siehe showCurrentChord(), fitChordNow()).
+     */
+    this.chordNow = document.createElement('div');
+    this.chordNow.className = 'chord-now';
+    this.chordNow.hidden = true;
+    const menu = controls.closest('.songbar')?.querySelector('.songbar-menu');
+    if(menu) menu.before(this.chordNow);
+    else controls.after(this.chordNow);
     this.showViewControls();
     root.innerHTML = `
-      <div class="chord-strip" data-ref="diagrams" hidden></div>
       <div class="score-status" data-ref="status">Noten werden geladen &hellip;</div>
       <div class="score-wrap" data-ref="wrap"><div data-ref="at"></div></div>
       <div class="text-view" data-ref="text" hidden></div>
-      <div class="player-panel" data-ref="panel" hidden></div>
+      <div class="volume-dialog" data-ref="volumes" hidden></div>
       <div class="transport">
         <button class="tbtn tbtn-play" data-ref="play" type="button" disabled aria-label="Abspielen">&#9654;</button>
-        <button class="tbtn" data-ref="stop" type="button" disabled aria-label="Zum Anfang">&#9632;</button>
         <div class="tprogress">
           <input type="range" data-ref="seek" min="0" max="1" value="0" step="1" aria-label="Position">
           <span class="ttime" data-ref="time">0:00 / 0:00</span>
         </div>
-        <select class="tselect" data-ref="speed" aria-label="Tempo">
-          ${SPEEDS.map(s => `<option value="${s}">${Math.round(s * 100)} %</option>`).join('')}
-        </select>
-        <button class="tbtn" data-ref="loop" type="button" aria-pressed="false" aria-label="Loop" title="Loop (Bereich im Notenblatt markieren)">&#10227;</button>
-        <button class="tbtn" data-ref="settings" type="button" aria-expanded="false" aria-label="Einstellungen">&#9881;</button>
+        <div class="speed-menu">
+          <button class="tbtn tbtn-speed" data-ref="speedBtn" type="button" aria-haspopup="true" aria-expanded="false"
+            aria-label="Geschwindigkeit" title="Geschwindigkeit">
+            ${RUN_ICON}<span data-ref="speedBadge" hidden></span>
+          </button>
+          <div class="speed-pop" data-ref="speedPop" hidden>
+            ${SPEEDS.map(s => `<button type="button" data-speed="${s}">${Math.round(s * 100)} %</button>`).join('')}
+          </div>
+        </div>
+        <button class="tbtn" data-ref="loop" type="button" aria-pressed="false" aria-label="Wiederholen" title="Wiederholen">&#10227;</button>
+        <button class="tbtn" data-ref="volumeBtn" type="button" aria-expanded="false" aria-label="Lautstärke"
+          title="Lautstärke">${SPEAKER_ICON}</button>
       </div>
     `;
     /**
@@ -348,14 +391,12 @@ export class Player {
     root.querySelectorAll('[data-ref]').forEach(n => { this.el[n.dataset.ref] = n; });
     /** Positionsregler. */
     this.seek = /** @type {HTMLInputElement} */ (this.el.seek);
-    /** Auswahl des Abspieltempos. */
-    this.speed = /** @type {HTMLSelectElement} */ (this.el.speed);
     // Ein gespeichertes Tempo, das es in der Auswahl nicht mehr gibt (z. B. 75 %), auf das nächste setzen.
     const saved = this.prefs.speed;
     this.prefs.speed = SPEEDS.reduce((best, s) => Math.abs(s - saved) < Math.abs(best - saved) ? s : best);
-    this.speed.value = String(this.prefs.speed);
-    /** Verteilt die Griffbilder neu, wenn sich die Breite ändert. */
-    this.onResize = () => this.layoutChordDiagrams();
+    this.showSpeed();
+    /** Prüft bei geänderter Breite, ob der aktuelle Akkord mit Griffbild in die Leiste passt. */
+    this.onResize = () => this.fitChordNow();
     window.addEventListener('resize', this.onResize);
     /** Holt die Wake-Lock-Sperre zurück, wenn die Seite beim Abspielen wieder sichtbar wird. */
     this.onVisibility = () => { if(document.visibilityState === 'visible' && this.isPlaying) void this.requestWakeLock(); };
@@ -440,7 +481,6 @@ export class Player {
     api.playerReady.on(() => {
       this.applyLevels();
       this.el.play.disabled = false;
-      this.el.stop.disabled = false;
     });
     api.midiLoad.on(midi => {
       this.midiSyncPoints = this.hasAudio ? playbackSyncPoints(alphaTab, api.score) : [];
@@ -456,42 +496,56 @@ export class Player {
         api.playbackSpeed * recordingTempoAt(this.midiSyncPoints, e.currentTick));
       this.applySpeed(e.currentTick);
       this.highlightText(e.currentTick);
+      this.showCurrentChord(e.currentTick);
     });
-    api.playbackRangeChanged.on(() => this.renderPanel());
     api.error.on(err => this.setStatus(escapeHtml('Fehler: ' + (err.message || err))));
 
     this.el.play.addEventListener('click', () => api.playPause());
-    this.el.stop.addEventListener('click', () => api.stop());
     this.seek.addEventListener('input', () => { api.timePosition = Number(this.seek.value); });
-    this.speed.addEventListener('change', () => {
-      this.prefs.speed = Number(this.speed.value);
+    this.el.speedBtn.addEventListener('click', () => this.toggleSpeedMenu());
+    this.el.speedPop.addEventListener('click', e => {
+      const choice = /** @type {?HTMLElement} */ (/** @type {HTMLElement} */ (e.target).closest('[data-speed]'));
+      if(!choice) return;
+      this.prefs.speed = Number(choice.dataset.speed);
       this.mixer?.setSpeed(this.prefs.speed);
       this.applySpeed(api.tickPosition, true);
       savePrefs(this.prefs);
+      this.showSpeed();
+      this.toggleSpeedMenu(false);
     });
     this.el.loop.addEventListener('click', () => {
       api.isLooping = !api.isLooping;
       this.el.loop.setAttribute('aria-pressed', String(api.isLooping));
     });
-    this.el.settings.addEventListener('click', () => this.togglePanel());
-    this.el.panel.addEventListener('change', e => this.onPanelChange(/** @type {HTMLInputElement} */ (e.target)));
+    this.el.volumeBtn.addEventListener('click', () => this.toggleVolumeDialog());
+    /** Schließt Lautstärke-Dialog bzw. Geschwindigkeitsliste bei einem Klick daneben (nicht darauf, nicht auf den Knopf). */
+    this.onOutsideClick = e => {
+      const target = /** @type {Node} */ (e.target);
+      if(!this.el.volumes.hidden && !this.el.volumes.contains(target) && !this.el.volumeBtn.contains(target)){
+        this.toggleVolumeDialog(false);
+      }
+      if(!this.el.speedPop.hidden && !this.el.speedPop.closest('.speed-menu').contains(target)){
+        this.toggleSpeedMenu(false);
+      }
+    };
+    document.addEventListener('pointerdown', this.onOutsideClick);
     // Lautstärken schon beim Ziehen übernehmen, nicht erst beim Loslassen.
-    this.el.panel.addEventListener('input', e => {
+    this.el.volumes.addEventListener('input', e => {
       const t = /** @type {HTMLInputElement} */ (e.target);
       if(t.dataset.volume) this.onVolumeChange(t);
     });
-    this.el.panel.addEventListener('click', e => this.onPanelClick(/** @type {HTMLElement} */ (e.target)));
+    this.el.volumes.addEventListener('change', e => this.onAudibleChange(/** @type {HTMLInputElement} */ (e.target)));
     this.el.text.addEventListener('click', e => this.onTextClick(/** @type {HTMLElement} */ (e.target)));
 
     const score = parseScore(alphaTab, tex, api.settings);
     applySongMeta(score, song);
-    // Stumm und Solo aus der Datei gelten nicht; Stumm steuert das Mischpult.
+    // Stumm und Solo aus der Datei gelten nicht; was zu hören ist, steuert der Lautstärke-Dialog.
     for(const track of score.tracks){
       track.playbackInfo.isMute = false;
       track.playbackInfo.isSolo = false;
     }
     this.applyStave(score);
-    // Das Modell für "Chords" und die Griffbilder braucht die Akkorde, wie sie in der Datei stehen, also vor
+    // Das Modell für "Chords" und den aktuellen Akkord braucht die Akkorde, wie sie in der Datei stehen, also vor
     // applyChordNames().
     this.textModel = buildTextModel(score);
     this.mergedChords = mergeChords(score);
@@ -508,7 +562,9 @@ export class Player {
     this.applySystemGap(visible);
     api.updateSettings();
     api.renderScore(score, visible.map(t => t.index));
-    this.el.diagrams.innerHTML = renderChordDiagrams(this.textModel);
+    this.currentChord = null;
+    this.showCurrentChord(0);
+    this.fitChordNow();
     this.el.text.innerHTML = renderTextView(this.textModel);
     this.textMarks = [...this.el.text.querySelectorAll('[data-t]')].map(el => ({t: Number(el.dataset.t), el}));
     this.scrollMode = api.settings.player.scrollMode;
@@ -543,7 +599,7 @@ export class Player {
     this.mixer = mixer;
     this.applyLevels();
     this.applySpeed(this.api.tickPosition, true);
-    this.renderPanel();
+    this.renderVolumeDialog();
   }
 
   /**
@@ -645,20 +701,20 @@ export class Player {
   }
 
   /**
-   * Übernimmt eine Lautstärke aus dem Einstellungsfeld, schon beim Ziehen.
+   * Übernimmt eine Lautstärke aus dem Lautstärke-Dialog, schon beim Ziehen.
    * @param {HTMLInputElement} t Regler mit data-volume ("track:<Index>", "audio", "metronome" oder "countIn")
    * @returns {void}
    */
   onVolumeChange(t){
     const value = Number(t.value);
-    const level = this.el.panel.querySelector(`[data-level="${t.dataset.volume}"]`);
+    const level = this.el.volumes.querySelector(`[data-level="${t.dataset.volume}"]`);
     if(level) level.textContent = `${Math.round(value * 100)} %`;
     this.levelOf(t.dataset.volume).set(value);
     this.saveLevels();
   }
 
   /**
-   * Lautstärke und Stumm eines Eintrags im Mischpult.
+   * Lautstärke und Stumm eines Eintrags im Lautstärke-Dialog.
    * @param {string} key "track:<Index>", "audio", "metronome" oder "countIn"
    * @returns {{volume: number, mute: boolean, set: function(number): void, toggleMute: function(): void}}
    */
@@ -731,7 +787,8 @@ export class Player {
   }
 
   /**
-   * Zeigt die Wahl im Umschalter der Kopfzeile; "Spuren" gibt es nur in den Notenansichten.
+   * Zeigt die Wahl im Umschalter der Leiste. Die Spurwahl darunter gibt es nur in den Notenansichten und nur bei
+   * mehr als einer Spur.
    * @returns {void}
    */
   showViewControls(){
@@ -739,9 +796,33 @@ export class Player {
     for(const b of this.controls.querySelectorAll('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === view));
     const select = /** @type {HTMLSelectElement} */ (this.controls.querySelector('.view-select'));
     select.value = view;
-    const tracksMenu = /** @type {HTMLElement} */ (this.controls.querySelector('.tracks-menu'));
-    tracksMenu.hidden = view === 'chords';
-    if(view === 'chords') this.toggleTracksMenu(false);
+    this.trackChecks.hidden = view === 'chords' || this.trackChecks.childElementCount < 2;
+  }
+
+  /**
+   * Darstellung, die der Dialog "Darstellung" (Menü ⋮, app.js) zeigt und ändert.
+   * @returns {{scale: number}} Größe (Faktor, siehe SCALES)
+   */
+  get display(){
+    return {scale: this.prefs.scale};
+  }
+
+  /**
+   * Übernimmt die Darstellung aus dem Dialog "Darstellung" und merkt sie für alle Songs.
+   * @param {{scale: number}} display Größe (Faktor)
+   * @returns {void}
+   */
+  setDisplay({scale}){
+    const rescale = scale !== this.prefs.scale;
+    this.prefs.scale = scale;
+    savePrefs(this.prefs);
+    const api = this.api;
+    if(rescale && api){
+      api.settings.display.scale = scale;
+      api.updateSettings();
+      api.render();
+    }
+    this.applyView();
   }
 
   /**
@@ -755,10 +836,6 @@ export class Player {
     this.el.text.hidden = !text;
     // Die Größe gilt nur für den Inhalt (--scale in app.css), Blatt und Leiste behalten ihre Breite.
     this.root.style.setProperty('--scale', String(this.prefs.scale));
-    this.el.diagrams.hidden = !this.prefs.diagrams || !this.el.diagrams.hasChildNodes();
-    // Erst die Breite der Ansicht ("narrow" in Chords), dann verteilen.
-    this.el.diagrams.classList.toggle('narrow', text);
-    this.layoutChordDiagrams();
     const api = this.api;
     if(!api?.score) return;
     if(text){
@@ -770,26 +847,64 @@ export class Player {
     api.settings.player.scrollMode = text ? this.alphaTab.ScrollMode.Off : this.scrollMode;
     this.scrolledSystem = -1;
     api.updateSettings();
-    this.renderPanel();
+    this.renderVolumeDialog();
   }
 
   /**
-   * Verteilt die Griffbilder gleichmäßig auf die Reihen: Passen höchstens m in eine Reihe, braucht es
-   * n = ⌈k / m⌉ Reihen für alle k, und jede Reihe bekommt ⌈k / n⌉ (bei 10 Griffbildern und Platz für 7 also zwei
-   * Reihen zu 5 statt 7 + 3). Die Größe (zoom) wirkt nur auf die Bilder, ihre Breite wird deshalb gemessen.
+   * Zeigt in der Leiste den Akkord, der an einer Stelle klingt: Name, darunter der Griff als Text von der tiefen
+   * E-Saite aus ("x x 0 2 3 1", x = nicht gespielt), daneben das Griffbild; vor dem ersten Akkord den ersten. Ist zu
+   * wenig Platz (fitChordNow()), fällt das Griffbild weg und Name und Griff stehen in einer Zeile. Ohne Akkorde bleibt
+   * die Anzeige leer.
+   * @param {number} tick MIDI-Tick in Abspielreihenfolge
    * @returns {void}
    */
-  layoutChordDiagrams(){
-    const strip = this.el.diagrams;
-    const first = /** @type {?HTMLElement} */ (strip.firstElementChild);
-    if(strip.hidden || !first) return;
-    const style = getComputedStyle(strip);
-    const space = strip.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    const gap = parseFloat(style.columnGap) || 0;
-    const count = strip.childElementCount;
-    const fit = Math.max(1, Math.floor((space + gap) / (first.getBoundingClientRect().width + gap)));
-    const rows = Math.ceil(count / fit);
-    strip.style.setProperty('--per-row', String(Math.ceil(count / rows)));
+  showCurrentChord(tick){
+    const times = this.textModel?.chordTimes ?? [];
+    this.chordNow.hidden = !times.length;
+    if(!times.length) return;
+    let index = 0;
+    for(let lo = 0, hi = times.length - 1; lo <= hi;){
+      const mid = (lo + hi) >> 1;
+      if(times[mid].t <= tick){
+        index = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    const name = times[index].name;
+    if(name === this.currentChord) return;
+    this.currentChord = name;
+    const grip = this.textModel.chords.find(c => c.name === name)?.grip ?? '';
+    const frets = grip ? parseGrip(grip).map(f => f < 0 ? 'x' : String(f)).join(' ') : '';
+    this.chordNow.innerHTML = `<span class="chord-now-label"><strong>${escapeHtml(name)}</strong>`
+      + `<span class="chord-now-frets">${escapeHtml(frets)}</span></span>`
+      + (grip ? `<span class="chord-now-svg">${chordDiagramSvg(name, grip)}</span>` : '');
+    // Oben sitzt im Griffbild der Name, der hier schon daneben steht: diesen Teil abschneiden, das Bild wird größer.
+    const svg = this.chordNow.querySelector('svg');
+    const box = svg?.viewBox.baseVal;
+    // Mit Bundangabe links Platz für die größere Zahl (app.css: .chord-now-svg .fret-label).
+    const left = svg?.querySelector('.fret-label') ? CHORD_NOW_FRET_SPACE : 0;
+    if(box){
+      svg.setAttribute('viewBox',
+        `${box.x - left} ${CHORD_NOW_CROP} ${box.width + left} ${box.height - CHORD_NOW_CROP}`);
+    }
+  }
+
+  /**
+   * Zeigt den aktuellen Akkord mit Griffbild (über beide Zeilen der Leiste, app.css), wenn er neben Ansichtswahl und
+   * Menü Platz hat, sonst platzsparend als Text (Klasse "compact").
+   * @returns {void}
+   */
+  fitChordNow(){
+    const el = this.chordNow;
+    const bar = /** @type {?HTMLElement} */ (this.controls.closest('.songbar'));
+    if(el.hidden || !bar) return;
+    el.classList.remove('compact');
+    // Zu eng, wenn die Ansichtswahl in die Spalte des Akkords ragt oder die Leiste überläuft.
+    const tight = this.controls.getBoundingClientRect().right > el.getBoundingClientRect().left - 4
+      || bar.scrollWidth > bar.clientWidth + 1;
+    if(tight) el.classList.add('compact');
   }
 
   /**
@@ -900,43 +1015,54 @@ export class Player {
   }
 
   /**
-   * Füllt das Spuren-Menü der Kopfzeile: je Spur eine Checkbox zum Anzeigen, in der Reihenfolge der Anzeige
-   * (orderTracks()).
+   * Füllt die Spurwahl unter der Leiste: je Spur eine Checkbox, in der Reihenfolge der Anzeige (orderTracks()).
    * @returns {void}
    */
   renderTracksMenu(){
     const api = this.api;
     if(!api?.score) return;
     const shown = new Set(api.tracks.map(t => t.index));
-    this.controls.querySelector('.tracks-pop').innerHTML = this.orderTracks(api.score.tracks).map(t => `
+    const tracks = this.orderTracks(api.score.tracks);
+    const label = t => escapeHtml(trackLabel(t.name) || `Spur ${t.index + 1}`);
+    this.trackChecks.innerHTML = tracks.map(t => `
       <label><input type="checkbox" data-track-show="${t.index}"${shown.has(t.index) ? ' checked' : ''}>
-        ${escapeHtml(trackLabel(t.name) || `Spur ${t.index + 1}`)}</label>`).join('');
+        ${label(t)}</label>`).join('');
+    this.showViewControls();
   }
 
   /**
-   * Öffnet oder schließt das Spuren-Menü.
-   * @param {boolean} open öffnen
+   * Zeigt die gewählten Spuren und merkt sie für diesen Song; mindestens eine bleibt angezeigt.
+   * @param {number[]} indexes Indizes der anzuzeigenden Spuren
    * @returns {void}
    */
-  toggleTracksMenu(open){
-    const pop = /** @type {HTMLElement} */ (this.controls.querySelector('.tracks-pop'));
-    pop.hidden = !open;
-    this.controls.querySelector('.tracks-btn').setAttribute('aria-expanded', String(open));
+  showTracks(indexes){
+    const api = this.api;
+    if(!api?.score || !indexes.length) return;
+    localStorage.setItem(TRACKS_KEY_PREFIX + this.slug, JSON.stringify(indexes));
+    const tracks = this.orderTracks(indexes.map(i => api.score.tracks[i]));
+    this.applyLyrics(tracks);
+    this.applyChordNames(tracks);
+    this.applySystemGap(tracks);
+    api.updateSettings();
+    api.renderTracks(tracks);
+    const shown = new Set(indexes);
+    for(const c of this.trackChecks.querySelectorAll('[data-track-show]')){
+      /** @type {HTMLInputElement} */ (c).checked = shown.has(Number(/** @type {HTMLElement} */ (c).dataset.trackShow));
+    }
   }
 
   /**
-   * Klicks in der Kopfzeile: Ansicht wählen, Spuren-Menü öffnen.
+   * Klicks in der Leiste: Ansicht wählen.
    * @param {HTMLElement} t angeklicktes Element
    * @returns {void}
    */
   onControlsClick(t){
     const view = t.closest('[data-view]')?.dataset.view;
     if(view) this.setView(view);
-    if(t.closest('.tracks-btn')) this.toggleTracksMenu(this.controls.querySelector('.tracks-pop').hidden);
   }
 
   /**
-   * Änderungen in der Kopfzeile: Ansicht im Dropdown (Handy), angezeigte Spuren.
+   * Änderungen in der Leiste: Ansicht im Dropdown (Handy), angezeigte Spuren.
    * @param {HTMLInputElement} t geändertes Element
    * @returns {void}
    */
@@ -944,19 +1070,13 @@ export class Player {
     if(t.classList.contains('view-select')){
       this.setView(t.value);
     } else if(t.dataset.trackShow !== undefined){
-      const api = this.api;
-      const checked = [...this.controls.querySelectorAll('[data-track-show]:checked')].map(n => Number(n.dataset.trackShow));
+      const checked = [...this.trackChecks.querySelectorAll('[data-track-show]:checked')]
+        .map(n => Number(/** @type {HTMLElement} */ (n).dataset.trackShow));
       if(!checked.length){
         t.checked = true;
         return;
       }
-      localStorage.setItem(TRACKS_KEY_PREFIX + this.slug, JSON.stringify(checked));
-      const tracks = this.orderTracks(checked.map(i => api.score.tracks[i]));
-      this.applyLyrics(tracks);
-      this.applyChordNames(tracks);
-      this.applySystemGap(tracks);
-      api.updateSettings();
-      api.renderTracks(tracks);
+      this.showTracks(checked);
     }
   }
 
@@ -1110,58 +1230,65 @@ export class Player {
   }
 
   /**
-   * Öffnet bzw. schließt das Einstellungsfeld.
+   * Zeigt die Geschwindigkeit am Knopf: unter 100 % zusätzlich den Wert ("50 %"), und markiert ihn in der Liste.
    * @returns {void}
    */
-  togglePanel(){
-    const open = this.el.panel.hidden;
-    this.el.panel.hidden = !open;
-    this.el.settings.setAttribute('aria-expanded', String(open));
-    if(open) this.renderPanel();
-  }
-
-  /**
-   * Taktnummer zu einem Tick, für die Anzeige des Loop-Bereichs.
-   * @param {number} tick MIDI-Tick
-   * @returns {number} Taktnummer (1-basiert)
-   */
-  barAtTick(tick){
-    const bars = this.api.score.masterBars;
-    let n = 1;
-    for(const mb of bars){
-      if(mb.start <= tick) n = mb.index + 1;
+  showSpeed(){
+    const speed = this.prefs.speed;
+    const badge = this.el.speedBadge;
+    badge.hidden = speed === 1;
+    badge.textContent = `${Math.round(speed * 100)} %`;
+    this.el.speedBtn.title = `Geschwindigkeit: ${Math.round(speed * 100)} %`;
+    for(const b of this.el.speedPop.querySelectorAll('[data-speed]')){
+      b.setAttribute('aria-current', String(Number(/** @type {HTMLElement} */ (b).dataset.speed) === speed));
     }
-    return n;
   }
 
   /**
-   * Zeichnet das Einstellungsfeld neu (nur wenn es offen ist und Noten geladen sind).
+   * Öffnet bzw. schließt die Liste der Geschwindigkeiten über ihrem Knopf.
+   * @param {boolean} [open] öffnen; ohne Angabe umschalten
    * @returns {void}
    */
-  renderPanel(){
+  toggleSpeedMenu(open = this.el.speedPop.hidden){
+    this.el.speedPop.hidden = !open;
+    this.el.speedBtn.setAttribute('aria-expanded', String(open));
+  }
+
+  /**
+   * Öffnet bzw. schließt den Lautstärke-Dialog.
+   * @param {boolean} [open] öffnen; ohne Angabe umschalten
+   * @returns {void}
+   */
+  toggleVolumeDialog(open = this.el.volumes.hidden){
+    this.el.volumes.hidden = !open;
+    this.el.volumeBtn.setAttribute('aria-expanded', String(open));
+    if(open) this.renderVolumeDialog();
+  }
+
+  /**
+   * Zeichnet den Lautstärke-Dialog neu (nur wenn er offen ist und Noten geladen sind): je Eintrag eine Checkbox
+   * (Haken = zu hören), Regler und Wert; Spuren und Audiospur, mit Abstand darunter Metronom und Vorzähler. Was
+   * nicht zu hören ist, steht blass da.
+   * @returns {void}
+   */
+  renderVolumeDialog(){
     const api = this.api;
-    if(!api?.score || this.el.panel.hidden) return;
+    if(!api?.score || this.el.volumes.hidden) return;
     const score = api.score;
-    const range = api.playbackRange;
-    const barCount = score.masterBars.length;
-    const fromBar = range ? this.barAtTick(range.startTick) : '';
-    const toBar = range ? this.barAtTick(range.endTick - 1) : '';
-    const option = (value, label, current) => `<option value="${value}"${String(value) === String(current) ? ' selected' : ''}>${label}</option>`;
 
     /** @type {(key: string, label: string) => string} */
     const row = (key, label) => {
       const {volume, mute} = this.levelOf(key);
+      const off = mute ? ' class="off"' : '';
       return `
-        <label for="vol-${key}">${escapeHtml(label)}</label>
-        <input type="range" id="vol-${key}" min="0" max="1" step="0.05" value="${volume}" data-volume="${key}">
-        <output data-level="${key}">${Math.round(volume * 100)} %</output>
-        <button class="tbtn small${mute ? ' on' : ''}" type="button" data-mute="${key}" title="Stumm"
-          aria-pressed="${mute}">M</button>`;
+        <label><input type="checkbox" data-audible="${key}"${mute ? '' : ' checked'}> ${escapeHtml(label)}</label>
+        <input type="range"${off} min="0" max="1" step="0.05" value="${volume}" data-volume="${key}"
+          aria-label="Lautstärke ${escapeHtml(label)}">
+        <output${off} data-level="${key}">${Math.round(volume * 100)} %</output>`;
     };
 
-    this.el.panel.innerHTML = `
+    this.el.volumes.innerHTML = `
       <div class="mix-grid">
-        <h4>Lautstärke</h4>
         ${this.orderTracks(score.tracks)
           .map(t => row(`track:${t.index}`, trackLabel(t.name) || `Spur ${t.index + 1}`)).join('')}
         ${this.mixer ? row('audio', 'Audiospur') : ''}
@@ -1170,91 +1297,24 @@ export class Player {
             + 'lassen sie sich im Sync-Editor (Menü).</div>'
           : this.mixer.offset ? `<div class="hint">Noch eingestellt: Audio-Versatz ${this.mixer.offset} ms (frühere
             Einstellung). Im Sync-Editor (Menü) lässt er sich in die Sync-Punkte übernehmen.</div>` : ''}
-        <h4>Schläge</h4>
+        <div class="mix-gap"></div>
         ${row('metronome', 'Metronom')}
         ${row('countIn', 'Vorzähler')}
-      </div>
-      <h4>Loop-Bereich</h4>
-      <div class="panel-row">
-        Takt <input type="number" min="1" max="${barCount}" value="${fromBar}" data-range="from" aria-label="Von Takt">
-        bis <input type="number" min="1" max="${barCount}" value="${toBar}" data-range="to" aria-label="Bis Takt">
-        <button class="tbtn small" type="button" data-range-clear>&times;</button>
-      </div>
-      ${this.prefs.view === 'chords' ? ''
-        : '<div class="hint">Oder im Notenblatt mit der Maus bzw. dem Finger über die Takte ziehen.</div>'}
-      <h4>Darstellung</h4>
-      <div class="panel-row">
-        <select data-pref="scale" aria-label="Größe">
-          ${SCALES.map(s => option(s, `${Math.round(s * 100)} %`, this.prefs.scale)).join('')}
-        </select>
-        <label><input type="checkbox" data-pref="diagrams"${this.prefs.diagrams ? ' checked' : ''}> Griffbilder</label>
       </div>
     `;
   }
 
   /**
-   * Reagiert auf Änderungen im Einstellungsfeld: Loop-Bereich, Größe, Griffbilder (Lautstärken übernimmt schon
-   * onVolumeChange()).
+   * Checkbox im Lautstärke-Dialog: Haken = zu hören, ohne Haken stumm.
    * @param {HTMLInputElement} t geändertes Element
    * @returns {void}
    */
-  onPanelChange(t){
-    const api = this.api;
-    if(t.dataset.range){
-      this.applyRangeInputs();
-    } else if(t.dataset.pref === 'scale'){
-      this.prefs.scale = Number(t.value);
-      savePrefs(this.prefs);
-      api.settings.display.scale = this.prefs.scale;
-      api.updateSettings();
-      api.render();
-      this.applyView();
-    } else if(t.dataset.pref === 'diagrams'){
-      this.prefs.diagrams = t.checked;
-      savePrefs(this.prefs);
-      this.applyView();
-    }
-  }
-
-  /**
-   * Reagiert auf Klicks im Einstellungsfeld: Stumm, Loop-Bereich löschen.
-   * @param {HTMLElement} t angeklicktes Element
-   * @returns {void}
-   */
-  onPanelClick(t){
-    const api = this.api;
-    if(t.dataset.mute){
-      this.levelOf(t.dataset.mute).toggleMute();
-      this.saveLevels();
-      this.renderPanel();
-    } else if(t.dataset.rangeClear !== undefined){
-      api.playbackRange = null;
-      api.clearPlaybackRangeHighlight();
-      this.renderPanel();
-    }
-  }
-
-  /**
-   * Loop-Bereich aus den Takt-Eingaben setzen (Takte 1-basiert, beide inklusive).
-   * @returns {void}
-   */
-  applyRangeInputs(){
-    const api = this.api;
-    const bars = api.score.masterBars;
-    /** @type {(name: string) => number} */
-    const input = name => Number(/** @type {HTMLInputElement} */ (this.el.panel.querySelector(`[data-range="${name}"]`)).value);
-    const from = input('from');
-    const to = input('to') || from;
-    if(!from || from > bars.length) return;
-    const first = bars[from - 1];
-    const last = bars[Math.min(Math.max(to, from), bars.length) - 1];
-    api.playbackRange = {startTick: first.start, endTick: last.start + last.calculateDuration()};
-
-    // Bereich im Notenblatt markieren wie bei einer Auswahl mit der Maus (erste angezeigte Spur).
-    const staff = api.tracks[0]?.staves[0];
-    const startBeat = staff?.bars[first.index].voices[0].beats[0];
-    const endBeats = staff?.bars[last.index].voices[0].beats;
-    if(startBeat && endBeats?.length) api.highlightPlaybackRange(startBeat, endBeats[endBeats.length - 1]);
+  onAudibleChange(t){
+    if(!t.dataset.audible) return;
+    const level = this.levelOf(t.dataset.audible);
+    if(level.mute === t.checked) level.toggleMute();
+    this.saveLevels();
+    this.renderVolumeDialog();
   }
 
   /**
@@ -1264,7 +1324,9 @@ export class Player {
   destroy(){
     document.removeEventListener('visibilitychange', this.onVisibility);
     window.removeEventListener('resize', this.onResize);
-    document.removeEventListener('click', this.onDocumentClick);
+    document.removeEventListener('pointerdown', this.onOutsideClick);
+    this.trackChecks.remove();
+    this.chordNow.remove();
     clearTimeout(this.renderStatusTimer);
     this.controls.innerHTML = '';
     this.releaseWakeLock();

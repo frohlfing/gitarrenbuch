@@ -45,7 +45,7 @@ export function chordDiagramSvg(name, grip){
       stroke-width="${w}"/>`);
   }
   if(first > 1){
-    parts.push(`<text x="${LEFT - 6}" y="${y(first) + 4}" text-anchor="end" font-size="11"
+    parts.push(`<text class="fret-label" x="${LEFT - 6}" y="${y(first) + 4}" text-anchor="end" font-size="11"
       fill="currentColor">${first}</text>`);
   }
   // Kennzeichen über dem Sattel, Barré, Fingerpunkte.
