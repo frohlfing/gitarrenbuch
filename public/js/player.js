@@ -343,6 +343,12 @@ export class Player {
     this.trackChecks.className = 'track-checks';
     this.trackChecks.hidden = true;
     (controls.closest('.songbar') ?? controls).append(this.trackChecks);
+    /**
+     * Bearbeitungsmodus, solange er offen ist (siehe note-editor.js): Dann zeichnet er die Noten und bekommt die
+     * Spurwahl.
+     * @type {?import('./note-editor.js').NoteEditor}
+     */
+    this.editor = null;
     controls.addEventListener('click', e => this.onControlsClick(/** @type {HTMLElement} */ (e.target)));
     for(const el of [controls, this.trackChecks]){
       el.addEventListener('change', e => this.onControlsChange(/** @type {HTMLInputElement} */ (e.target)));
@@ -990,6 +996,9 @@ export class Player {
    * @returns {void}
    */
   scrollToSystem(bounds, force){
+    // Im Bearbeitungsmodus führt der Cursor des Editors; alphaTab setzt die Abspielposition nach jedem Neuzeichnen
+    // auf den Anfang und würde sonst jedes Mal zu Takt 1 rollen.
+    if(this.editor && !this.isPlaying) return;
     const system = bounds.barBounds.masterBarBounds.staffSystemBounds;
     if(!system || (!force && system.index === this.scrolledSystem)) return;
     this.scrolledSystem = system.index;
@@ -1039,12 +1048,17 @@ export class Player {
     const api = this.api;
     if(!api?.score || !indexes.length) return;
     localStorage.setItem(TRACKS_KEY_PREFIX + this.slug, JSON.stringify(indexes));
-    const tracks = this.orderTracks(indexes.map(i => api.score.tracks[i]));
-    this.applyLyrics(tracks);
-    this.applyChordNames(tracks);
-    this.applySystemGap(tracks);
-    api.updateSettings();
-    api.renderTracks(tracks);
+    if(this.editor){
+      // Im Bearbeitungsmodus zeigt der Editor seine Noten unverändert (ohne Text und Akkorde umzuhängen).
+      this.editor.showTracks(indexes);
+    } else {
+      const tracks = this.orderTracks(indexes.map(i => api.score.tracks[i]));
+      this.applyLyrics(tracks);
+      this.applyChordNames(tracks);
+      this.applySystemGap(tracks);
+      api.updateSettings();
+      api.renderTracks(tracks);
+    }
     const shown = new Set(indexes);
     for(const c of this.trackChecks.querySelectorAll('[data-track-show]')){
       /** @type {HTMLInputElement} */ (c).checked = shown.has(Number(/** @type {HTMLElement} */ (c).dataset.trackShow));

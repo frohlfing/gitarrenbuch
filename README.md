@@ -40,7 +40,7 @@ Wo was liegt (je Song unter `data/songs/<slug>/`):
 | `score.atex`     | Noten, Tabs, Text, Akkorde, Abschnitte, Tempo, Stimmung, Capo, Tonart, Sync-Punkte  |
 | `audio.mp3`      | Aufnahme                                                                            |
 | `cover.jpg`      | Cover                                                                               |
-| `leadsheet.json` | nur Layout der DIN-A4-Seite (Zeilenumbrüche, Anschlagmuster, Randnotizen), geplant  |
+| `leadsheet.json` | nur Layout der DIN-A4-Seite (Anschlagmuster, Randnotizen), geplant                  |
 | `orig/`          | alle Uploads unverändert                                                            |
 
 ## Voraussetzungen
@@ -108,10 +108,10 @@ Wo was liegt (je Song unter `data/songs/<slug>/`):
      entschlüsseln; ohne sie warnt es, und Formate fehlen. Node ginge auch, aber erst in neueren Versionen als 20.9.
    - ffmpeg (mit ffprobe): z. B. nach `C:\Program Files\ffmpeg\bin`.
      
-8. **alphaTab** liegt fertig unter `public/vendor/alphatab/` (1.8.4 aus npm, siehe `VERSION.txt`), mit **drei
-   eigenen Änderungen** in `alphaTab.core.mjs` (30.10.2026; vermerkt als Kommentar ganz oben in der Datei). Bei einem
-   Update von alphaTab prüfen, ob sie noch nötig sind, und sie sonst neu einfügen. Änderungen an alphaTab so wenige
-   wie möglich: Was sich über Einstellungen lösen lässt, löst der Player.
+8. **alphaTab** liegt fertig unter `public/vendor/alphatab/` (1.8.4 aus npm, siehe `VERSION.txt`), mit **vier
+   eigenen Änderungen** in `alphaTab.core.mjs` (30./31.10.2026; vermerkt als Kommentar ganz oben in der Datei). Bei
+   einem Update von alphaTab prüfen, ob sie noch nötig sind, und sie sonst neu einfügen. Änderungen an alphaTab so
+   wenige wie möglich: Was sich über Einstellungen lösen lässt, löst der Player.
 
    **1. Jede Art von Angabe in einer eigenen Zeile**
    - Stelle: `update(t)` der Effekt-Zeilen (im Quelltext `EffectBandSlot.update()`), minifiziert
@@ -143,7 +143,15 @@ Wo was liegt (je Song unter `data/songs/<slug>/`):
      bleibt alles wie in alphaTab.
    - Ohne diese Änderung klebt der Text wieder an der Zeile darüber.
 
-   **Für alle drei:**
+   **4. Zeilenumbrüche im Liedtext nicht zeichnen**
+   - Stelle: `createNewGlyph()` des Liedtexts (minifiziert `createNewGlyph(t,e){return new co(0,0,e.lyrics,…`, `lo`
+     ist `LyricsEffectInfo`).
+   - Geändert: `e.lyrics.map(l=>l&&l.replace(/\n/g,""))` statt `e.lyrics`. Ein Zeilenumbruch im Liedtext steht als
+     `\n` am Ende der letzten Silbe einer Zeile (siehe "Text und Akkorde"); gezeichnet wird die Silbe ohne ihn.
+   - Ohne diese Änderung zeichnet der Browser den Umbruch als Leerzeichen: nicht zu sehen, die Silbe steht aber gut
+     1 px weiter links (sie wird mittig unter die Note gesetzt und ist breiter).
+
+   **Für alle vier:**
    - Die unveränderte Datei liegt daneben als `alphaTab.core.mjs.orig`.
    - Der Browser hält `alphaTab.core.mjs` ohne Versionszähler im Cache; nach einer Änderung einmal mit Strg+F5 laden.
 
@@ -233,6 +241,7 @@ gitarrenbuch/                         # Projektroot
  │              ├── score.atex        # Noten, Tabs, Text, Akkorde, Abschnitte, Sync-Punkte (alphaTex)
  │              ├── audio.mp3         # Audiospur (beim Import aus der GP-Datei herausgelöst)
  │              ├── cover.jpg         # Albumcover, 500 px (Deezer, iTunes oder eigenes Bild)
+ │              ├── history/          # Die letzten 10 Fassungen von score.atex vor dem Überschreiben
  │              └── orig/             # Hochgeladenes Rohmaterial (GP-, ChordPro-, Textdateien), nie überschrieben
  │    └── backup/                     # Nur lokal: Rohmaterial je Song (<slug>/), u. a. die von YouTube geladene Spur
  ├── bin/
@@ -257,7 +266,7 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── cover.php              # Cover ausliefern, suchen, übernehmen, hochladen, entfernen
  │    │    ├── import.php             # Neuen Song mit Noten anlegen (Import oder Gerüst, inkl. Cover)
  │    │    ├── lyrics.php             # Akkorddatei hochladen (landet unter orig/)
- │    │    ├── score.php              # score.atex ausliefern (für alphaTab) und ersetzen (Sync-Editor)
+ │    │    ├── score.php              # score.atex ausliefern (für alphaTab) und ersetzen (Sync-/Struktur-Editor)
  │    │    ├── songs.php              # Songs lesen, bearbeiten, löschen
  │    │    └── youtube.php            # Titel und Länge eines YouTube-Videos (für das Formular)
  │    ├── dev/                        # Admin-/Wartungsskripte – NICHT dauerhaft auf dem Produktivserver lassen
@@ -266,10 +275,15 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── api.js                 # API-Zugriff, Token-Abfrage, gemeinsame Typen (Song, CoverHit)
  │    │    ├── chordpro.js            # ChordPro-Export (.cho) aus der Ansicht "Text & Akkorde"
  │    │    ├── chords.js              # Akkordbibliothek: Griffe, Griffbilder vereinheitlichen, Tonart erkennen
+ │    │    ├── editor.js              # Struktur-Editor: Sprünge ausschreiben, Spurrollen, Capo, Tonart, Akkorde
+ │    │    ├── icons.js               # Symbole des Bearbeitungsmodus (selbst gezeichnet, Bravura, Material)
  │    │    ├── library.js             # Kachelübersicht, Formulare (Song, Import, Cover, Text), Overlay
  │    │    ├── mixer.js               # Audiospur parallel zum Synth, Gleichlauf über die Sync-Punkte
+ │    │    ├── note-editor.js         # Bearbeitungsmodus: Werkzeugleiste, Panels, Cursor, Maus, Rückgängig
  │    │    ├── player.js              # alphaTab-Wrapper: Notenansicht, Abspielleiste, Einstellungen
+ │    │    ├── score-edit.js          # Bearbeitungsschritte am Modell (Bund, Dauer, Takte …), ohne DOM
  │    │    ├── score.js               # Notenformat: GP lesen, bereinigen und prüfen, Gerüst, GP-Export, Eckdaten
+ │    │    ├── shortcuts.js           # Tastenkürzel des Bearbeitungsmodus (wie Guitar Pro 8), Übersicht "?"
  │    │    ├── svg.js                 # Griffbild als SVG
  │    │    ├── sync-editor.js         # Sync-Editor: Wellenform, Sync-Punkte setzen, verschieben, speichern
  │    │    ├── textview.js            # Ansicht "Text & Akkorde": Zeilen, Akkorde über Silben, Taktzeilen
@@ -315,7 +329,7 @@ abdeckt.
 | DELETE  | `/api/songs.php?slug=xyz`         | Song samt Ordner (Rohmaterial inklusive) löschen                                                                                              |
 | POST    | `/api/import.php`                 | Neuen Song anlegen (`multipart/form-data`: `meta` = JSON wie bei PUT `songs.php`, `score` = alphaTex, `file` = Original-GP-Datei, optional)   |
 | GET     | `/api/score.php?slug=xyz`         | Noten `score.atex` ausliefern (für alphaTab)                                                                                                  |
-| PUT     | `/api/score.php?slug=xyz`         | Noten ersetzen (Body: alphaTex als `text/plain`; nutzt der Sync-Editor). Nur für Songs, die schon Noten haben                                 |
+| PUT     | `/api/score.php?slug=xyz`         | Noten ersetzen (Body: alphaTex als `text/plain`; Sync-/Struktur-Editor), alte Fassung nach `history/`. Nur für Songs mit Noten                |
 | GET     | `/api/audio.php?slug=xyz`         | Audiospur `audio.mp3` ausliefern                                                                                                              |
 | PUT     | `/api/audio.php?slug=xyz`         | Audiospur ersetzen (Body: die MP3 als `audio/mpeg`; nutzt `bin/audio.php`)                                                                    |
 | GET     | `/api/cover.php?slug=xyz`         | Cover `cover.jpg` ausliefern                                                                                                                  |
@@ -431,10 +445,11 @@ alphaTab liest die Datei im Browser, weil PHP die GP-Formate nicht selbst auswer
   Griffbilder"): je Spur und Akkordname ein Griffbild aus der Bibliothek, keine Rhythmus-Schrägstriche, keine
   Anzeige-Angaben je Spur. Tonart und Vorzeichen bleiben wie in der Datei, Korrekturen schlägt der Editor vor.
 - Dann werden sie ohne die Angaben zu alphaTex (siehe "Notenformat"). Danach liest der Browser das Ergebnis wieder
-  ein und vergleicht es Schlag für Schlag mit dem Modell; geht dabei etwas verloren, lehnt er den Import ab.
+  ein und vergleicht es Takt für Takt mit dem Modell (`exportScore()`). Geht dabei etwas verloren, warnt der Dialog
+  mit den betroffenen Takten ("Abweichungen in 2 Takten (Takt 12, 30)"); der Benutzer wählt "Trotzdem übernehmen"
+  oder "Abbrechen". Abgelehnt wird nur, wenn alphaTab das Ergebnis gar nicht lesen kann.
 - Der Server prüft das Format am Dateiinhalt (nicht an der Endung), legt die GP-Datei unverändert unter `orig/` ab
-  und speichert die Noten als `score.atex`. Noten lassen sich nur beim Anlegen speichern; ändern wird sie der
-  geplante Editor.
+  und speichert die Noten als `score.atex`. Danach ändern sie nur noch Sync-Editor und Struktur-Editor.
 
 Enthält eine GP8-Datei eine Audiospur (MP3), löst der Server sie aus dem Original heraus (`extract_gp_audio()`): Die
 MP3 wird unverändert zu `audio.mp3` (auf dem Server gibt es kein ffmpeg zum Umwandeln). Die Sync-Punkte zwischen
@@ -552,8 +567,8 @@ Textformat von alphaTab, und nicht als GP-Datei:
   und neue Spuren schreiben sollen.
 - **Geprüft am Archiv**: Alle 41 überarbeiteten Songs aus Guitar Pro kamen über alphaTex ohne Abweichung zurück
   (je Schlag Bund, Saite, Dauer, Text, Akkord und Effekte, dazu Tempowechsel, Abschnitte und Sync-Punkte). Rund
-  100 KB je Song sind unkritisch. Zwei fremde GP5-Dateien mit Schlagzeugspuren lehnt der Import ab, weil alphaTab
-  sie nicht als alphaTex schreiben kann.
+  100 KB je Song sind unkritisch. Zwei fremde GP5-Dateien mit Schlagzeugspuren schreibt alphaTab nicht verlustfrei
+  als alphaTex; früher lehnte der Import sie ab, heute warnt er.
 - **Risiko**: alphaTex kann sich mit neuen alphaTab-Versionen ändern. Vor einem Update werden deshalb alle Songs mit
   der alten Version geladen und mit der neuen gespeichert; die Originale in `orig/` und der GP-Export bleiben als
   Sicherung.
@@ -585,9 +600,38 @@ nur von den Bildservern von Deezer und iTunes.
 Text, Akkorde und Abschnitte werden nur einmal gespeichert, in den Noten: Silben und Akkordsymbole hängen an den
 Schlägen, haben also einen genauen Zeitpunkt, Abschnitte sind Marker an den Takten. So liegen sie auch in den
 überarbeiteten GP-Dateien des Archivs. Ein `song.cho` gibt es nicht; ChordPro und die DIN-A4-Seite werden aus den
-Noten erzeugt, nur Layout-Angaben (Zeilenumbrüche, Anschlagmuster, Randnotizen) kommen nach `leadsheet.json`.
+Noten erzeugt, nur Layout-Angaben (Anschlagmuster, Randnotizen) kommen nach `leadsheet.json`.
 Umgekehrt ginge Information verloren: ChordPro kennt nur "Akkord vor dieser Silbe", Akkorde ohne Silbe (Intro,
 Zwischenspiel) hätten keinen Schlag mehr.
+
+**Zeilenumbrüche** des Liedtexts stehen ebenfalls in den Noten: als `\n` am Ende der letzten Silbe jeder Zeile, z. B.
+`lyrics "Ber-lin,\n"` (`LYRICS_BREAK` in `js/tracks.js`). alphaTab zeichnet das Zeichen nicht (Änderung 4 unter
+"Setup", Punkt 8). Gesetzt werden sie im Reiter "Liedtext" des Bearbeitungsmodus, dort bekommt jede Zeile ihren
+Umbruch; hat eine Strophe keine, bricht die Ansicht selbst um (nach Satzzeichen, Pausen und Abschnitten). Guitar Pro
+speichert den Text samt Umbrüchen als Fließtext, alphaTab verwirft sie beim Import.
+
+**Liedtext auf die Schläge verteilen** (Reiter "Liedtext", `setLyricsText()` und `placeSyllables()` in
+`js/score-edit.js`):
+
+- **Guitar Pro** verteilt den Fließtext bei jeder Änderung neu von vorn: jede Silbe auf die nächste Note, ein
+  doppeltes Leerzeichen lässt eine aus. Ein zusätzliches Wort verschiebt alles dahinter; gehaltene Silben und Lücken
+  muss man mit Leerzeichen nachbauen. Eine Silbe kann nur unter einer Note stehen, nicht unter einer Pause.
+- **Wir** vergleichen alten und neuen Text des Felds (längste gemeinsame Folge der Silben) und ändern nur, was sich
+  geändert hat:
+  1. Gleich gebliebene Silben bleiben auf ihrem Schlag, Lücken (gehaltene Silben) bleiben erhalten.
+  2. Geänderte oder neue Silben kommen auf die Schläge der alten an derselben Stelle, reichen die nicht, auf freie
+     Schläge dahinter bis zur nächsten gleich gebliebenen Silbe.
+  3. Passt es auch so nicht, rückt der Rest des Abschnitts Schlag für Schlag nach, bis zum Abschnittsende; was dann
+     übrig bleibt, macht den Abschnitt rot. Ein Abschnitt verschiebt nie die folgenden.
+  4. Verteilt wird immer vom Stand vor dem Schreiben aus: Wird ein zu langer Abschnitt wieder gekürzt, stehen die
+     Silben wie vorher (das Nachrücken in 3 füllt Lücken).
+- **Schlag, nicht Note:** Im Modell von alphaTab hängt die Silbe am Schlag (`beat.lyrics`), auch an einer Pause;
+  alphaTab speichert und zeichnet sie dort (Test-Song, Takt 12: `r.4{lyrics "Ak-"}`). Beim Verteilen zählen aber nur
+  Schläge, auf denen eine Note angeschlagen wird, also keine Pausen und keine übergebundenen Noten (dort klingt der
+  Ton nur weiter). Ein Schlag, der schon eine Silbe hat, zählt auch als Pause mit, sonst ginge sie verloren.
+- **Idee (nicht umgesetzt):** Im linken Panel beim Feld "Abschnitt" eine Checkbox "Silbe auch auf Pause". Ist sie
+  gesetzt, zählen in diesem Abschnitt beim Verteilen auch die Pausen als Schläge (z. B. für gesprochenen Text oder
+  einen Einsatz, der in den Noten auf einer Pause steht). Offen ist, wo die Einstellung gespeichert wird.
 
 Im Formular "Song bearbeiten" lässt sich unter "Akkorddatei" eine ChordPro- (`.cho`, `.chopro`, `.crd`, `.pro`) oder
 Textdatei (`.txt`, z. B. Akkorde über den Zeilen) hineinziehen oder auswählen. Wie beim Cover wird sofort gespeichert,
@@ -645,12 +689,14 @@ markiert und im Editor korrigiert:
 (`read_score_issues()` in `api/lib/crud.php`, liest `score.atex` ohne alphaTab). Geprüft wird nur, womit die App nicht
 von selbst zurechtkommt: zuerst "Capo ungleich" (Capo nicht in allen Spuren gleich), dann "Sprungzeichen"
 (`\jump` in den Noten: D.S., D.C., Coda, Fine; im Gitarrenbuch werden sie ausgeschrieben, die Ansicht "Chords" kennt
-sie nicht), dann "Spur ohne Rolle" (Hinweis "ohne Rolle: „Guitar“"). Wo Text und Akkorde stehen, zählt nicht: Dafür gibt es die Ersatzregeln, und wird eine Spur im Editor zur Gesangs- oder Begleitspur, wandern Text bzw.
-Akkorde dorthin. Solche Songs haben in der Übersicht einen roten Rahmen mit der wichtigsten Abweichung, z. B. "⚠ Spur
-ohne Rolle" (Tooltip mit dem Hinweis); im Song steht sie mit Hinweis rot im Kopf unter den Eckdaten. Die
+sie nicht), dann "Spur ohne Rolle" (Hinweis "ohne Rolle: „Guitar“"). Wo Text und Akkorde stehen, zählt nicht:
+Dafür gibt es die Ersatzregeln, und der Struktur-Editor schreibt die Akkorde in die Begleitspur (der Text folgt
+später, siehe "Struktur-Editor"). Solche Songs haben in der Übersicht einen roten Rahmen mit der wichtigsten
+Abweichung, z. B. "⚠ Spur ohne Rolle" (Tooltip mit dem Hinweis); im Song steht sie mit Hinweis rot im Kopf unter den
+Eckdaten. Die
 Rollen stehen deshalb zweimal (`TRACK_ROLES` in `js/tracks.js` und `api/lib/crud.php`). Stand 29.10.2026 haben 41
-der 42 Songs Spuren ohne Rolle ("Redemption Song" hat nur die Spur "Vocal"); umgebaut wird mit dem Editor. `assignTrackRoles()` schlägt dafür Rollen nach dem Spurnamen vor ("Voice",
-"Rhythm Guitar", "Fingerpicking", …).
+der 42 Songs Spuren ohne Rolle ("Redemption Song" hat nur die Spur "Vocal"); umgebaut wird mit dem Struktur-Editor.
+`assignTrackRoles()` schlägt dafür Rollen nach dem Spurnamen vor ("Voice", "Rhythm Guitar", "Fingerpicking", …).
 
 **Der Import** korrigiert nur Formales, ohne den Inhalt zu ändern (`cleanImportedScore()` in `js/score.js`, siehe
 "Akkorde und Griffbilder"): Rhythmus-Schrägstriche (sonst stürzt alphaTab ab), Anzeige-Angaben je Spur, Notizen im
@@ -683,12 +729,13 @@ mehrere Varianten gleichen Namens, oft Bruchstücke mit ausgeblendetem Griffbild
 Griffbilder im Kopf.
 
 **Über den Noten** zeichnet alphaTab nichts mehr (`HIDDEN_SCORE_ELEMENTS` in `js/player.js`): Titel, Interpret usw.
-stehen schon in der Kopfzeile der Seite, ebenso der Capo (dort fett, man übersieht ihn leicht; "Capo. fret 1" über
-dem ersten Takt drängte sich dort mit Tempo, Abschnitt und Akkordnamen) und die Stimmung, wenn es nicht die Standardstimmung ist: "Stimmung **D** A D G B E", abweichende Saiten
-fett; unterscheiden sich nur die Oktaven, mit Oktaven ("Johnny Walker" steht auf E3 A3 D4 G4 B4 E5, eine Oktave über
-der Standardstimmung; das passt noch nicht in die Kopfzeile, offen). Wechselt das Tempo, steht der Bereich in der
-Kopfzeile ("89–96 BPM"). Das Tempo zählt immer in Vierteln: alphaTab rechnet beim GP-Import andere Bezugsnoten
-(Achtel, punktierte Viertel, …) um, alphaTex kennt nur Viertel; Kommazahlen (`\tempo 88.7`) sind erlaubt.
+stehen schon in der Kopfzeile der Seite, ebenso der Capo (dort fett, man übersieht ihn leicht; "Capo. fret 1" über dem 
+ersten Takt drängte sich dort mit Tempo, Abschnitt und Akkordnamen) und die Stimmung, wenn es nicht die Standardstimmung 
+ist: "Stimmung **D** A D G B E", abweichende Saiten fett; unterscheiden sich nur die Oktaven, mit Oktaven ("Johnny 
+Walker" steht auf E3 A3 D4 G4 B4 E5, eine Oktave über der Standardstimmung; das passt noch nicht in die Kopfzeile, 
+offen). Wechselt das Tempo, steht der Bereich in der Kopfzeile ("89–96 BPM"). Das Tempo zählt immer in Vierteln: 
+alphaTab rechnet beim GP-Import andere Bezugsnoten (Achtel, punktierte Viertel, …) um, alphaTex kennt nur Viertel; 
+Kommazahlen (`\tempo 88.7`) sind erlaubt.
 
 **Griffbilder** zeigt der Player seit 31.10.2026 nur noch für den Akkord, der gerade klingt (siehe "Leiste" unten).
 Alle Griffbilder eines Songs auf einmal (`renderChordDiagrams()` in `js/textview.js`, in der Reihenfolge des ersten
@@ -700,10 +747,11 @@ Hintergrund.
 
 Den **Systemtrenner** aus Guitar Pro (zwei schräge Striche zwischen den Notenzeilen, `\useSystemSignSeparator`)
 entfernt der Import; aus den 40 Songs, die ihn hatten, ist er am 30.10.2026 entfernt (Sicherung
-`data/backup/systemtrenner/<slug>.atex`). Den Abstand zwischen den Zeilen setzt der Player (`SYSTEM_GAP`, 45 px bei mehreren angezeigten Spuren, damit man
-sieht, wo eine Zeile mit allen Spuren endet; `SYSTEM_GAP_SINGLE`, 20 px bei nur einer), ebenso den zwischen den Spuren einer
-Zeile (`TRACK_GAP`, 20 px statt 5; sonst klebte "Rhythm Guitar 1" in "Junge" an den Tabs der Spur darüber) und
-zwischen den Angaben über den Noten (`EFFECT_GAP`, 8 px statt 2: Tempo, Abschnitt, Text, Akkordname).
+`data/backup/systemtrenner/<slug>.atex`). Den Abstand zwischen den Zeilen setzt der Player (`SYSTEM_GAP`, 45 px bei 
+mehreren angezeigten Spuren, damit man sieht, wo eine Zeile mit allen Spuren endet; `SYSTEM_GAP_SINGLE`, 20 px bei nur 
+einer), ebenso den zwischen den Spuren einer Zeile (`TRACK_GAP`, 20 px statt 5; sonst klebte "Rhythm Guitar 1" in 
+"Junge" an den Tabs der Spur darüber) und zwischen den Angaben über den Noten (`EFFECT_GAP`, 8 px statt 2: Tempo, 
+Abschnitt, Text, Akkordname).
 
 **Reihenfolge der Spuren und Liedtext** (`orderTracks()`, `applyLyrics()` in `js/player.js`): Oben steht die
 Begleitung (Schlag-, dann Zupfbegleitung; ohne Rollen die erste Begleitspur), unten die Spur mit dem Text
@@ -715,9 +763,9 @@ Spuren. Text an eine andere Spur zu hängen, ginge wie bei den Akkorden nur, wo 
 Gesang und Gitarre haben oft verschiedene Rhythmen, Silben würden fehlen. Unter den Tabs steht der Text dank der
 zweiten Änderung an alphaTab, mit Abstand dank der dritten (siehe "Setup", Punkt 8).
 
-**Alle Texte in den Noten** (Akkorde, Abschnitte, Liedtext, Tempo, Beat-Texte, Spurnamen, Taktnummern, …) stehen in
-der Schrift der Seite (`TEXT_FONT` in `js/player.js`), Größe und Stil wie bei alphaTab; die Notenschrift selbst
-(Bravura) bleibt. Der Liedtext steht gerade statt kursiv, 13 px (`LYRICS_FONT_SIZE`). Leere Strophen am Ende eines Schlags
+**Alle Texte in den Noten** (Akkorde, Abschnitte, Liedtext, Tempo, Beat-Texte, Spurnamen, Taktnummern, …) stehen in der 
+Schrift der Seite (`TEXT_FONT` in `js/player.js`), Größe und Stil wie bei alphaTab; die Notenschrift selbst (Bravura) 
+bleibt. Der Liedtext steht gerade statt kursiv, 13 px (`LYRICS_FONT_SIZE`). Leere Strophen am Ende eines Schlags
 lässt der Player weg (`withoutTrailingEmpty()`): Aus Guitar Pro haben die Schläge oft fünf Strophen, meist nur die
 erste mit Text, und alphaTab rechnet den Abstand zwischen Strophen auch für die leeren mit; der Text hatte darunter
 gut 20 px zu viel.
@@ -792,11 +840,11 @@ auch beim Abspielen, statt gleitend zu scrollen. Die aktuelle Zeile kommt dabei 
 "Noten werden gezeichnet" erscheint erst nach 0,4 s (`RENDER_STATUS_DELAY`), sonst blitzt es beim Umschalten auf.
 
 Die Ansicht **Chords** (Umschalter in der Kopfzeile, siehe unten) zeigt statt der Noten den Songtext mit den Akkorden
-(`js/textview.js`); die Wiedergabe läuft weiter. Je Abschnitt folgen die Zeilen, jeder Akkord genau über seiner Silbe (je Silbe ein Block, deshalb auch in
-Proportionalschrift und mit Umbruch auf dem Smartphone). Text und Akkorde kommen aus den Spuren nach "Spuren, Capo,
-Text und Akkorde" (Akkorde aus allen Spuren zusammengetragen, `mergeChords()`), in Abspielreihenfolge mit Wiederholungen und Strophen (ohne Sprünge wie D.S. al Coda).
-Zeilen enden an Satzzeichen, längeren Pausen und Abschnitten, nie mitten im Wort; ein Auftakt gehört zum folgenden
-Abschnitt.
+(`js/textview.js`); die Wiedergabe läuft weiter. Je Abschnitt folgen die Zeilen, jeder Akkord genau über seiner Silbe 
+(je Silbe ein Block, deshalb auch in Proportionalschrift und mit Umbruch auf dem Smartphone). Text und Akkorde kommen 
+aus den Spuren nach "Spuren, Capo, Text und Akkorde" (Akkorde aus allen Spuren zusammengetragen, `mergeChords()`), in 
+Abspielreihenfolge mit Wiederholungen und Strophen (ohne Sprünge wie D.S. al Coda). Zeilen enden an Satzzeichen, 
+längeren Pausen und Abschnitten, nie mitten im Wort; ein Auftakt gehört zum folgenden Abschnitt.
 
 **Jeder Takt kommt vor**, wie in den handgebauten Leadsheets (Vorbild: `leadsheet_manuell_erstellt.txt` von
 "Junge"):
@@ -809,7 +857,14 @@ Abschnitt.
   deren Anfang: `|G  warum hast du …`.
 - Nur Abschnitte ganz ohne Text (Intro, Solo) werden zu Taktzeilen, bis zu acht Takte je Zeile. Sie sehen aus wie die
   Akkordzeile einer Textzeile, nur ohne Text: `|F  |  |G  |  |`.
-- Endet mit einer Zeile ein Takt (die nächste beginnt mit einem neuen), schließt ein `|` sie ab.
+- **Strich am Zeilenende** (`closed` in `buildTextModel()`): Eine Zeile schließt mit `|`, wenn mit ihr ein Takt endet,
+  also wenn die nächste Zeile mit einem Taktanfang beginnt (ihr erster Teil trägt selbst einen `|`), eine Taktzeile
+  ist oder keine mehr folgt. Ein `|` am Ende und einer am Anfang der nächsten Zeile sind derselbe Taktstrich, zweimal
+  gezeichnet; dazwischen liegt kein Takt.
+- Beginnt die nächste Zeile mitten im Takt, endet die Zeile ohne `|`: Der Takt geht dort weiter. Typisch ist ein
+  Auftakt, der wegen des Zeilenumbruchs schon in der nächsten Zeile steht, z. B. "No Woman No Cry", Bridge → Chorus 3:
+  `… |Am Everything's gonna F be alright,` und darunter `so |C Woman, no G/B cry.`; "so" liegt noch im F-Takt. Der
+  Auftakt gehört zum neuen Abschnitt, dessen Name steht schon über ihm.
 - Verworfen wurde die Schreibweise ohne Taktstriche (`G  %  Am  Asus2`): Über dem Text sähe ein Wechsel mitten im
   Takt genauso aus wie ein neuer Takt.
 - Ein Akkord gehört an die nächste Silbe bzw. den nächsten leeren Takt in seinem Takt, wenn bis dahin kein anderer
@@ -828,7 +883,7 @@ erst, wenn sie erreicht ist (im leeren Teil vor einem Auftakt keine). Sprünge w
 nicht, dort liefe die Markierung falsch; solche Songs sind als "Sprungzeichen" markiert (alphaTab selbst spielt sie
 richtig). Ein **Klick** auf eine Silbe, einen Akkord oder Taktstrich setzt die Wiedergabe dorthin (`onTextClick()`);
 läuft sie, spielt sie von dort weiter. Die Noten werden in dieser Ansicht nur eingeklappt, damit alphaTab weiter die
-Breite kennt. Noch offen: Zeilenumbrüche aus `leadsheet.json`.
+Breite kennt. Die Zeilen kommen aus den gespeicherten Zeilenumbrüchen (siehe oben), sonst aus `splitPhrases()`.
 
 Hat der Song eine `audio.mp3`, läuft sie gleichzeitig mit dem Synth (`js/mixer.js`). alphaTab kann beides nicht
 zusammen abspielen, deshalb spielt ein eigenes `<audio>`-Element die Spur und folgt der Position des Synths: Die
@@ -891,12 +946,14 @@ einen Eintrag), zuletzt rot die wichtigste Abweichung von der Konvention ("⚠ S
 
 Darunter die **Leiste**, die beim Abspielen oben stehen bleibt (`.songbar`, sticky):
 
-- **←** zurück zur Liste, **⋮** rechts das Menü (Bearbeiten, Darstellung, Sync-Editor, Exporte, Löschen).
+- **←** zurück zur Liste, rechts der **Stift** (Bearbeitungsmodus, siehe dort) und **⋮** das Menü (Songdaten,
+  Darstellung, Struktur-Editor, Sync-Editor, Exporte, Löschen). "Songdaten" hieß bis 30.10.2026 "Bearbeiten".
   **Darstellung** öffnet einen kleinen Dialog mit der Skalierung (50 bis 150 %, gilt für Noten und Chords),
   übernommen mit OK, für alle Songs gemerkt (`openDisplayDialog()` in `app.js`, `Player.setDisplay()`).
 - **Aktueller Akkord** links neben ⋮, immer zu sehen: der Akkord, der gerade klingt, darunter sein Griff als Text
-  ("x x 0 2 3 1"), daneben das Griffbild (oben ohne den Namen, der daneben steht). Die Leiste der Liedansicht ist ein Raster (`#songView .songbar` in `app.css`): Das
-  Griffbild (72 px hoch) reicht über beide Zeilen, Schaltflächen und Spur-Checkboxen, die in ihrer Spalte umbrechen.
+  ("x x 0 2 3 1"), daneben das Griffbild (oben ohne den Namen, der daneben steht). Die Leiste der Liedansicht ist ein 
+  Raster (`#songView .songbar` in `app.css`): Das  Griffbild (72 px hoch) reicht über beide Zeilen, Schaltflächen und 
+  Spur-Checkboxen, die in ihrer Spalte umbrechen.
   Die Bundangabe bei Griffen in höheren Lagen ist dort vergrößert (rund 15 px, `.fret-label`), links bekommt sie
   zusätzlich Platz (`CHORD_NOW_FRET_SPACE`); verkleinert wäre sie nur etwa 6 px.
   Ragt die Ansichtswahl in seine Spalte, fällt das Griffbild weg, und Name und Griff stehen in einer Zeile
@@ -943,7 +1000,9 @@ Die Sync-Punkte (`\sync` in `score.atex`) ordnen Takte der Noten Stellen in der 
 GP-Dateien übernimmt alphaTab sie beim Umwandeln. Bei YouTube-Audio und nach dem Wechsel auf einen anderen Clip
 werden sie im Sync-Editor gesetzt bzw. nachgezogen (`js/sync-editor.js`, Vorbild ist der "Media Sync Editor" im
 alphaTab-Playground). Er öffnet sich über das Menü der Songansicht, wenn der Song eine `audio.mp3` hat, und liegt fest
-über der Abspielleiste. Noten, Cursor und Wiedergabe bleiben dabei bedienbar.
+über der Abspielleiste. Noten, Cursor und Wiedergabe bleiben dabei bedienbar. Im Bearbeitungsmodus steht er
+eingebettet unten im Reiter "Audio": ohne eigenes Speichern, Schließen und Rückgängig, jede Änderung ist dort ein
+Schritt des Bearbeitungsmodus.
 
 - **Wellenform** der Audiospur mit einem Marker je Sync-Punkt, beschriftet mit der Taktnummer (dazu "+ 50 %" für eine
   Stelle mitten im Takt, "⇥" für das Taktende und "(2.)" für die zweite Wiederholung). Die rote Linie ist die
@@ -972,9 +1031,77 @@ alphaTab-Playground). Er öffnet sich über das Menü der Songansicht, wenn der 
 Jede Änderung wirkt sofort auf die Wiedergabe. **Speichern** schreibt mit `PUT api/score.php` nur die Zeilen
 `\sync (…)` (an der Stelle der bisherigen, sonst am Ende) und die Zahlen in den Zeilen `\tempo …`; alles andere in
 `score.atex` bleibt Zeichen für Zeichen erhalten (`writeSyncAndTempo()` in `js/score.js`). Vorher wird das Ergebnis
-eingelesen und mit dem Erwarteten verglichen. Den alphaTex-Exporter von alphaTab zu nehmen, kommt nicht in Frage: Er
-schreibt nur 6 der 42 Songs unverändert zurück (siehe "Offene Punkte"). "Schließen" fragt bei ungespeicherten
+eingelesen und mit dem Erwarteten verglichen. Den alphaTex-Exporter braucht es dafür nicht: Er schreibt
+kein `score.atex` Zeichen für Zeichen zurück (siehe "Offene Punkte"). "Schließen" fragt bei ungespeicherten
 Änderungen nach und setzt sie im Player zurück.
+
+### Bearbeitungsmodus
+
+Vorbild Guitar Pro: Noten, Tabs, Text und Akkorde direkt in der Liedansicht bearbeiten (`js/note-editor.js`, die
+Schritte am Modell in `js/score-edit.js`, die Icons in `js/icons.js`). Was wo steht, mit Tastenkürzeln und dem, was
+noch fehlt, beschreibt `docs/Editor.md`; dort steht auch, was aus Guitar Pro nicht übernommen wird und warum.
+
+- **Einschalten:** Stift rechts in der Leiste (nur bei Songs mit Noten). Abweichungen (Sprungzeichen, Capo ungleich,
+  Tonart, Akkorde außerhalb der Begleitspur, Spur ohne Rolle) stehen als Meldungen unter der Werkzeugleiste, jede mit
+  einem Knopf, der sie behebt.
+  Der Kopf mit Cover und Eckdaten verschwindet; bearbeitet wird mit Tabs ("Noten + Tabs" oder "Tabs").
+- **Verlassen:** "Fertig"; fragt bei ungespeicherten Änderungen nach und zeigt den Song neu, wenn Noten oder
+  Songdaten gespeichert wurden.
+- **Aufteilung:** oben die Werkzeugleiste (was man beim Eintippen ständig braucht), links "Am Cursor" (Effekte,
+  Schlag, Takt), rechts "Song" (Tonart, Taktart, Tempo, Triolen-Feeling, Capo, Songdaten), unten Liedtext, Akkorde,
+  Spuren (samt Anzeigen/Ausblenden) und Audio (Sync-Editor) mit der Statuszeile. Panels klappen mit F2, F6, F8
+  bzw. dem Pfeil ein.
+  Ab 900 px stehen die Seiten-Panels neben den Noten, darunter legen sie sich ausgeklappt darüber.
+- **Tastenkürzel** wie in Guitar Pro 8, soweit der Browser sie nicht selbst belegt (`js/shortcuts.js`, Übersicht
+  über "?").
+- **Maus:** Klick setzt den Cursor; eine Note lässt sich auf eine andere Saite oder einen anderen Schlag ziehen
+  (gleicher Ton), ein Taktstrich in den Nachbartakt (die Schläge dazwischen wandern mit).
+
+Bearbeitet werden frisch geladene Noten, nicht das Anzeige-Modell des Players; im Modus zeichnet alphaTab sie so,
+wie sie gespeichert werden. Nach jeder Änderung wird das Modell als alphaTex geschrieben und neu eingelesen (der Text
+davor ist der Schritt für "Rückgängig"). Gespeichert wird geprüft wie beim Import (`writeScoreChecked()`), die alte
+Fassung kommt nach `history/`. Den Cursor setzt `boundsLookup` von alphaTab: Die Tab-Zeile eines Takts reicht genau
+von der obersten bis zur untersten Saite. alphaTab zeichnet in einem Worker, dort bleibt `BarBounds.bar` leer; der
+Takt einer Zeile kommt deshalb über ihre Schläge. Nach jedem Neuzeichnen setzt alphaTab die Abspielposition auf den
+Anfang; damit die Seite nicht zu Takt 1 springt, rollt der Player im Modus nur beim Abspielen mit.
+
+### Struktur-Editor
+
+Menü "Struktur-Editor" in der Liedansicht (`js/editor.js`): bringt die Noten in die Form des Gitarrenbuchs (siehe
+"Spuren, Capo, Text und Akkorde"), ohne einzelne Noten zu bearbeiten. Der Dialog ist mit Vorschlägen vorbelegt:
+
+- **Spuren:** je Spur eine Rolle (Gesang, Schlag-, Zupfbegleitung, Fingerstyle) oder keine; vorgeschlagen nach dem
+  Spurnamen (`assignTrackRoles()`). Eine Spur mit Rolle heißt wie die Rolle, ohne Rolle hat sie einen eigenen Namen.
+  Jede Rolle gibt es nur einmal. Daneben je Spur Capo, Zahl der Akkorde und Silben.
+- **Capo** (nur bei ungleichem Capo): ein Capo für alle Spuren, vorgeschlagen der der Begleitspur (`unifyCapo()`).
+  Die anderen Spuren werden umgerechnet (`moveToCapo()`), sie klingen gleich; der Hinweis nennt sie und wie viele
+  Noten nur eine Oktave höher passen.
+- **Sprungzeichen** (nur, wenn es welche gibt): Wiederholungen und Sprünge (D.C., D.S., Coda, Fine) ausschreiben
+  (`unrollRepeats()` in `js/score-edit.js`); danach wird nicht mehr wiederholt, von Volta-Klammern gilt die letzte.
+- **Tonart:** erkannte Vorzeichen (`detectKeySignature()`) zum Übernehmen, sonst "C passt".
+- **Akkorde:** die Akkorde aller Spuren in die Begleitspur nach den gewählten Rollen (Schlag-, sonst
+  Zupfbegleitung) schreiben, nach der Regel von `mergeChords()` (die Begleitspur gewinnt). In den anderen Spuren
+  fallen sie weg. Hat die Begleitspur an der Stelle keinen Schlag (z. B. mitten in einer langen Note), bleibt der
+  Akkord in seiner Spur; der Hinweis zählt beides. Bei anderem Capo wird der Name umgerechnet.
+
+**Speichern** wendet die Auswahl auf frisch geladene Noten an (nicht auf das Modell des Players, das die Anzeige
+verändert), vereinheitlicht die Griffbilder (`normalizeChords()`) und schreibt das ganze `score.atex` mit dem
+alphaTex-Exporter neu. Das Ergebnis wird wie beim Import wieder eingelesen und verglichen
+(`writeScoreChecked()` in `js/score.js`); bei Abweichungen wird nicht gespeichert. Ändert die Auswahl nichts, wird
+nichts geschrieben. Der Server legt die bisherige Fassung vorher unter `history/score-<Zeitstempel>.atex` ab (die
+letzten 10, `keep_score_history()` in `api/lib/file_store.php`); zurückholen geht bisher nur von Hand.
+
+Probelauf (30.10.2026, ohne Speichern): Mit den Vorschlägen lassen sich alle 42 Songs prüfungsfrei schreiben.
+Akkorde wandern in 4 Songs ("Johnny Walker" 6, "Tennessee Whiskey" 2, "Losing My Religion" und "Three Little
+Birds" je 1); Capo und Tonart schlägt der Editor derzeit für keinen Song vor.
+
+Zum Ausprobieren gibt es den Song "Test Struktur-Editor" (`gitarrenbuch-test-struktur-editor`, Tag "Test", kann
+gelöscht werden): drei Spuren "Guitar" (Capo 2), "Rhythm" und "Voice" (Capo 0), Vorzeichen C statt A, Akkorde in
+allen drei Spuren mit einem Konflikt (Takt 5) und einem Akkord ohne Schlag in der Begleitspur (Takt 4); der Dialog
+zeigt dort alle Abschnitte samt Capo-Abgleich (16 Noten nur eine Oktave höher).
+
+Noch nicht dabei: Text in die Gesangsspur verschieben, Abschnitte anlegen, Wiederholungen ausschreiben, Spuren
+löschen, Rückgängig über `history/`.
 
 ## Stand / Roadmap
 
@@ -1006,6 +1133,8 @@ schreibt nur 6 der 42 Songs unverändert zurück (siehe "Offene Punkte"). "Schli
   Wiedergabe"; Konvention für Spurrollen und Capo, Abweichungen rot markiert (siehe "Spuren, Capo, Text und
   Akkorde")
 - ✅ ChordPro-Export (29.10.2026): Menü "ChordPro-Export", Standard-ChordPro (siehe "ChordPro-Export")
+- ✅ Struktur-Editor (30.10.2026): Spurrollen, ein Capo, Tonart, Akkorde in die Begleitspur; Speichern über den
+  alphaTex-Exporter mit Prüfung, alte Fassung unter `history/` (siehe "Struktur-Editor")
 - ❌ Editor für Text und Akkorde samt Aufbereitung: Song-Modell, Akkorde bearbeiten, Speichern der ganzen
   Noten, Einarbeiten von Akkorddateien (Grundsatz 3), eingefügter Text, Vorschläge beim Nachreichen von Material
   - TODO: Drag-&-Drop-Feld "Akkorddatei" aus dem Formular "Song bearbeiten" in den Editor verschieben
@@ -1087,11 +1216,11 @@ Abschnitte, Zeilen, Silben, Akkorde, Muster und Tab-Verweise. Undo/Redo läuft a
 Ansichten hinweg.
 
 **Laden:** Das Modell entsteht aus `score.atex` (Noten, Silben und Akkorde an den Schlägen, Abschnitte als Marker)
-und `leadsheet.json` (Zeilenumbrüche, Art und Muster der Abschnitte).
+und `leadsheet.json` (Art und Muster der Abschnitte; die Zeilenumbrüche stehen an den Silben in den Noten).
 
-- Zeilenumbrüche und Abschnittsdaten verweisen über Silbennummern (Abspielreihenfolge mit Wiederholungen) bzw. Takte
-  auf die Noten. Fügt der Editor Takte ein oder löscht welche, zieht er diese Verweise nach (die Sync-Punkte in den
-  Noten wandern selbst mit). Dafür braucht es keine eigene Zuordnungsdatei.
+- Abschnittsdaten verweisen über Takte auf die Noten. Fügt der Editor Takte ein oder löscht welche, zieht er diese
+  Verweise nach (die Sync-Punkte und Zeilenumbrüche in den Noten wandern selbst mit). Dafür braucht es keine eigene
+  Zuordnungsdatei.
 - Passt das nicht mehr, etwa weil sich die Noten geändert haben, markiert der Editor die betroffenen Stellen.
 
 **Prüfen und Vorschläge:** Was der Import automatisch bereinigt (Griffbilder, siehe "Akkorde und Griffbilder"),
@@ -1106,9 +1235,8 @@ hält der Editor beim Bearbeiten aktuell. Dazu, jeweils als Vorschlag, den der B
 **Speichern:** Alles wird aus dem Modell neu geschrieben, `orig/` bleibt immer unberührt.
 
 - `score.atex`: Noten, Tabs, Liedtext und Akkordsymbole an den Schlägen, Abschnitte als Marker, Sync-Punkte, mit
-  `PUT api/score.php`. Der alphaTex-Exporter von alphaTab taugt dafür erst, wenn er verlustfrei schreibt (siehe
-  "Offene Punkte").
-- `leadsheet.json`: mit `PUT api/leadsheet.php`, inklusive Zeilenumbrüchen und Abschnittsdaten
+  `PUT api/score.php`, über den alphaTex-Exporter mit Prüfung wie im Struktur-Editor (`writeScoreChecked()`).
+- `leadsheet.json`: mit `PUT api/leadsheet.php`, inklusive Abschnittsdaten
 
 **Manuell angelegte Songs** haben ein erzeugtes Gerüst, anfangs mit leeren Takten. Text und Akkorde aus einer
 Akkorddatei werden auch dort den Takten zugeordnet, bestmöglich verteilt (z. B. ein Akkordwechsel je Takt), bis
@@ -1229,7 +1357,7 @@ Taktanfang über dem Text; `-/-` für einen wiederholten Abschnitt, `|: … :| x
 **Datenquellen:** Das Leadsheet liest das Modell des Editors (aus `score.atex`) und `leadsheet.json`.
 
 **Schema `leadsheet.json`** (Entwurf, wird mit dem Editor festgelegt). Es enthält, was die Noten nicht abbilden:
-Begleitmuster, Tab-Verweise, Layout, dazu Art, `id` und Muster der Abschnitte sowie die Zeilenumbrüche des Texts.
+Begleitmuster, Tab-Verweise, Layout, dazu Art, `id` und Muster der Abschnitte.
 
 ```json
 {
@@ -1239,7 +1367,6 @@ Begleitmuster, Tab-Verweise, Layout, dazu Art, `id` und Muster der Abschnitte so
     "5":  { "id": "r1", "type": "chorus", "pattern": "refrain" },
     "13": { "id": "s1", "type": "verse",  "pattern": "strophe" }
   },
-  "lineBreaks": [8, 17, 25],
   "patterns": {
     "strophe": {
       "technique": "fingerpicking", "grid": "8", "steps": "B 3 B2 2 B 3 B2 2", "fingers": "p i p m p i p m"
@@ -1261,8 +1388,7 @@ Begleitmuster, Tab-Verweise, Layout, dazu Art, `id` und Muster der Abschnitte so
 }
 ```
 
-- `sections` ist nach dem Takt (Masterbar-Index) des Markers geordnet, `lineBreaks` sind Silbennummern in
-  Abspielreihenfolge, vor denen eine neue Zeile beginnt.
+- `sections` ist nach dem Takt (Masterbar-Index) des Markers geordnet.
 - Die Schlüssel in `tabs` sind die `id`s der Tab-Abschnitte in `sections`.
 - `diagrams`: `"rare"` zeigt nur Akkorde, die nicht als gängig markiert sind, `"all"` zeigt alle, `"none"` keine.
 - Wird ein Abschnitt umbenannt oder gelöscht, hält der Editor `tabs` und Musterzuordnungen konsistent und meldet
@@ -1276,7 +1402,9 @@ Begleitmuster, Tab-Verweise, Layout, dazu Art, `id` und Muster der Abschnitte so
 - Silbenzählung in Abspielreihenfolge bei Wiederholungen, Sprüngen (D.S., Coda) und mehreren Liedtextzeilen
 - Qualität der automatischen Zuordnung in `align.js` an echten Beispielen
 - Mixer auf dem Smartphone, Ausgabe-Latenz des Synths
-- Der alphaTex-Exporter schreibt nur 6 der 42 Songs unverändert zurück (u. a. zusätzliche `\scale`-Angaben)
+- Der alphaTex-Exporter schreibt keinen Song Zeichen für Zeichen zurück, inhaltlich aber alle 42 gleich (Stand
+  30.10.2026; anders sind nur Formalien wie Griff-Angaben `showdiagram`/`firstfret`, `\staff`-Blöcke und
+  Stimmungsnamen). Der Struktur-Editor schreibt deshalb über ihn, der Sync-Editor ändert weiter nur einzelne Zeilen
 - Klang: Der mitgelieferte SoundFont (Sonivox, rund 1 MB) klingt eher nach Computer; bessere sind 30–150 MB groß
 - alphaTab-Updates: Die alphaTex-Syntax kann sich ändern. Vor einem Update alle Songs mit der alten Version laden und
   mit der neuen speichern.
@@ -1308,7 +1436,7 @@ Version davon) jedoch weitergibst, musst du deinen Quellcode ebenfalls unter der
 
 ### Mitgelieferte Fremdbestandteile
 
-Unter `public/vendor/alphatab/` liegen, bis auf eine vermerkte Änderung in `alphaTab.core.mjs` (siehe "Setup",
+Unter `public/vendor/alphatab/` liegen, bis auf vermerkte Änderungen in `alphaTab.core.mjs` (siehe "Setup",
 Punkt 8; die MPL-2.0 erlaubt das, die geänderte Datei bleibt unter MPL-2.0):
 
 | Bestandteil                                         | Lizenz                    | Lizenzdatei                  |
@@ -1318,8 +1446,9 @@ Punkt 8; die MPL-2.0 erlaubt das, die geänderte Datei bleibt unter MPL-2.0):
 | Notenschrift Bravura (Steinberg)                    | SIL Open Font License 1.1 | `font/Bravura-OFL.txt`       |
 | SoundFont Sonivox (Sonic Network)                   | Apache 2.0                | `soundfont/LICENSE`          |
 
-Dazu im Code (`js/player.js`, `RUN_ICON`) der Pfad des Symbols "directions_run" aus Google Material Icons
-(Apache 2.0).
+Dazu im Code die Pfade der Symbole "directions_run" (`js/player.js`, `RUN_ICON`), "edit" (`app.js`) sowie "save",
+"undo" und "redo" (`js/icons.js`) aus Google Material Icons (Apache 2.0). Die übrigen Symbole in `js/icons.js` sind
+selbst gezeichnet.
 
 Alle vier Lizenzen sind mit der GPL-3.0 vereinbar: Die MPL-2.0 erlaubt die Verbindung mit der GPL ausdrücklich
 (alphaTab trägt nicht den Vermerk "Incompatible With Secondary Licenses"), MIT und Apache 2.0 lassen sich in

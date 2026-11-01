@@ -5,10 +5,12 @@
 
 import {coverUrl, escapeHtml, loadAudio, loadChordLibrary, loadScoreText} from './js/api.js';
 import {exportChordProFile} from './js/chordpro.js';
+import {openStructureEditor} from './js/editor.js';
 import {chordDiagramSvg} from './js/svg.js';
 import {
-  closeOverlay, deleteSongUI, findSong, initLibrary, openImportForm, openOverlay, openSongForm,
+  closeOverlay, deleteSongUI, findSong, initLibrary, openImportForm, openOverlay, openSongForm, storeSong,
 } from './js/library.js';
+import {NoteEditor} from './js/note-editor.js';
 import {Player, SCALES} from './js/player.js';
 import {describeScoreInfo, exportGpFile} from './js/score.js';
 import {SyncEditor} from './js/sync-editor.js';
@@ -36,6 +38,17 @@ let player = null;
  * @type {?SyncEditor}
  */
 let syncEditor = null;
+
+/**
+ * Bearbeitungsmodus der Liedansicht, null, wenn er aus ist.
+ * @type {?NoteEditor}
+ */
+let noteEditor = null;
+
+/** Stift-Symbol (Material Icons "edit", Apache 2.0) für den Knopf "Bearbeiten" in der Leiste. */
+const EDIT_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">'
+  + '<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 '
+  + '0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
 
 /**
  * Beobachtet die Höhe des Sync-Editors, null, wenn er geschlossen ist.
@@ -73,6 +86,7 @@ function showLibrary(){
  * @returns {void}
  */
 function leaveSong(){
+  closeNoteEditor();
   closeSyncEditor();
   player?.destroy();
   player = null;
@@ -218,10 +232,14 @@ function showSong(song){
       <a class="btn btn-icon" href="${LIST_HASH}" aria-label="Zur Songliste">&larr;</a>
       <div class="songbar-controls" id="songControls"></div>
       <div class="songbar-menu">
+        ${song.files.includes('score') ? `<button class="btn btn-icon edit-toggle" id="noteEditBtn" type="button"
+          aria-pressed="false" title="Bearbeiten">${EDIT_ICON}</button>` : ''}
         <button class="btn btn-icon" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
         <div class="menu" id="menu" hidden>
-          <button type="button" id="editBtn">Bearbeiten</button>
+          <button type="button" id="editBtn" title="Titel, Interpret, Cover, Quellen usw.">Songdaten</button>
           <button type="button" id="displayBtn"${song.files.includes('score') ? '' : ' hidden'}>Darstellung</button>
+          <button type="button" id="structBtn"${song.files.includes('score') ? '' : ' hidden'}
+            title="Spurrollen, Capo, Tonart und Akkorde in Ordnung bringen">Struktur-Editor</button>
           <button type="button" id="syncBtn"${song.files.includes('score') && song.files.includes('audio') ? '' : ' hidden'}
             title="Sync-Punkte an der Audiospur ausrichten">Sync-Editor</button>
           <button type="button" id="exportBtn"${song.files.includes('score') ? '' : ' hidden'}
@@ -243,13 +261,43 @@ function showSong(song){
   // Ein im Formular geändertes Cover landet nur in SONGS, nicht in song: deshalb mit dem aktuellen Stand öffnen.
   const current = () => findSong(song.slug) ?? song;
 
-  document.getElementById('editBtn').addEventListener('click', () => {
-    setMenu(false);
+  /**
+   * Formular "Songdaten" im linken Panel des Bearbeitungsmodus. Ändert sich der Slug (Titel oder Interpret), gilt ab
+   * sofort der neue: für den Player (Speichern der Noten) und in der Adresszeile, ohne die Ansicht neu zu laden.
+   * @param {HTMLElement} container Element im Panel
+   * @returns {void}
+   */
+  const renderSongData = container => {
+    openSongForm(current(), saved => {
+      if(saved.slug !== song.slug){
+        if(player) player.slug = saved.slug;
+        history.replaceState(null, '', songHash(saved.slug));
+      }
+      song = saved;
+      document.title = `${saved.title} – Gitarrenbuch`;
+      songDataChanged = true;
+    }, {}, container);
+  };
+  /** Ob die Songdaten im Bearbeitungsmodus geändert wurden (dann zeigt "Fertig" den Song neu). */
+  let songDataChanged = false;
+  /** Formular "Songdaten" aus dem Menü. */
+  const openSongData = () => {
     openSongForm(current(), saved => {
       // Rename ändert den Slug: Hash anpassen, sonst neu zeichnen.
       if(saved.slug !== song.slug) location.replace(songHash(saved.slug));
       else showSong(saved);
     });
+  };
+  document.getElementById('editBtn').addEventListener('click', () => {
+    setMenu(false);
+    openSongData();
+  });
+  document.getElementById('structBtn').addEventListener('click', () => {
+    setMenu(false);
+    openStructureEditor(current(), saved => {
+      storeSong(saved);
+      showSong(saved);
+    }).catch(err => alert('Struktur-Editor: ' + err.message));
   });
   document.getElementById('exportBtn').addEventListener('click', () => {
     setMenu(false);
@@ -284,7 +332,14 @@ function showSong(song){
   });
   document.getElementById('syncBtn').addEventListener('click', () => {
     setMenu(false);
+    closeNoteEditor();
     void openSyncEditor(current(), songPlayer, showMeta);
+  });
+  // Stift: Bearbeitungsmodus; "Fertig" zeigt den Song neu, wenn Noten oder Songdaten gespeichert wurden.
+  // Abweichungen (Capo ungleich, Sprungzeichen …) meldet der Modus selbst, mit Knöpfen zum Beheben.
+  document.getElementById('noteEditBtn').addEventListener('click', () => {
+    songDataChanged = false;
+    openNoteEditor(songPlayer, renderSongData, () => songDataChanged);
   });
   songPlayer.load(song).then(info => {
     showMeta(info);
@@ -353,6 +408,46 @@ async function openSyncEditor(song, songPlayer, showMeta){
     closeSyncEditor();
     alert('Sync-Editor: ' + err.message);
   }
+}
+
+/**
+ * Schaltet die Liedansicht in den Bearbeitungsmodus (Werkzeugleiste und Panels, siehe js/note-editor.js). Ein offener
+ * Sync-Editor wird geschlossen. Verlassen wird er mit "Fertig" (der Stift ist dann ausgeblendet).
+ * @param {Player} songPlayer Player der Liedansicht
+ * @param {function(HTMLElement): void} renderSongData zeichnet das Formular "Songdaten" in ein Element
+ * @param {function(): boolean} songDataChanged ob die Songdaten im Modus gespeichert wurden
+ * @returns {void}
+ */
+function openNoteEditor(songPlayer, renderSongData, songDataChanged){
+  if(noteEditor || !songPlayer.api?.score) return;
+  closeSyncEditor();
+  noteEditor = new NoteEditor(songView, songPlayer, {
+    // Nach dem Speichern zeigt der Player wieder die Ansicht des Songs, dafür neu laden.
+    onClose: saved => {
+      closeNoteEditor();
+      const song = saved || songDataChanged() ? findSong(songPlayer.slug) : null;
+      if(song) showSong(song);
+    },
+    onSongData: renderSongData,
+    onSaved: saved => storeSong(saved),
+  });
+  noteEditor.open();
+  const button = document.getElementById('noteEditBtn');
+  button.setAttribute('aria-pressed', 'true');
+  button.title = 'Bearbeiten beenden';
+}
+
+/**
+ * Verlässt den Bearbeitungsmodus ohne Rückfrage (Rückfragen stellt NoteEditor.finish()).
+ * @returns {void}
+ */
+function closeNoteEditor(){
+  if(!noteEditor) return;
+  noteEditor.destroy();
+  noteEditor = null;
+  const button = document.getElementById('noteEditBtn');
+  button?.setAttribute('aria-pressed', 'false');
+  if(button) button.title = 'Bearbeiten';
 }
 
 /**

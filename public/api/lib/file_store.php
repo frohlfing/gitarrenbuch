@@ -132,10 +132,40 @@ function store_new_score(string $slug, string $tex, ?string $gpPath = null, stri
     return touch_song($slug);
 }
 
+/** Anzahl der Fassungen von score.atex, die keep_score_history() unter history/ aufhebt. */
+const SCORE_HISTORY_KEEP = 10;
+
 /**
- * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor. Nur für Lieder, die schon Noten haben; neue
- * Noten kommen über store_new_score(). Geschrieben wird erst daneben und dann umbenannt, damit nie eine halbe Datei
- * entsteht.
+ * Hebt die aktuelle score.atex vor dem Überschreiben unter history/score-<Zeitstempel>.atex auf, damit sich ein
+ * missglücktes Speichern rückgängig machen lässt (von Hand, eine Oberfläche dafür gibt es nicht). Es bleiben die
+ * letzten SCORE_HISTORY_KEEP Fassungen.
+ *
+ * @param string $slug Slug des Lieds (score.atex muss existieren)
+ * @return void
+ * @throws RuntimeException wenn history/ nicht angelegt oder die Datei nicht kopiert werden kann
+ */
+function keep_score_history(string $slug): void
+{
+    $dir = song_dir($slug) . '/history';
+    if (!is_dir($dir) && !mkdir($dir, 0775) && !is_dir($dir)) {
+        throw new RuntimeException('history/ konnte nicht angelegt werden');
+    }
+    $name = unique_filename($dir, 'score-' . date('Ymd-His'), 'atex');
+    if (!copy(song_dir($slug) . '/' . SONG_FILES['score'], "$dir/$name")) {
+        throw new RuntimeException('Die bisherigen Noten konnten nicht gesichert werden');
+    }
+    // Zeitstempel im Namen: alphabetisch = zeitlich sortiert.
+    $versions = glob("$dir/score-*.atex") ?: [];
+    sort($versions);
+    foreach (array_slice($versions, 0, max(0, count($versions) - SCORE_HISTORY_KEEP)) as $old) {
+        @unlink($old);
+    }
+}
+
+/**
+ * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor oder dem Editor. Nur für Lieder, die schon
+ * Noten haben; neue Noten kommen über store_new_score(). Die bisherige Fassung kommt vorher nach history/ (siehe
+ * keep_score_history()). Geschrieben wird erst daneben und dann umbenannt, damit nie eine halbe Datei entsteht.
  *
  * @param string $slug Slug des Lieds
  * @param string $tex Noten als alphaTex
@@ -152,6 +182,7 @@ function store_score(string $slug, string $tex): array
     if (!is_file($target)) {
         throw new NotFoundException('Der Song hat noch keine Noten');
     }
+    keep_score_history($slug);
     $tmp = "$target.tmp";
     if (file_put_contents($tmp, $tex) === false || !rename($tmp, $target)) {
         @unlink($tmp);

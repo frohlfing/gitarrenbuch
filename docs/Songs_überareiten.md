@@ -219,3 +219,98 @@ gemeldet.
 - [ ] Bob Dylan – Knockin' On Heaven's Door: letzter Sync-Punkt 2,5 s hinter dem Ende der Audiospur.
 - [ ] Die Ärzte – Ich weiss nicht (ob es Liebe ist): letzter Sync-Punkt 0,7 s hinter dem Ende.
 - [ ] The Animals – House Of Rising Sun: letzter Sync-Punkt 0,6 s hinter dem Ende.
+
+## Akkorde prüfen (3 ❌)
+
+Neu dazugekommen sind Akkorde in drei Songs:
+- [ ] Tennessee Whiskey: 2 Akkorde aus „Vocal“
+- [ ] Johnny Walker: 6 Akkorde aus „Guitar (P. Bursch)“
+- [ ] Losing My Religion: 1 Akkord aus „Guitar & Mandolin“     
+
+## Stimmung (1 ❌) 
+
+- [ ] „Johnny Walker“: Die Stimmung steht eine Oktave zu hoch. Das ist vermutlich ein Fehler aus der GP-Datei, zudem passt die
+Anzeige nicht in den Kopf.
+
+
+Volta-Klammern sind die Klammern über den Schlusstakten einer Wiederholung („1.“ und „2.“). Beim ersten Durchgang spielt man den Takt unter „1.“, nach der Wiederholung springt man direkt zu „2.“. Auf Deutsch heißen sie auch „Haus 1 / Haus 2“ oder „Klammer 1 / 2“. Sie stehen in zwei Songs:
+- Für Elise: zweimal, beide Teile mit 1. und 2. Klammer.
+- Kol Dodie: einmal.
+
+## Wiederholungszeichen (6 ❌) 
+
+Wiederholungszeichen entfernen
+
+| Song                    | Wiederholungen                             |
+|-------------------------|--------------------------------------------|
+| Fröhliche Weihnacht     | vier, drei davon 2× und eine 5×            |
+| Für Elise               | zwei, je 2×, mit Volta-Klammern            |
+| Kol Dodie               | zwei, je 2×, die zweite mit Volta-Klammern |
+| Schlaflied (Die Ärzte)  | eine, 3×                                   |
+| Kommet, ihr Hirten      | eine, 3×, ab Songanfang                    |
+| Drunken Sailor          | eine, 4×, ab Songanfang                    |
+
+
+## Unterschiede im Wortlaut (Noten → Leadsheet)
+
+Nicht aufgeführt sind reine Schreibweisen: fehlende Leerzeichen im Leadsheet, „V2:“ vor den Strophen, Griffbilder am Zeilenende, „z-ombie“ und ähnliche Silbentrennung.
+
+Kokain
+- Refrain: „Oh oh oh oh oh Mama“ → „Oh... oh Mama“
+- Outro: In den Noten steht eine ganze Zeile „la la la …“ mehr.
+
+Redemption Song
+- „But my hand was made strong“ → „my head“
+- „Won't you help to sing These song of freedom?“ → „these songs“ (3×)
+
+Junge
+- „(Was soll' n die Nachbarn sagen?)“ → „sollen“ (5×)
+- „(Was soll' n das Finanzamt sagen?)“ → „soll“
+
+Ich weiß nicht, ob es Liebe ist
+- „Vor zwei Wochen hab' ich Dich zum ersten Mal“ → „2 … hab … 1.“
+
+Manchmal haben Frauen
+- „zwischen Männern“ → „zw.“
+- „der Typ mir plötzlich leid“ → „der Kerl“
+- „Mundgeruch brachte mir Übelkeit“ → „machte“
+- „und ich rannte nach Haus“ → „und rannte nach Haus“
+
+Schlaflied
+- „Die Nacht, sie schaut“ → „die schaut“
+- „Der runde Mond**, er** hat dich gerne“ → „Mond der hat“
+- „hm hmm hm hm“ → „hm hm hm hm“
+
+Nussschüsselblues
+- „Bau Bak bau ba wa dik bau... hei hei hei“ → „Bau bak bau wa dik bau… hei, hei, hei“
+- Die nächste Zeile beginnt mit einem vierten „hei“, das im Leadsheet fehlt.
+
+Alles aus Liebe
+- „nicht weiss“ → „weiß“
+- „wie gross“ → „groß“
+
+Stairway to Heaven
+- „Ooh, it makes me wonder.“ → „Ooh 'makes me wonder.“
+- „Yes, there are two paths“ → „There're two path“
+- „the road you're on“ → „your on“
+- „And it makes me wonder. Ohhhohoh“ → „Ooh, 'makes me wonder. Ooh 'makes me wonder.“
+
+Geiler is schon
+- „Ich brauch' auch kein Schloß“ → „Ich brauche kein Schloß“
+- „Aber geiler wärs' schon“ → „is'“
+- „der kann uns mal... lecken.“ → „lecken“ fehlt im Leadsheet.
+
+Wish You Were Here
+- „Soo, so you think“ → „So, so“
+
+Zombie
+- „Hey hey oh oh, oh“ → „Hey, hey, hey, oh,“
+- Outro „oh oh oh, … oh oh do ja ja ja ja, ah.“ → im Leadsheet „doo doo doo doo, …“
+
+With or Without You
+- „Uh oh oh oh Uh oh“ → „Uh oh oh oh. Uh oh oh oh.“
+- „With or without you. Without you, uh.“ → im Leadsheet nur „With or without you.“
+
+Happy Birthday
+- „Happy Birthday lieber NAME!“ → „dear NAME!“                                                                                                                                 
+ 

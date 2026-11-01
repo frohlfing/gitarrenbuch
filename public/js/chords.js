@@ -117,17 +117,18 @@ export function barreFret(frets){
 
 /**
  * Wählt das Griffbild eines Akkords: den Standardgriff der Bibliothek, sonst den meistgenutzten echten Griff aus
- * der Datei.
+ * der Datei; mit preferOwn umgekehrt (im Bearbeitungsmodus gesetzte Griffe gelten).
  * @param {string} name Akkordname
  * @param {Map<string, number>} ownGrips Griffe aus der Datei mit Anzahl der Schläge
  * @param {?ChordLibrary} library Bibliothek, null für Notensysteme in anderer Stimmung
+ * @param {boolean} [preferOwn] eigener Griff vor dem der Bibliothek
  * @returns {?string} Griff, null, wenn es keinen echten Griff gibt
  */
-export function chooseGrip(name, ownGrips, library){
+export function chooseGrip(name, ownGrips, library, preferOwn = false){
   const known = library?.[chordKey(name)]?.[0];
-  if(known) return known;
   const own = [...ownGrips].filter(([grip]) => playedStrings(grip) >= MIN_PLAYED_STRINGS).sort((a, b) => b[1] - a[1]);
-  return own[0]?.[0] ?? null;
+  if(preferOwn && own.length) return own[0][0];
+  return known ?? own[0]?.[0] ?? null;
 }
 
 /** Tonhöhenklassen der Stammtöne (H und B für die deutsche bzw. englische Schreibweise). */
@@ -211,7 +212,6 @@ function keySignatureOf(tonic, minor){
   return 0;
 }
 
-// noinspection JSUnusedGlobalSymbols: für den Editor, noch ohne Aufrufer
 /**
  * Erkennt die Tonart aus den Akkorden (klingend, also mit Capo gerechnet) und den gespielten Tönen und vergleicht
  * sie mit den notierten Vorzeichen. Viele GP-Dateien haben gar keine Vorzeichen, obwohl das Lied etwa in A steht.
@@ -267,9 +267,10 @@ export function detectKeySignature(score){
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @param {ChordLibrary} library Akkordbibliothek
+ * @param {boolean} [preferOwn] eigene Griffe vor denen der Bibliothek (Bearbeitungsmodus, siehe chooseGrip())
  * @returns {void}
  */
-export function normalizeChords(alphaTab, score, library){
+export function normalizeChords(alphaTab, score, library, preferOwn = false){
   for(const track of score.tracks) for(const staff of track.staves){
     /** @type {Map<string, Map<string, number>>} */
     const used = new Map();
@@ -286,7 +287,7 @@ export function normalizeChords(alphaTab, score, library){
     for(const [name, grips] of used){
       const chord = new alphaTab.model.Chord();
       chord.name = name;
-      const grip = chooseGrip(name, grips, isStandardTuning(staff) ? library : null);
+      const grip = chooseGrip(name, grips, isStandardTuning(staff) ? library : null, preferOwn);
       const frets = grip ? parseGrip(grip) : [];
       chord.strings = [...frets].reverse();
       chord.firstFret = diagramFirstFret(frets);

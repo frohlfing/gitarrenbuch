@@ -5,6 +5,10 @@
  *
  * Jede Änderung wirkt sofort auf den Player (Noten und Mixer), gespeichert wird erst mit "Speichern". Geschrieben
  * werden dabei nur die Zeilen \sync und \tempo in score.atex (siehe writeSyncAndTempo() in score.js).
+ *
+ * Im Bearbeitungsmodus liegt der Editor eingebettet im Reiter "Audio" (Rückruf onEdit): Er ändert dann die Noten des
+ * Bearbeitungsmodus, ohne eigenes Speichern, Schließen und Rückgängig; das übernimmt der Bearbeitungsmodus. Ändern
+ * sich dort die Noten, liest reload() die Sync-Punkte neu.
  */
 
 import {escapeHtml, loadScoreText, saveScore} from './api.js';
@@ -154,8 +158,9 @@ export class SyncEditor {
    * @param {HTMLElement} root leeres Element für den Editor
    * @param {Player} player geladener Player mit Mixer
    * @param {Song} song Song
-   * @param {{onChange?: function(ScoreInfo): void, onClose?: function(): void}} [callbacks] onChange nach jeder
-   *   Änderung (z. B. für die Kopfzeile), onClose nach dem Schließen
+   * @param {{onChange?: function(ScoreInfo): void, onClose?: function(): void, onEdit?: function(): void}} [callbacks]
+   *   onChange nach jeder Änderung (z. B. für die Kopfzeile), onClose nach dem Schließen; onEdit: eingebettet im
+   *   Bearbeitungsmodus, nach jeder Änderung an den Noten (die der Bearbeitungsmodus dann übernimmt)
    */
   constructor(root, player, song, callbacks = {}){
     /** Element des Editors. */
@@ -166,8 +171,10 @@ export class SyncEditor {
     this.song = song;
     /** Rückmeldungen an die Liedansicht. */
     this.callbacks = callbacks;
+    /** Eingebettet im Bearbeitungsmodus (ohne Speichern, Schließen und Rückgängig). */
+    this.embedded = !!callbacks.onEdit;
     root.innerHTML = `
-      <div class="sync-editor">
+      <div class="sync-editor${this.embedded ? ' sync-embedded' : ''}">
         <div class="sync-toolbar">
           <button class="btn btn-sm" type="button" data-act="first" title="Ersten Sync-Punkt an den Anfang der Aufnahme setzen">Anfang erkennen</button>
           <button class="btn btn-sm" type="button" data-act="last" title="Letzten Sync-Punkt an das Ende der Aufnahme setzen">Ende erkennen</button>
@@ -197,6 +204,7 @@ export class SyncEditor {
     this.el = {};
     root.querySelectorAll('[data-ref]').forEach(n => { this.el[n.dataset.ref] = n; });
     root.querySelectorAll('[data-act]').forEach(n => { this.el[n.dataset.act] = n; });
+    if(this.embedded) for(const act of ['undo', 'save', 'close']) this.el[act].hidden = true;
     /** Zeichenfläche der Wellenform. */
     this.canvas = /** @type {HTMLCanvasElement} */ (this.el.canvas);
     /** Regler für den sichtbaren Ausschnitt. */
@@ -222,13 +230,9 @@ export class SyncEditor {
   async open(){
     // Abspielreihenfolge und Ticks gibt es erst, wenn alphaTab das MIDI erzeugt hat.
     if(!this.api.tickCache) await new Promise(resolve => { const off = this.api.midiLoaded.on(() => { off(); resolve(); }); });
-    this.baseTex = await loadScoreText(this.song.slug);
+    if(!this.embedded) this.baseTex = await loadScoreText(this.song.slug);
     this.playerOffset = this.mixer.offset;
-    /** @type {Score} */
-    const score = this.api.score;
-    this.basePoints = score.exportFlatSyncPoints();
-    this.baseTempos = score.masterBars.map(mb => mb.tempoAutomations.map(a => a.value));
-    this.points = this.sortByPlayback(this.basePoints.map(p => ({...p})));
+    this.readScore();
 
     this.root.addEventListener('click', e => {
       const act = /** @type {HTMLElement} */ (e.target).closest('[data-act]')?.dataset.act;
@@ -254,6 +258,42 @@ export class SyncEditor {
       ? `Im Player ist noch ein Audio-Versatz von ${this.playerOffset} ms eingestellt. `
         + '<button class="btn btn-sm" type="button" data-act="takeOffset">In die Sync-Punkte übernehmen</button>'
       : this.defaultStatus());
+  }
+
+  /**
+   * Liest Sync-Punkte und Tempi aus den Noten des Players (Grundlage für Schließen ohne Speichern und das Tempo).
+   * @returns {void}
+   */
+  readScore(){
+    /** @type {Score} */
+    const score = this.api.score;
+    this.basePoints = score.exportFlatSyncPoints();
+    this.baseTempos = score.masterBars.map(mb => mb.tempoAutomations.map(a => a.value));
+    this.tempoFactor = 1;
+    this.points = this.sortByPlayback(this.basePoints.map(p => ({...p})));
+  }
+
+  /**
+   * Eingebettet: Die Noten haben sich im Bearbeitungsmodus geändert (neues Modell, Rückgängig). Sync-Punkte und Tempi
+   * neu lesen und neu zeichnen; die Auswahl bleibt, solange es den Punkt gibt.
+   * @returns {void}
+   */
+  reload(){
+    if(!this.api?.score) return;
+    this.readScore();
+    if(this.selected >= this.points.length) this.selected = -1;
+    this.updateButtons();
+    this.draw();
+  }
+
+  /**
+   * Eingebettet: Der Bearbeitungsmodus hat gespeichert. Ein übernommener Versatz gilt dann nicht mehr im Player.
+   * @returns {void}
+   */
+  saved(){
+    if(!this.offsetTaken) return;
+    this.player.clearStoredOffset();
+    this.offsetTaken = false;
   }
 
   /**
@@ -386,10 +426,11 @@ export class SyncEditor {
     this.mixer.setScore(score);
     this.player.applySpeed(this.api.tickPosition, true);
     this.player.refreshMidi(tempoChanged);
-    this.dirty = true;
+    this.dirty = !this.embedded;
     this.updateButtons();
     this.draw();
     this.callbacks.onChange?.(readScoreInfo(this.player.alphaTab, score));
+    this.callbacks.onEdit?.();
   }
 
   /**
@@ -880,12 +921,13 @@ export class SyncEditor {
 
   /**
    * Tastatur auf der Wellenform: Pfeiltasten verschieben den ausgewählten Marker, Entf löscht ihn, Strg+Z nimmt
-   * zurück.
+   * zurück (eingebettet das Rückgängig des Bearbeitungsmodus).
    * @param {KeyboardEvent} e Ereignis
    * @returns {void}
    */
   onKey(e){
-    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){
+    // Eingebettet gilt Strg+Z des Bearbeitungsmodus.
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !this.embedded){
       e.preventDefault();
       this.undo();
     } else if(e.key === 'Delete' || e.key === 'Backspace'){

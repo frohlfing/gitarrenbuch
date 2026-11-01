@@ -8,21 +8,23 @@
  * Jeder Takt des Songs kommt vor, wie in den handgebauten Leadsheets: In Abschnitten mit Text steht über der ersten
  * Silbe eines Takts ein Taktstrich "|" (mit Akkord, wenn dort einer angeschlagen wird), Takte ohne Silbe hängen als
  * "|Am |Asus2" an der Zeile. Abschnitte ganz ohne Text (Intro, Solo) stehen als Taktzeile "| G | % | C |" da.
- * Zeilenumbrüche stehen nicht in den Noten; sie ergeben sich aus Satzzeichen, Pausen und Abschnitten (später aus
- * leadsheet.json). buildTextModel() kommt ohne DOM aus und läuft deshalb auch in Node.
+ * Zeilenumbrüche stehen als "\n" am Ende der letzten Silbe einer Zeile in den Noten (LYRICS_BREAK in tracks.js,
+ * gesetzt im Reiter "Liedtext"); hat eine Strophe keine, ergeben sie sich aus Satzzeichen, Pausen und Abschnitten.
+ * buildTextModel() kommt ohne DOM aus und läuft deshalb auch in Node.
  */
 
 import {escapeHtml} from './api.js';
 import {gripOf} from './chords.js';
 import {chordDiagramSvg} from './svg.js';
-import {chordsTrack, lyricsTrack, mergeChords} from './tracks.js';
+import {chordsTrack, endsLyricsLine, lyricsTrack, mergeChords} from './tracks.js';
 
 /** @typedef {import('../../types/alphatab').model.Score} Score */
 /** @typedef {import('../../types/alphatab').model.MasterBar} MasterBar */
 
 /**
- * Silbe mit absoluter Zeit in Abspielreihenfolge.
- * @typedef {{t: number, end: number, text: string}} Syllable
+ * Silbe mit absoluter Zeit in Abspielreihenfolge. br: Die Silbe beendet eine Zeile (gespeicherter Zeilenumbruch);
+ * fehlt, wenn ihre Strophe keine gespeicherten Umbrüche hat (dann bricht splitPhrases() selbst um).
+ * @typedef {{t: number, end: number, text: string, br?: boolean}} Syllable
  */
 
 /**
@@ -117,16 +119,163 @@ function playOrder(score){
 }
 
 /**
- * Silbe eines Schlags im jeweiligen Durchgang: Strophe 2 beim zweiten Mal usw.; hat der Schlag nur eine Strophe,
- * gilt sie in jedem Durchgang.
+ * Strophe, deren Silbe ein Schlag im jeweiligen Durchgang singt: Strophe 2 beim zweiten Mal usw.; hat der Schlag nur
+ * eine Strophe, gilt sie in jedem Durchgang.
  * @param {string[]} lyrics Silben des Schlags je Strophe
  * @param {number} pass Durchgang
- * @returns {string} Silbe, leer, wenn keine
+ * @returns {number} Index der Strophe, -1, wenn keine Silbe
  */
-function syllableFor(lyrics, pass){
-  const own = lyrics[pass - 1]?.trim() ?? '';
-  if(own) return own;
-  return lyrics.slice(1).some(s => s?.trim()) ? '' : (lyrics[0]?.trim() ?? '');
+function verseFor(lyrics, pass){
+  if(lyrics[pass - 1]?.trim()) return pass - 1;
+  return !lyrics.slice(1).some(s => s?.trim()) && lyrics[0]?.trim() ? 0 : -1;
+}
+
+/**
+ * Strophen einer Spur mit gespeicherten Zeilenumbrüchen (endsLyricsLine()).
+ * @param {?import('../../types/alphatab').model.Track} track Spur mit dem Text
+ * @returns {Set<number>} Indizes der Strophen
+ */
+function versesWithBreaks(track){
+  const verses = new Set();
+  for(const staff of track?.staves ?? []) for(const bar of staff.bars) for(const voice of bar.voices){
+    for(const beat of voice.beats) beat.lyrics?.forEach((s, i) => { if(endsLyricsLine(s)) verses.add(i); });
+  }
+  return verses;
+}
+
+/**
+ * Silbe für die Zeilen: ohne Leerzeichen und Umbruch drumherum, mit br, wenn ihre Strophe gespeicherte Umbrüche hat.
+ * @param {number} t Beginn in Ticks
+ * @param {number} end Ende in Ticks
+ * @param {string} raw Silbe aus beat.lyrics
+ * @param {boolean} explicit ob die Strophe gespeicherte Umbrüche hat
+ * @returns {Syllable}
+ */
+function syllable(t, end, raw, explicit){
+  return explicit ? {t, end, text: raw.trim(), br: endsLyricsLine(raw)} : {t, end, text: raw.trim()};
+}
+
+/**
+ * Teilt Silben in Zeilen: nach einer Silbe mit gespeichertem Umbruch (br) und bei Abschnittswechsel; in Strophen ohne
+ * gespeicherte Umbrüche auch bei längerer Pause oder Satzzeichen, dann nie mitten im Wort. Ein Auftakt (die Zeile
+ * beginnt erst im Takt vor dem Abschnitt) gehört schon zum neuen Abschnitt.
+ * @param {Syllable[]} syllables Silben, nach Zeit sortiert
+ * @param {SectionMark[]} sections Abschnitte, nach Zeit sortiert
+ * @param {function(number): {t: number, end: number}} barAt Takt, in dem ein Tick liegt
+ * @returns {{syl: Syllable[], section: ?SectionMark}[]} Zeilen; section nur bei einem Auftakt gesetzt
+ */
+function splitPhrases(syllables, sections, barAt){
+  /** @type {{syl: Syllable[], section: ?SectionMark}[]} */
+  const phrases = [];
+  let current = null;
+  for(const s of syllables){
+    const prev = current?.syl.at(-1);
+    // Liegen mehrere Abschnitte dazwischen (z. B. ein Zwischenspiel ohne Text), zählt der letzte.
+    const sectionBetween = prev ? sections.filter(x => x.t > prev.t && x.t <= s.t).at(-1) ?? null : null;
+    const pickup = !!sectionBetween && current !== null && current.syl[0].t >= barAt(sectionBetween.t - 1).t;
+    const chars = current ? current.syl.reduce((n, x) => n + x.text.length + 1, 0) : 0;
+    const gap = prev ? s.t - prev.end : 0;
+    const explicit = prev?.br !== undefined;
+    const lineEnd = !current || (sectionBetween && !pickup) || (explicit ? prev.br : gap >= HALF_NOTE_TICKS * 2
+      || (chars >= LINE_SOFT_CHARS && gap >= HALF_NOTE_TICKS / 2)
+      || (/[.!?;:]$/.test(prev.text) && current.syl.length >= LINE_MIN_SYLLABLES)
+      || (/,$/.test(prev.text) && current.syl.length >= LINE_COMMA_SYLLABLES));
+    const midWord = !explicit && prev?.text.endsWith('-') && !(sectionBetween && !pickup);
+    if(!current || (lineEnd && !midWord)){
+      current = {syl: [], section: null};
+      phrases.push(current);
+    } else if(sectionBetween && pickup){
+      // Die Zeile hat als Auftakt begonnen und geht im neuen Abschnitt weiter: Sie gehört zu ihm.
+      current.section = sectionBetween;
+    }
+    current.syl.push(s);
+  }
+  return phrases;
+}
+
+/**
+ * Liedtext einer Spur zum Bearbeiten (Reiter "Liedtext"): die erste Strophe in der Reihenfolge der Noten (ohne
+ * Wiederholungen), Silben eines Worts mit Bindestrich ("Frank-" "furt" → "Frank-furt"). Die Zeilen sind umbrochen wie
+ * in der Ansicht "Text & Akkorde" (splitPhrases()). Vor jedem Abschnitt steht sein Name in einer eigenen Zeile, z. B.
+ * "[Verse]", auch vor Abschnitten ohne Text (Intro, Solo), davor eine Leerzeile. Diese Zeilen teilen den Text beim
+ * Verteilen auf die Schläge in Abschnitte (setLyricsText() in score-edit.js).
+ * @param {Score} score Noten
+ * @param {import('../../types/alphatab').model.Track} track Spur mit dem Text
+ * @returns {string} Text mit Zeilenumbrüchen
+ */
+export function lyricsLines(score, track){
+  return layoutLyrics(score, track).lines.join('\n');
+}
+
+/**
+ * Anfang jedes Abschnitts für den Liedtext, in der Reihenfolge der Abschnittszeilen von lyricsLines(): der Anfang
+ * des Abschnitts oder, wenn er mit einem Auftakt beginnt, der Anfang des Auftakts.
+ * @param {Score} score Noten
+ * @param {import('../../types/alphatab').model.Track} track Spur mit dem Text
+ * @returns {number[]} Zeit in Ticks (Reihenfolge der Noten, ohne Wiederholungen), je Abschnitt
+ */
+export function lyricsSectionStarts(score, track){
+  return layoutLyrics(score, track).starts;
+}
+
+/**
+ * Zeilen des Liedtexts und Anfänge der Abschnitte (siehe lyricsLines() und lyricsSectionStarts()).
+ * @param {Score} score Noten
+ * @param {import('../../types/alphatab').model.Track} track Spur mit dem Text
+ * @returns {{lines: string[], starts: number[]}}
+ */
+function layoutLyrics(score, track){
+  /** @type {Syllable[]} */
+  const syllables = [];
+  /** @type {SectionMark[]} */
+  const sections = [];
+  /** @type {{t: number, end: number}[]} */
+  const bars = [];
+  const explicit = versesWithBreaks(track).has(0);
+  // Zeit wie masterBar.start (Reihenfolge der Noten), wie setLyricsText() sie für die Abschnitte nimmt.
+  for(const mb of score.masterBars){
+    const time = mb.start;
+    bars.push({t: time, end: time + mb.calculateDuration()});
+    if(mb.section){
+      sections.push({t: time, name: (mb.section.text || mb.section.marker || '').replace(/^\[|]$/g, '')});
+    }
+    for(const beat of track.staves[0].bars[mb.index]?.voices[0]?.beats ?? []){
+      const raw = beat.lyrics?.[0] ?? '';
+      const t = time + beat.playbackStart;
+      if(raw.trim()) syllables.push(syllable(t, t + beat.playbackDuration, raw, explicit));
+    }
+  }
+  const barAt = t => bars.find(b => b.t <= t && t < b.end) ?? bars[bars.length - 1];
+  const sectionAt = t => sections.filter(s => s.t <= t).at(-1) ?? null;
+  /** @type {string[]} */
+  const lines = [];
+  const starts = sections.map(s => s.t);
+  let next = 0;
+  /**
+   * Schreibt die Namen aller Abschnitte bis zu einer Zeit, je mit einer Leerzeile davor (außer ganz oben).
+   * @param {number} t Zeit in Ticks
+   * @returns {void}
+   */
+  const headers = t => {
+    for(; next < sections.length && sections[next].t <= t; next++){
+      if(lines.length) lines.push('');
+      lines.push(`[${sections[next].name}]`);
+    }
+  };
+  for(const p of splitPhrases(syllables, sections, barAt)){
+    // Ein Auftakt gehört schon zum nächsten Abschnitt: dessen Name steht über ihm, und dort beginnt der Abschnitt.
+    const section = p.section ?? sectionAt(p.syl[0].t);
+    if(section){
+      headers(section.t);
+      const index = sections.indexOf(section);
+      starts[index] = Math.min(starts[index], p.syl[0].t);
+    }
+    // Mehrere Wörter auf einem Schlag stehen mit "_" verbunden da ("mir_zu."), siehe splitSyllables().
+    lines.push(p.syl.reduce((line, s) => line + (line && !line.endsWith('-') ? ' ' : '') + s.text.replace(/\s+/g, '_'),
+      ''));
+  }
+  headers(Infinity);
+  return {lines, starts};
 }
 
 /**
@@ -156,14 +305,16 @@ export function buildTextModel(score){
   const bars = [];
   /** @type {Map<string, string>} */
   const grips = new Map();
+  const explicit = versesWithBreaks(textTrack);
   let time = 0;
   for(const {mb, pass} of playOrder(score)){
     const length = mb.calculateDuration();
     bars.push({t: time, end: time + length, beats: mb.timeSignatureNumerator});
     if(mb.section) sections.push({t: time, name: (mb.section.text || mb.section.marker || '').replace(/^\[|]$/g, '')});
     for(const voice of textTrack?.staves[0].bars[mb.index]?.voices ?? []) for(const beat of voice.beats){
-      const text = syllableFor(beat.lyrics ?? [], pass);
-      if(text) syllables.push({t: time + beat.playbackStart, end: time + beat.playbackStart + beat.playbackDuration, text});
+      const verse = verseFor(beat.lyrics ?? [], pass);
+      const t = time + beat.playbackStart;
+      if(verse >= 0) syllables.push(syllable(t, t + beat.playbackDuration, beat.lyrics[verse], explicit.has(verse)));
     }
     for(const {tick, chord} of barChords.get(mb.index) ?? []){
       const t = time + tick - mb.start;
@@ -178,28 +329,8 @@ export function buildTextModel(score){
   const sectionAt = t => sections.filter(s => s.t <= t).at(-1) ?? null;
   const barAt = t => bars.find(b => b.t <= t && t < b.end) ?? bars[bars.length - 1];
 
-  // 2. Zeilen: Umbruch bei längerer Pause, Satzzeichen oder Abschnittswechsel, nie mitten im Wort. Ein Auftakt (die
-  // Zeile beginnt erst im Takt vor dem Abschnitt) gehört schon zum neuen Abschnitt.
-  /** @type {{syl: Syllable[], section: ?SectionMark}[]} */
-  const phrases = [];
-  let current = null;
-  for(const s of syllables){
-    const prev = current?.syl.at(-1);
-    const sectionBetween = prev ? sections.find(x => x.t > prev.t && x.t <= s.t) : null;
-    const pickup = !!sectionBetween && current !== null && current.syl[0].t >= barAt(sectionBetween.t - 1).t;
-    const chars = current ? current.syl.reduce((n, x) => n + x.text.length + 1, 0) : 0;
-    const gap = prev ? s.t - prev.end : 0;
-    const lineEnd = !current || gap >= HALF_NOTE_TICKS * 2 || (chars >= LINE_SOFT_CHARS && gap >= HALF_NOTE_TICKS / 2)
-      || (/[.!?;:]$/.test(prev.text) && current.syl.length >= LINE_MIN_SYLLABLES)
-      || (/,$/.test(prev.text) && current.syl.length >= LINE_COMMA_SYLLABLES) || (sectionBetween && !pickup);
-    const midWord = prev?.text.endsWith('-') && !(sectionBetween && !pickup);
-    if(!current || (lineEnd && !midWord)){
-      current = {syl: [], section: null};
-      phrases.push(current);
-    }
-    if(sectionBetween && pickup) current.section = sectionBetween;
-    current.syl.push(s);
-  }
+  // 2. Zeilen (splitPhrases()).
+  const phrases = splitPhrases(syllables, sections, barAt);
   for(const p of phrases){
     if(p.section) continue;
     // Auftakt: Die Zeile liegt ganz im Takt vor einem Abschnitt, und dort geht der Text weiter.

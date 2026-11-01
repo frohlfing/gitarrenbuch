@@ -9,10 +9,11 @@ import {
   loadYoutubeInfo, searchCovers, setCover, uploadChordFile, uploadCover,
 } from './api.js';
 import {formatTime} from './player.js';
-import {createScore, loadAlphaTab, parseScore, readGpFile, scoreDuration} from './score.js';
+import {createScore, describeScoreLoss, loadAlphaTab, parseScore, readGpFile, scoreDuration} from './score.js';
 import {trackLabel} from './tracks.js';
 
 /** @typedef {import('./api.js').Song} Song */
+/** @typedef {import('./score.js').ScoreLoss} ScoreLoss */
 
 /**
  * Alle geladenen Lieder (Stand des Servers, nach jeder Änderung aktualisiert).
@@ -527,18 +528,20 @@ function showFileLengths(s){
  * @param {?Song} song zu bearbeitendes Lied, null zum Anlegen
  * @param {(saved: Song) => void} onSaved wird nach erfolgreichem Speichern aufgerufen
  * @param {{ultimateGuitar?: string}} [sources] Vorbelegung der Quellen beim Anlegen (z. B. aus dem Import-Dialog)
+ * @param {?HTMLElement} [container] statt im Overlay in diesem Element (Bearbeitungsmodus, linkes Panel); dort
+ *   setzt "Zurücksetzen" die Eingaben zurück, und nach dem Speichern bleibt das Formular stehen
  * @returns {void}
  */
-export function openSongForm(song, onSaved, sources = {}){
+export function openSongForm(song, onSaved, sources = {}, container = null){
   const isEdit = song !== null;
   const s = song ?? /** @type {Song} */ ({tags: [], sources: {...sources}});
-  formIsOpen = true;
+  if(!container) formIsOpen = true;
 
   const nameFields = `
     ${field('titleInput', 'Titel', s.title)}
     ${field('artistInput', 'Interpret', s.artist, 'list="artistList" autocomplete="off"')}`;
-  openOverlay(`
-    <h2>${isEdit ? 'Song bearbeiten' : 'Neuer Song'}</h2>
+  const html = `
+    ${container ? '' : `<h2>${isEdit ? 'Song bearbeiten' : 'Neuer Song'}</h2>`}
     <div id="formError"></div>
     ${isEdit ? `<div class="form-head">
       <button class="cover-pick" id="coverPick" type="button" title="Cover ändern">${coverPickHtml(s)}</button>
@@ -589,11 +592,14 @@ export function openSongForm(song, onSaved, sources = {}){
     </div>` : ''}
     <div class="btn-row">
       <button class="btn btn-primary" id="saveBtn" type="button">Speichern</button>
-      <button class="btn" id="cancelBtn" type="button">Abbrechen</button>
+      <button class="btn" id="cancelBtn" type="button">${container ? 'Zurücksetzen' : 'Abbrechen'}</button>
     </div>
-  `);
+  `;
+  if(container) container.innerHTML = html;
+  else openOverlay(html);
 
-  byId('cancelBtn').addEventListener('click', closeOverlay);
+  byId('cancelBtn').addEventListener('click', container
+    ? () => openSongForm(findSong(s.slug) ?? s, onSaved, sources, container) : closeOverlay);
   // Das Cover wird im Dialog sofort gespeichert, unabhängig vom Speichern des Formulars.
   byId('coverPick')?.addEventListener('click', () => openCoverForm(s, saved => {
     s.files = saved.files;
@@ -653,7 +659,8 @@ export function openSongForm(song, onSaved, sources = {}){
     }
 
     storeSong(saved, isEdit ? s.slug : saved.slug);
-    closeOverlay();
+    if(container) openSongForm(saved, onSaved, sources, container);
+    else closeOverlay();
     onSaved(saved);
   });
 }
@@ -682,19 +689,48 @@ function bindDropzone(onFile){
   input.addEventListener('change', () => {
     if(input.files[0]) onFile(input.files[0]);
   });
-  overlay.ondragover = e => {
+  // Im Overlay darf überall im Dialog abgelegt werden, im Panel des Bearbeitungsmodus nur auf der Fläche.
+  const target = overlay.classList.contains('open') ? overlay : dropzone;
+  target.ondragover = e => {
     e.preventDefault();
     dropzone.classList.add('dragover');
   };
-  overlay.ondragleave = e => {
-    if(!overlay.contains(/** @type {Node} */ (e.relatedTarget))) dropzone.classList.remove('dragover');
+  target.ondragleave = e => {
+    if(!target.contains(/** @type {Node} */ (e.relatedTarget))) dropzone.classList.remove('dragover');
   };
-  overlay.ondrop = e => {
+  target.ondrop = e => {
     e.preventDefault();
     dropzone.classList.remove('dragover');
     const dropped = e.dataTransfer?.files[0];
     if(dropped) onFile(dropped);
   };
+}
+
+/**
+ * Warnt im Import-Dialog, dass beim Umwandeln etwas verloren geht, und wartet auf die Entscheidung des Benutzers.
+ * @param {HTMLElement} box Bereich für Meldungen im Dialog
+ * @param {ScoreLoss} loss betroffene Takte (siehe exportScore() in score.js)
+ * @returns {Promise<boolean>} true bei "Trotzdem übernehmen", false bei "Abbrechen"
+ */
+function confirmLoss(box, loss){
+  box.innerHTML = `
+    <div class="error-box">
+      <p>Beim Umwandeln gehen Angaben verloren, die alphaTex nicht schreiben kann.
+        ${escapeHtml(describeScoreLoss(loss))} Die Originaldatei bleibt unter orig/ erhalten.</p>
+      <div class="btn-row">
+        <button class="btn btn-primary" type="button" data-loss="accept">Trotzdem übernehmen</button>
+        <button class="btn" type="button" data-loss="cancel">Abbrechen</button>
+      </div>
+    </div>`;
+  return new Promise(resolve => {
+    box.addEventListener('click', function onClick(e){
+      const choice = /** @type {?HTMLElement} */ (/** @type {HTMLElement} */ (e.target).closest('[data-loss]'));
+      if(!choice) return;
+      box.removeEventListener('click', onClick);
+      box.innerHTML = '';
+      resolve(choice.dataset.loss === 'accept');
+    });
+  });
 }
 
 /**
@@ -754,7 +790,12 @@ export function openImportForm(onImported){
     btn.disabled = true;
     btn.textContent = 'Importiert …';
     try {
-      const {meta, tex} = await readGpFile(file);
+      const {meta, tex, loss} = await readGpFile(file);
+      if(loss && !await confirmLoss(errorBox, loss)){
+        btn.disabled = false;
+        btn.textContent = 'Importieren';
+        return;
+      }
       if(!meta.title){
         Object.assign(meta, metaFromFileName(file.name), meta.artist ? {artist: meta.artist} : {});
       }

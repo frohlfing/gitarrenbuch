@@ -68,7 +68,8 @@ header p.sub{
   flex:1 1 270px;
   max-width:330px;
 }
-.controls input[type=search], .controls select, .form-field input, .form-field select, .form-field textarea{
+.controls input[type=search], .controls select, .form-field input, .form-field select, .form-field textarea,
+.struct-track input, .struct-track select{
   padding:.6rem .8rem;
   border:1px solid var(--rule);
   border-radius:6px;
@@ -234,6 +235,20 @@ header p.sub{
 }
 .sheet h2{margin:.1rem 0 1rem; font-size:1.5rem;}
 .sheet.sheet-small{max-width:340px;}
+/* Struktur-Editor: je Spur Name, Rolle und Eckdaten */
+.struct-form fieldset{border:0; border-top:1px solid var(--rule); margin:0 0 .6rem; padding:.6rem 0 0;}
+.struct-form legend{font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; color:var(--ink-soft);
+  padding-right:.5rem;}
+.struct-track{display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 11rem); gap:.25rem .5rem;
+  align-items:center; margin-bottom:.7rem;}
+.struct-track input, .struct-track select{width:100%;}
+.struct-track input:disabled{background:var(--paper); color:var(--ink-soft);}
+.struct-facts{grid-column:1 / -1; font-size:.8rem; color:var(--ink-soft);}
+.struct-form .hint{font-size:.75rem; color:var(--ink-soft);}
+.struct-ok{margin:0 0 .8rem;}
+.struct-error{color:var(--danger); margin:.4rem 0 .8rem;}
+.struct-actions{display:flex; gap:.6rem; margin-top:.4rem;}
+.struct-form.busy{opacity:.6; pointer-events:none;}
 .check-field{display:flex; align-items:center; gap:.5rem; margin-bottom:1rem; cursor:pointer;}
 .sheet .close{
   position:absolute;
@@ -533,6 +548,10 @@ header p.sub{
 .sync-wave:focus-visible{outline:2px solid var(--accent);}
 .sync-scroll{display:block; width:100%; margin:.25rem 0 0; accent-color:var(--accent);}
 .sync-status{display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; min-height:1.8em; font-size:.8rem; color:var(--ink-soft);}
+/* Eingebettet im Reiter "Audio" des Bearbeitungsmodus: im Fluss des Panels, Wellenform flacher */
+.sync-editor.sync-embedded{position:static; z-index:auto; background:none; border:0; box-shadow:none; padding:0;}
+.sync-embedded .sync-wave{height:64px; margin-top:.3rem;}
+.sync-embedded .sync-status{min-height:1.4em;}
 
 .volume-dialog output{display:inline-block; min-width:3.2em; text-align:right; font-variant-numeric:tabular-nums;}
 /* Lautstärke-Dialog: Checkbox mit Name, Regler, Wert in festen Spalten */
@@ -595,3 +614,230 @@ header p.sub{
   .view-switch button{padding:.4rem .5rem; font-size:.8rem;}
   .transport{gap:.3rem; padding-left:.4rem; padding-right:.4rem;}
 }
+
+/* Bearbeitungsmodus (js/note-editor.js): Werkzeugleiste als dritte Zeile der festen Leiste, links Effekte, rechts
+   Eigenschaften, unten Text/Akkorde/Spuren über der Abspielleiste. --edit-top (Unterkante der Leiste) und
+   --edit-bottom-h (Höhe des unteren Panels) setzt note-editor.js. */
+@font-face{font-family:'GbBravura'; src:url('vendor/alphatab/font/Bravura.woff2') format('woff2'); font-display:block;}
+#songView{--edit-left-w:270px; --edit-right-w:300px; --edit-closed-w:38px;}
+#songView.editing .songhead{display:none;}
+/* Im Modus zeigt die feste Leiste nur die Werkzeugleiste (Ansicht und Spuren stecken darin, siehe note-editor.js) */
+#songView.editing .songbar{display:block; padding:0;}
+#songView.editing .songbar > :not(.edit-toolbar):not(.edit-notices){display:none;}
+/* Meldungen unter der Werkzeugleiste: je Abweichung eine Zeile mit Knopf zum Beheben (siehe renderNotices()) */
+.edit-notices{padding:.3rem .8rem; border-top:1px solid var(--rule); background:#fff6ec; font-size:.85rem;}
+.edit-notices[hidden]{display:none;}
+.edit-notice{display:flex; flex-wrap:wrap; align-items:center; gap:.3rem .6rem; padding:.15rem 0;}
+.edit-notice span{color:var(--danger);}
+.edit-notice .ebtn{height:auto; padding:.15rem .5rem;}
+/* Capo je Spur (rechtes Panel, nur bei ungleichem Capo) */
+.ecapo-tracks{display:grid; gap:.3rem; margin:-.2rem 0 .5rem;}
+.ecapo-tracks[hidden]{display:none;}
+.ecapo-track{display:flex; align-items:center; justify-content:space-between; gap:.5rem; font-size:.85rem;}
+.ecapo-track input{width:4.5rem;}
+#songView.editing .track-checks{padding:0;}
+#songView.editing .score-wrap{max-width:none;}
+#songView.editing{padding-bottom:calc(var(--bar-h) + var(--edit-bottom-h, 0px) + env(safe-area-inset-bottom) + 1rem);}
+#songView.editing .score-wrap, #songView.editing .score-status{
+  margin-left:var(--edit-closed-w); margin-right:var(--edit-closed-w);
+}
+#songView.editing.edit-left-open .score-wrap, #songView.editing.edit-left-open .score-status{
+  margin-left:var(--edit-left-w);
+}
+#songView.editing.edit-right-open .score-wrap, #songView.editing.edit-right-open .score-status{
+  margin-right:var(--edit-right-w);
+}
+.songbar-menu{display:flex; gap:.4rem; align-items:center;}
+.btn-icon.edit-toggle[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff;}
+
+.edit-toolbar{
+  display:flex; flex-wrap:wrap; align-items:center; gap:.35rem .8rem;
+  padding:.45rem .8rem;
+  background:var(--paper);
+}
+.egroup-view{flex-direction:column; align-items:flex-start; gap:.3rem;}
+.egroup{display:flex; gap:.2rem; align-items:center;}
+.egroup + .egroup{padding-left:.8rem; border-left:1px solid var(--rule);}
+.edit-toolbar .edit-end{margin-left:auto; gap:.4rem; border-left:0;}
+.ebtn{
+  min-width:34px; height:34px; padding:0 .4rem;
+  display:inline-flex; align-items:center; justify-content:center;
+  font:inherit; font-size:.85rem; line-height:1; color:var(--ink);
+  background:var(--card); border:1px solid var(--rule); border-radius:6px; cursor:pointer;
+}
+.ebtn:hover{border-color:var(--accent); color:var(--accent-dark);}
+.ebtn[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-dark);}
+.ebtn-text{padding:0 .6rem; white-space:nowrap;}
+.ebtn-danger{color:var(--danger);}
+.ebtn-danger:hover{border-color:var(--danger); color:var(--danger);}
+/* Notenwerte aus Bravura: die Zeichen sitzen auf der Grundlinie und ragen weit nach oben; smufl-c: Zeichen um die
+   Mitte (Vorzeichen, Anschlag, Schlüssel) */
+.smufl{font-family:'GbBravura'; font-size:19px; line-height:1; position:relative; top:5px;}
+.smufl.smufl-c{top:0; font-size:18px; line-height:0;}
+/* Der Violinschlüssel ist rund 1,8-mal so hoch wie die Schriftgröße */
+.ebtn[data-action="notation"] .smufl{font-size:12px;}
+.ebtn-wide{padding:0 .3rem;}
+
+/* Seitliche Panels: fest zwischen Leiste und unterem Panel; eingeklappt ein schmaler Streifen mit senkrechtem Titel */
+.edit-panel{
+  position:fixed; z-index:25; top:var(--edit-top, 0px);
+  bottom:calc(var(--bar-h) + var(--edit-bottom-h, 0px) + env(safe-area-inset-bottom));
+  display:flex; flex-direction:column;
+  background:var(--card); border-color:var(--rule); border-style:solid; border-width:0;
+}
+.edit-left{left:0; width:var(--edit-left-w); border-right-width:1px;}
+.edit-right{right:0; width:var(--edit-right-w); border-left-width:1px;}
+.edit-panel.collapsed{width:var(--edit-closed-w);}
+.edit-panel-head{display:flex; align-items:center; gap:.3rem; padding:.4rem .4rem .4rem .7rem;
+  border-bottom:1px solid var(--rule);}
+.edit-panel-title{flex:1; font-size:.72rem; text-transform:uppercase; letter-spacing:.12em; color:var(--ink-soft);}
+.edit-panel.collapsed .edit-panel-head{flex-direction:column-reverse; padding:.4rem 0; border:0; gap:.6rem;}
+.edit-panel.collapsed .edit-panel-title{writing-mode:vertical-rl; flex:none;}
+.edit-left.collapsed .edit-panel-title{transform:rotate(180deg);}
+.edit-panel.collapsed .edit-panel-body{display:none;}
+.edit-panel-body{flex:1; overflow-y:auto; padding:.4rem .7rem .8rem;}
+.edit-panel h4{margin:.6rem 0 .35rem; font-size:.72rem; font-weight:600; color:var(--ink-soft);}
+/* Quadratische Knöpfe in der Palette links und in der Werkzeugleiste (Text-Knöpfe ausgenommen) */
+.effect-grid{display:grid; grid-template-columns:repeat(auto-fill, 38px); gap:.3rem;}
+.effect-grid .ebtn{width:38px; height:38px; min-width:0; padding:0;}
+.edit-toolbar .ebtn:not(.ebtn-text){width:34px; min-width:34px; padding:0;}
+/* Pfeil zum Einklappen zeigt zur Seite, in die das Panel geht */
+.ebtn-collapse{min-width:26px; height:26px; padding:0; border-color:transparent; background:none;}
+.ebtn-collapse::before{content:'\2039'; font-size:1.2rem;}
+.edit-right .ebtn-collapse::before, .edit-left.collapsed .ebtn-collapse::before{content:'\203A';}
+.edit-right.collapsed .ebtn-collapse::before{content:'\2039';}
+.edit-bottom .ebtn-collapse::before{content:'\25BE'; font-size:.9rem;}
+.edit-bottom.collapsed .ebtn-collapse::before{content:'\25B4';}
+
+/* Reiter (rechtes und unteres Panel) */
+.etabs{display:flex; gap:.15rem; border-bottom:1px solid var(--rule); margin-bottom:.6rem;}
+.etabs button{font:inherit; font-size:.85rem; padding:.35rem .6rem; border:0; border-bottom:2px solid transparent;
+  background:none; color:var(--ink-soft); cursor:pointer;}
+.etabs button[aria-selected="true"]{color:var(--accent-dark); border-bottom-color:var(--accent); font-weight:600;}
+.efield{display:flex; flex-direction:column; gap:.2rem; margin-bottom:.6rem; font-size:.8rem; color:var(--ink-soft);}
+.efield input, .efield select{font:inherit; font-size:.9rem; color:var(--ink); padding:.35rem .45rem;
+  border:1px solid var(--rule); border-radius:6px; background:var(--card); width:100%;}
+.efield-row{display:flex; align-items:center; gap:.35rem; color:var(--ink);}
+.efield-row input{width:4.5rem;}
+.efield-check{display:flex; align-items:center; gap:.4rem; margin-bottom:.6rem; font-size:.85rem; cursor:pointer;}
+.ebtn-row{display:flex; flex-wrap:wrap; gap:.35rem; margin:.3rem 0 .7rem;}
+.efield-radios{display:flex; flex-direction:column; gap:.2rem; margin:-.3rem 0 .7rem; font-size:.85rem;}
+.efield-radios label{display:flex; align-items:center; gap:.4rem; cursor:pointer;}
+.efield-radios > span{color:var(--ink-soft); font-size:.8rem;}
+.efield-hint{font-size:.8rem; color:var(--ink-soft); margin:-.3rem 0 .2rem;}
+.ebtn-help{font-weight:700; border-radius:50%;}
+/* Korrektur-Dialog vor dem Bearbeiten: die Abweichungen über dem Formular */
+/* Übersicht der Tastenkürzel */
+.shortcut-intro{margin:-.4rem 0 1rem; color:var(--ink-soft); font-size:.9rem;}
+/* Eine Spalte: Tastenfolgen wie "Strg+Umschalt+←" brauchen Platz */
+.sheet h3{margin:.9rem 0 .4rem; font-size:.78rem; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft);}
+.shortcut-table{border-collapse:collapse; width:100%; font-size:.88rem; table-layout:fixed;}
+.shortcut-table td{padding:.2rem .5rem .2rem 0; vertical-align:top;}
+.shortcut-table td:first-child{white-space:nowrap; width:15rem;}
+@media (max-width:599px){
+  .shortcut-table{table-layout:auto;}
+  .shortcut-table td:first-child{width:auto; white-space:normal;}
+}
+kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; font-size:.8rem; text-align:center;
+  background:var(--paper); border:1px solid var(--rule); border-bottom-width:2px; border-radius:4px;}
+
+/* Unteres Panel: über der Abspielleiste, eingeklappt nur die Kopfzeile (Reiter und Statuszeile) */
+.edit-bottom{
+  position:fixed; left:0; right:0; z-index:26;
+  bottom:calc(var(--bar-h) + env(safe-area-inset-bottom));
+  background:var(--card); border-top:1px solid var(--rule); box-shadow:0 -4px 16px rgba(39,43,52,.08);
+}
+/* Oberer Rand zum Ziehen der Höhe (--edit-bottom-body-h setzt note-editor.js) */
+.edit-bottom-resize{position:absolute; left:0; right:0; top:-4px; height:8px; cursor:ns-resize; z-index:1;
+  touch-action:none;}
+.edit-bottom-resize:hover{background:linear-gradient(transparent 3px, var(--accent) 3px, var(--accent) 5px,
+  transparent 5px);}
+.edit-bottom-head{display:flex; align-items:center; gap:.8rem; padding:0 .6rem 0 .8rem;}
+.edit-bottom-head .etabs{border:0; margin:0;}
+.edit-status{flex:1; text-align:right; font-size:.8rem; color:var(--ink-soft); font-variant-numeric:tabular-nums;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.edit-bottom-body{height:var(--edit-bottom-body-h, 150px); overflow-y:auto; padding:.5rem .8rem .7rem; border-top:1px solid var(--rule);}
+.edit-bottom.collapsed .edit-bottom-body{display:none;}
+.edit-bottom textarea{width:100%; height:100%; resize:none; font:inherit; font-size:.95rem; padding:.5rem .6rem;
+  border:1px solid var(--rule); border-radius:6px;}
+.echord-list{display:flex; flex-wrap:wrap; gap:.35rem; align-items:center;}
+.echord-new{display:inline-flex; gap:.3rem; align-items:center; margin-left:.6rem;}
+.echord-new input{font:inherit; font-size:.85rem; padding:.3rem .4rem; border:1px solid var(--rule); border-radius:6px;
+  width:7rem;}
+.echord-new input[data-new-chord="grip"]{width:10rem;}
+/* Reiter "Liedtext": Textfeld, rechts daneben die Vorschau "Text & Akkorde" */
+.etab-lyrics:not([hidden]){display:flex; gap:.6rem; height:100%;}
+.etab-lyrics .elyrics-wrap{flex:1; position:relative; background:var(--card);}
+/* Markierungen hinter dem Liedtext: dieselbe Schrift und derselbe Umbruch wie im Feld, nur die Hintergründe */
+.elyrics-marks{position:absolute; inset:0; overflow:hidden; white-space:pre-wrap; overflow-wrap:break-word;
+  color:transparent; pointer-events:none; scrollbar-gutter:stable; font:inherit; font-size:.95rem;
+  padding:.5rem .6rem; border:1px solid transparent; line-height:normal;}
+.elyrics-marks mark{color:transparent; background:rgba(211,47,47,.18); border-radius:2px;}
+/* Silbe am Cursor der Noten (wie die aktuelle Silbe beim Abspielen) */
+.elyrics-marks mark.elyrics-cur{background:rgba(255,154,82,.45);}
+.etab-lyrics textarea{position:relative; display:block; background:transparent; line-height:normal;
+  scrollbar-gutter:stable;}
+.elyrics-view{flex:1; min-width:0; overflow:auto; background:var(--card); border:1px solid var(--rule); border-radius:6px;
+  padding:0 .7rem .5rem;}
+.elyrics-view .tv-section{margin-top:.5rem;}
+.elyrics-view .tv-section h3{font-size:.75rem; margin-bottom:.1rem;}
+.elyrics-view .tv-line{font-size:.9rem; margin-bottom:.15rem;}
+.elyrics-view .tv-chord{font-size:.8rem;}
+/* Reiter "Spuren": je Spur Zeigen, Name, Rolle, Stimmung, Instrument, Knöpfe */
+.etrack-list{display:flex; flex-direction:column; gap:.3rem;}
+.etrack{display:grid; grid-template-columns:3.2rem minmax(8rem, 16rem) 11rem 9rem 12rem auto; gap:.4rem;
+  align-items:center;}
+.etrack input[type=text], .etrack select{font:inherit; font-size:.85rem; padding:.25rem .4rem; border:1px solid var(--rule);
+  border-radius:6px; background:var(--card); color:var(--ink); min-width:0;}
+.etrack input:disabled{background:var(--paper); color:var(--ink-soft);}
+.etrack-head{font-size:.75rem; color:var(--ink-soft);}
+.etrack-buttons{display:flex; gap:.2rem;}
+.etrack-buttons .ebtn{min-width:28px; height:28px;}
+.etrack-foot{display:flex; align-items:center; gap:1.2rem; margin-top:.4rem;}
+.etrack-foot .efield-radios{flex-direction:row; gap:1rem; margin:0;}
+/* Songdaten im rechten Panel: Formular schmal, Felder untereinander, nichts breiter als das Panel */
+.edit-panel-body{overflow-x:hidden;}
+.edit-songdata .form-field input, .edit-songdata .form-field textarea, .edit-songdata .form-field select{width:100%;}
+.edit-songdata .form-head{display:block;}
+.edit-songdata .form-grid{display:block;}
+.edit-songdata .cover-pick{display:block; width:140px; margin:0 0 .8rem;}
+.edit-songdata .form-field label, .edit-songdata .form-field .label{font-size:.75rem;}
+.edit-songdata .form-field input, .edit-songdata .form-field textarea{font-size:.9rem; padding:.4rem .5rem;}
+
+/* Hinweis "Noch nicht umgesetzt" unter der Werkzeugleiste */
+.edit-toast{
+  position:fixed; z-index:40; left:50%; top:calc(var(--edit-top, 0px) + .5rem); transform:translateX(-50%);
+  padding:.45rem .9rem; border-radius:6px; background:var(--dark); color:#fff; font-size:.85rem;
+  opacity:0; pointer-events:none; transition:opacity .2s;
+}
+.edit-toast.show{opacity:.92;}
+
+/* Schmale Bildschirme: Seiten-Panels legen sich ausgeklappt über die Noten, die Noten behalten ihre Breite */
+@media (max-width:899px){
+  #songView.editing.edit-left-open .score-wrap, #songView.editing.edit-left-open .score-status{
+    margin-left:var(--edit-closed-w);
+  }
+  #songView.editing.edit-right-open .score-wrap, #songView.editing.edit-right-open .score-status{
+    margin-right:var(--edit-closed-w);
+  }
+  .edit-panel:not(.collapsed){box-shadow:0 0 24px rgba(39,43,52,.25); z-index:27;}
+  .egroup + .egroup{padding-left:0; border-left:0;}
+  .edit-status{display:none;}
+}
+
+/* Cursor des Bearbeitungsmodus: Spalte über den Schlag, Kästchen um die Saite (Lage setzt note-editor.js) */
+#songView.editing .score-wrap > div{position:relative;}
+.edit-cursor{position:absolute; inset:0; pointer-events:none; z-index:5;}
+.edit-cursor-beat, .edit-cursor-string{position:absolute; border-radius:4px;}
+.edit-cursor-beat{background:var(--accent-soft);}
+.edit-selection > div{position:absolute; background:rgba(255,154,82,.18); border:1px solid var(--mark); border-radius:3px;}
+.edit-cursor-string{border:2px solid var(--accent); background:rgba(86,159,255,.12);}
+/* Taktstrich ziehen: Zeiger über dem Strich, Linie beim Ziehen; Note ziehen */
+.edit-barline-ghost{position:absolute; width:2px; background:var(--mark);}
+.edit-over-barline, .edit-over-barline *{cursor:col-resize;}
+.edit-dragging, .edit-dragging *{cursor:grabbing;}
+.edit-warn{color:var(--danger); font-weight:600;}
+.ebtn:disabled{opacity:.4; cursor:default;}
+.ebtn:disabled:hover{border-color:var(--rule); color:var(--ink);}
+/* Speichern hervorheben, solange es ungespeicherte Änderungen gibt */
+.ebtn.ebtn-dirty{background:var(--accent); border-color:var(--accent); color:#fff;}

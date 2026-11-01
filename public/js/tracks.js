@@ -77,6 +77,21 @@ function hasLyrics(beat){
 }
 
 /**
+ * Zeilenumbruch im Liedtext: steht am Ende der letzten Silbe einer Zeile (beat.lyrics), im alphaTex als "\n" in der
+ * Silbe, z. B. lyrics "friend,\n". alphaTab zeichnet ihn nicht (Änderung in alphaTab.core.mjs, README "Setup").
+ */
+export const LYRICS_BREAK = '\n';
+
+/**
+ * Ob eine Silbe eine Zeile des Liedtexts beendet (LYRICS_BREAK am Ende).
+ * @param {?string} syllable Silbe aus beat.lyrics
+ * @returns {boolean}
+ */
+export function endsLyricsLine(syllable){
+  return /\S\s*\n\s*$/.test(syllable ?? '');
+}
+
+/**
  * Spur, die die meisten Schläge mit einer Eigenschaft hat; bei Gleichstand die vordere.
  * @param {Score} score Noten
  * @param {function(Beat): boolean} test Eigenschaft
@@ -137,13 +152,13 @@ export function chordsTrack(score){
 /**
  * Trägt die Akkorde aller Spuren zusammen: je Stelle (Tick) ein Akkord. Steht an einer Stelle in mehreren Spuren
  * ein Akkord, gewinnt die erste Begleitspur (chordsTrack()), danach die Spuren in ihrer Reihenfolge. So schreibt der
- * Editor die Akkorde später in die erste Begleitspur; bis dahin zeigt der Player sie nach dieser Regel einmal über
- * den Noten.
+ * Struktur-Editor die Akkorde in die erste Begleitspur (moveChordsTo() in editor.js); bis dahin zeigt der Player sie
+ * nach dieser Regel einmal über den Noten.
  * @param {Score} score Noten
+ * @param {?Track} [first] Spur, die gewinnt; ohne Angabe die erste Begleitspur (chordsTrack())
  * @returns {MergedChord[]} nach Tick sortiert
  */
-export function mergeChords(score){
-  const first = chordsTrack(score);
+export function mergeChords(score, first = chordsTrack(score)){
   const order = first ? [first, ...score.tracks.filter(t => t !== first)] : score.tracks;
   /** @type {Map<number, MergedChord>} */
   const merged = new Map();
@@ -158,7 +173,6 @@ export function mergeChords(score){
   return [...merged.values()].sort((a, b) => a.tick - b.tick);
 }
 
-// noinspection JSUnusedGlobalSymbols: für den Editor, noch ohne Aufrufer
 /**
  * Benennt Spuren, deren Name eindeutig eine Rolle meint ("Voice", "Rhythmus", …), in den internen Namen um. Eine
  * Rolle bekommt nur eine Spur; passen mehrere, bleiben alle wie sie sind. Für den Editor (Vorschlag beim Umbau);
@@ -240,7 +254,6 @@ export function moveToCapo(staff, capo){
   return octaves;
 }
 
-// noinspection JSUnusedGlobalSymbols: für den Editor, noch ohne Aufrufer
 /**
  * Gibt allen Spuren mit Saiten denselben Capo: den der Akkordspur (siehe chordsTrack()), ohne Akkorde den der Spur
  * mit den meisten Noten. Die anderen Spuren werden mit moveToCapo() umgerechnet, sie klingen danach gleich. Für den

@@ -265,13 +265,106 @@ export function parseScore(alphaTab, tex, settings){
 }
 
 /**
- * Schreibt ein Modell als alphaTex.
+ * Schreibt ein Modell als alphaTex, ungeprüft (der Bearbeitungsmodus nach jeder Änderung; gespeichert wird mit
+ * writeScoreChecked()).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten
  * @returns {string} alphaTex
  */
-function writeScore(alphaTab, score){
+export function writeScore(alphaTab, score){
   return new alphaTab.exporter.AlphaTexExporter().exportToString(score, new alphaTab.Settings());
+}
+
+/** Höchstens so viele Takte nennt describeScoreLoss(), danach "…". */
+const LOSS_BARS_SHOWN = 10;
+
+/**
+ * Takte, in denen beim Schreiben als alphaTex etwas verloren ging (siehe exportScore()).
+ * @typedef {Object} ScoreLoss
+ * @property {number[]} bars betroffene Takte, ab 1 gezählt, aufsteigend
+ */
+
+/**
+ * Takt einer Zeile aus fingerprint().
+ * @param {string} line Zeile ("<Spur> <Takt> …" bzw. "T<Takt> …")
+ * @returns {number} Takt ab 0
+ */
+function fingerprintBar(line){
+  return line.startsWith('T') ? Number(line.slice(1).split(' ')[0]) : Number(line.split(' ')[1]);
+}
+
+/**
+ * Fasst die Zeilen aus fingerprint() je Takt zusammen.
+ * @param {string[]} lines Zeilen
+ * @returns {Map<number, string>} Takt ab 0 → seine Zeilen
+ */
+function fingerprintByBar(lines){
+  /** @type {Map<number, string>} */
+  const bars = new Map();
+  for(const line of lines){
+    const bar = fingerprintBar(line);
+    bars.set(bar, (bars.get(bar) ?? '') + line + '\n');
+  }
+  return bars;
+}
+
+/**
+ * Schreibt ein Modell als alphaTex und prüft das Ergebnis: Es wird wieder eingelesen und Takt für Takt mit dem Modell
+ * verglichen (siehe fingerprint()).
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Score} score Noten
+ * @returns {{tex: string, loss: ?ScoreLoss}} alphaTex; loss null, wenn nichts verloren ging
+ * @throws {Error} wenn alphaTab das Ergebnis nicht lesen kann
+ */
+export function exportScore(alphaTab, score){
+  // Der Exporter schreibt "\staff { score tabs }" auch für die Vorgabe; die Angabe braucht es nicht.
+  const tex = writeScore(alphaTab, score).replace(/^( *\\staff) \{\n(?: *\S.*\n)*? *}\n/gm, '$1\n');
+  let actual;
+  try {
+    actual = fingerprintByBar(fingerprint(parseScore(alphaTab, tex)));
+  } catch(err){
+    throw new Error('Die Noten lassen sich nicht übernehmen: alphaTab kann das Ergebnis nicht lesen.');
+  }
+  const expected = fingerprintByBar(fingerprint(score));
+  const bars = [...new Set([...expected.keys(), ...actual.keys()])]
+    .filter(bar => expected.get(bar) !== actual.get(bar))
+    .sort((a, b) => a - b)
+    .map(bar => bar + 1);
+  return {tex, loss: bars.length ? {bars} : null};
+}
+
+/**
+ * Beschreibt einen Verlust beim Schreiben für den Benutzer.
+ * @param {ScoreLoss} loss Verlust
+ * @returns {string} z. B. "Abweichungen in 2 Takten (Takt 12, 30)."
+ */
+export function describeScoreLoss(loss){
+  const shown = loss.bars.slice(0, LOSS_BARS_SHOWN).join(', ') + (loss.bars.length > LOSS_BARS_SHOWN ? ', …' : '');
+  return `Abweichungen in ${loss.bars.length === 1 ? '1 Takt' : `${loss.bars.length} Takten`} (Takt ${shown}).`;
+}
+
+/**
+ * Schreibt ein Modell als alphaTex und lässt nur ein verlustfreies Ergebnis zu (siehe exportScore()). Für den Editor,
+ * der das ganze alphaTex neu schreibt.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Score} score Noten
+ * @returns {string} alphaTex
+ * @throws {Error} wenn dabei etwas verloren geht oder alphaTab das Ergebnis nicht lesen kann
+ */
+export function writeScoreChecked(alphaTab, score){
+  const {tex, loss} = exportScore(alphaTab, score);
+  if(loss) throw new Error('Die Noten lassen sich nicht verlustfrei schreiben. ' + describeScoreLoss(loss));
+  return tex;
+}
+
+/**
+ * Name einer Tonart.
+ * @param {number} keySignature Vorzeichen: Kreuze positiv, Bes negativ (wie bar.keySignature)
+ * @param {boolean} minor Moll
+ * @returns {string} z. B. "A", "F#m"; leer außerhalb von -7 bis 7
+ */
+export function keyName(keySignature, minor){
+  return (minor ? MINOR_KEYS : MAJOR_KEYS)[keySignature + 7] ?? '';
 }
 
 /**
@@ -501,13 +594,14 @@ function cleanImportedScore(alphaTab, score, library){
 
 /**
  * Liest eine GP-Datei für den Import: Die Angaben (Titel, Interpret, Beschreibung usw.) kommen nach song.json,
- * die Noten werden ohne diese Angaben zu alphaTex, bereinigt mit cleanImportedScore(). Danach wird das alphaTex
- * wieder eingelesen und mit dem Modell verglichen (siehe fingerprint()); geht dabei etwas verloren, wird der Import
- * abgelehnt. Die Audiospur löst der Server aus der Originaldatei, ihre Sync-Punkte stehen im alphaTex.
+ * die Noten werden ohne diese Angaben zu alphaTex, bereinigt mit cleanImportedScore(). Geht dabei etwas verloren,
+ * meldet das Ergebnis die betroffenen Takte (siehe exportScore()); ob trotzdem übernommen wird, entscheidet der
+ * Benutzer. Die Audiospur löst der Server aus der Originaldatei, ihre Sync-Punkte stehen im alphaTex.
  * @param {File} file Guitar-Pro-Datei (GP3 bis GP8)
- * @returns {Promise<{meta: Object<string, string>, tex: string}>} Angaben (title, artist, die Felder aus INFO_FIELDS,
- *   notes; leere Texte, wenn die Datei sie nicht enthält) und Noten als alphaTex
- * @throws {Error} wenn die Datei nicht lesbar ist oder sich nicht verlustfrei umwandeln lässt
+ * @returns {Promise<{meta: Object<string, string>, tex: string, loss: ?ScoreLoss}>} Angaben (title, artist, die
+ *   Felder aus INFO_FIELDS, notes; leere Texte, wenn die Datei sie nicht enthält), Noten als alphaTex und was beim
+ *   Umwandeln verloren ging (null: nichts)
+ * @throws {Error} wenn die Datei nicht lesbar ist oder alphaTab das Ergebnis nicht lesen kann
  */
 export async function readGpFile(file){
   const alphaTab = await loadAlphaTab();
@@ -527,22 +621,7 @@ export async function readGpFile(file){
   for(const prop of ['title', 'artist', 'notices', ...Object.values(INFO_FIELDS)]) score[prop] = '';
   // Ohne Bibliothek (Netzfehler) behalten die Akkorde ihren eigenen meistgenutzten Griff.
   cleanImportedScore(alphaTab, score, await loadChordLibrary().catch(() => ({})));
-
-  // Der Exporter schreibt "\staff { score tabs }" auch für die Vorgabe; die Angabe braucht es nicht.
-  const tex = writeScore(alphaTab, score).replace(/^( *\\staff) \{\n(?: *\S.*\n)*? *}\n/gm, '$1\n');
-  let differences;
-  try {
-    const expected = fingerprint(score);
-    const actual = fingerprint(parseScore(alphaTab, tex));
-    differences = Math.abs(expected.length - actual.length) + expected.filter((line, i) => line !== actual[i]).length;
-  } catch(err){
-    differences = -1;
-  }
-  if(differences !== 0){
-    throw new Error('Die Noten lassen sich nicht verlustfrei übernehmen'
-      + (differences > 0 ? ` (${differences} Abweichungen).` : ' (alphaTab kann das Ergebnis nicht lesen).'));
-  }
-  return {meta, tex};
+  return {meta, ...exportScore(alphaTab, score)};
 }
 
 /**
@@ -559,21 +638,30 @@ function clampInt(value, min, max, fallback){
 }
 
 /**
- * Wandelt eine Stimmung wie "D A D G B E" (tiefe bis hohe Saite, ohne Oktave) in die Schreibweise von alphaTex um.
- * Die Oktave jeder Saite ist die, die der Standardstimmung am nächsten liegt. Alles außer sechs gültigen Tönen ergibt
- * die Standardstimmung.
+ * Liest eine Stimmung wie "D A D G B E" (tiefe bis hohe Saite, ohne Oktave). Die Oktave jeder Saite ist die, die der
+ * Standardstimmung am nächsten liegt.
+ * @param {?string} tuning Stimmung, sechs Töne
+ * @returns {?number[]} MIDI-Tonhöhen, tiefste Saite zuerst; null, wenn es nicht sechs gültige Töne sind
+ */
+export function parseTuningText(tuning){
+  const notes = (tuning ?? '').trim().split(/\s+/);
+  if(notes.length !== STANDARD_TUNING.length || notes.some(n => PITCH_CLASSES[n.toUpperCase()] === undefined)){
+    return null;
+  }
+  return notes.map((n, i) => {
+    const below = (STANDARD_TUNING[i] - PITCH_CLASSES[n.toUpperCase()]) % 12;
+    return STANDARD_TUNING[i] - below + (below > 6 ? 12 : 0);
+  });
+}
+
+/**
+ * Wandelt eine Stimmung wie "D A D G B E" (tiefe bis hohe Saite, ohne Oktave) in die Schreibweise von alphaTex um
+ * (siehe parseTuningText()). Alles außer sechs gültigen Tönen ergibt die Standardstimmung.
  * @param {?string} tuning Stimmung aus dem Formular
  * @returns {string} hohe bis tiefe Saite mit Oktave, z. B. "E4 B3 G3 D3 A2 D2"
  */
 function tuningToAlphaTex(tuning){
-  const notes = (tuning ?? '').trim().split(/\s+/);
-  let midi = STANDARD_TUNING;
-  if(notes.length === STANDARD_TUNING.length && notes.every(n => PITCH_CLASSES[n.toUpperCase()] !== undefined)){
-    midi = notes.map((n, i) => {
-      const below = (STANDARD_TUNING[i] - PITCH_CLASSES[n.toUpperCase()]) % 12;
-      return STANDARD_TUNING[i] - below + (below > 6 ? 12 : 0);
-    });
-  }
+  const midi = parseTuningText(tuning) ?? STANDARD_TUNING;
   return midi.slice().reverse().map(m => NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1)).join(' ');
 }
 
