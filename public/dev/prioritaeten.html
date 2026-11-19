@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prioritäten der Griffe (Test)</title>
+<!--
+  Vergleicht Einteilungen der Griffe in Prioritäten (findGrips() in js/chordgrips.js) nebeneinander. Jede Variante in VARIANTS
+  legt fest, welche Priorität ein Griff hat (priority) und wie die Griffe innerhalb einer Priorität geordnet sind (compare):
+    Heute:     Priorität 1 bis 4 getrennt, innerhalb nach compareGrips().
+    3 und 4 zusammen: Priorität 4 wird Priorität 3; Priorität 3 und 4 stehen in einer Gruppe, gemeinsam nach compareGrips() sortiert.
+  Je Spalte steht oben, was der Akkorddialog zeigen würde (ohne Griffe des Katalogs): Priorität 1 und 2, bei weniger als sechs
+  aufgefüllt aus dem Rest in der Reihenfolge der Variante. Darunter alle Gruppen. Wer sich gegenüber "Heute" nach vorn oder hinten
+  verschiebt, ist farbig markiert; "vorher Priorität n" nennt die heutige Priorität. Hilfsmittel; gehört nicht zur Anwendung.
+-->
+<style>
+  :root{--up:#1a7f37; --down:#c62828; --line:#ccc; --bg:#f6f6f6;}
+  body{font:15px/1.4 system-ui, sans-serif; margin:0; color:#222; background:#fff;}
+  header{position:sticky; top:0; z-index:2; background:#fff; border-bottom:1px solid var(--line); padding:.5rem 1rem;
+    display:flex; flex-wrap:wrap; gap:.4rem 1rem; align-items:center;}
+  h1{font-size:1.15rem; margin:0;}
+  main{padding:1rem;}
+  button, input{font:inherit;}
+  button{cursor:pointer; border:1px solid #999; background:#fff; border-radius:6px; padding:.2rem .6rem;}
+  button:hover{background:var(--bg);}
+  #chords{display:flex; flex-wrap:wrap; gap:.3rem; margin:0 0 1rem;}
+  #chords button.current{background:#222; color:#fff;}
+  input[type=text]{padding:.2rem .4rem; width:8rem;}
+  .legend{display:flex; flex-wrap:wrap; gap:.4rem 1.2rem; font-size:.85rem; color:#444; margin-bottom:.8rem;}
+  .legend i{display:inline-block; width:.9rem; height:.9rem; border:3px solid var(--line); border-radius:3px; vertical-align:middle; margin-right:.3rem;}
+  #cols{display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:1rem; align-items:start;}
+  @media (max-width:760px){#cols{grid-template-columns:1fr;}}
+  .col{border:1px solid var(--line); border-radius:8px; padding:.6rem;}
+  .col h2{font-size:1rem; margin:0 0 .1rem;}
+  .col p{margin:0 0 .5rem; font-size:.82rem; color:#555;}
+  .col h3{font-size:.9rem; margin:.7rem 0 .3rem; border-top:1px solid #e5e5e5; padding-top:.4rem;}
+  .col h3.dialog{background:#eef3fb; border-top:0; padding:.25rem .4rem; border-radius:4px;}
+  .grips{display:flex; flex-wrap:wrap; gap:.3rem;}
+  .grip{border:3px solid var(--line); border-radius:6px; padding:.1rem; text-align:center; font:600 .72rem ui-monospace, monospace; width:5.6rem;}
+  .grip svg{display:block; height:5.5rem; width:auto; margin:0 auto;}
+  .grip.up{border-color:var(--up); background:#eef8f0;}
+  .grip.down{border-color:var(--down); background:#fdeeee;}
+  .grip small{display:block; font:500 .66rem system-ui, sans-serif; color:#555; min-height:1em;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Prioritäten der Griffe</h1>
+  <input type="text" id="own" aria-label="Eigener Akkord" placeholder="Akkord, z. B. Am7" autocomplete="off" spellcheck="false">
+  <button id="show">Zeigen</button>
+  <label><input type="checkbox" id="more"> mehr Griffe je Gruppe zeigen</label>
+</header>
+<main>
+  <div id="chords"></div>
+  <div class="legend">
+    <span><i style="border-color:var(--up); background:#eef8f0"></i>rückt gegenüber "Heute" nach vorn</span>
+    <span><i style="border-color:var(--down); background:#fdeeee"></i>rückt nach hinten</span>
+    <span><i></i>gleiche Stelle wie heute</span>
+    <span>Die Zahl unter dem Griff ist die Stelle in der Gruppe, dazu der tiefste gegriffene Bund.</span>
+  </div>
+  <div id="cols"></div>
+</main>
+<script type="module">
+import {chordDiagramSvg, escapeHtml} from '../js/base.js';
+import {compareGrips, findGrips} from '../js/chordgrips.js';
+import {parseChord} from '../js/chordtheory.js';
+
+const NAMES = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'Bb', 'Am', 'Em', 'Dm', 'Bm', 'F#m', 'C7', 'D7', 'E7', 'G7', 'A7', 'Am7', 'Em7', 'Dm7',
+  'Cmaj7', 'Fmaj7', 'Gmaj7', 'Csus4', 'Dsus4', 'Asus2', 'Cadd9', 'C6', 'C9', 'Cm7b5', 'Cdim', 'C5', 'C13', 'C/G', 'D/F#', 'G/B'];
+const SHOWN = 24;
+/** So viele Griffbilder passen im Akkorddialog in eine Reihe; so viele muss er mindestens zeigen. */
+const PER_ROW = 6;
+
+/**
+ * Die Varianten, die nebeneinander stehen. priority: Priorität eines gefundenen Griffs (1 = höchste); compare: Reihenfolge
+ * innerhalb einer Priorität (kleiner = besser). Die erste Variante ist die Grundlage der Markierungen.
+ */
+const VARIANTS = [
+  {
+    id: 'now', title: 'Heute',
+    text: 'Priorität 1 bis 4 getrennt, wie in docs/Akkorddialog.md (Abschnitt 4).',
+    priority: g => g.priority,
+    compare: (a, b) => compareGrips(a.features, b.features),
+  },
+  {
+    id: 'merged', title: 'Priorität 3 und 4 zusammen',
+    text: 'Priorität 4 wird Priorität 3: beide stehen in einer Gruppe, gemeinsam sortiert.',
+    priority: g => Math.min(g.priority, 3),
+    compare: (a, b) => compareGrips(a.features, b.features),
+  },
+];
+
+const byId = id => document.getElementById(id);
+let current = NAMES[0];
+
+/**
+ * Alle Griffe eines Akkords in der Reihenfolge einer Variante: erst nach Priorität, dann nach der Reihenfolge der Variante.
+ * @param {import('../js/chordgrips.js').FoundGrip[]} found Griffe
+ * @param {typeof VARIANTS[number]} variant Variante
+ * @returns {{g: import('../js/chordgrips.js').FoundGrip, p: number}[]} Griffe mit Priorität der Variante
+ */
+function arrange(found, variant){
+  return found.map(g => ({g, p: variant.priority(g)}))
+    .sort((a, b) => a.p - b.p || variant.compare(a.g, b.g) || a.g.grip.localeCompare(b.g.grip));
+}
+
+/**
+ * Das, was der Akkorddialog (ohne Katalog) zeigen würde: Priorität 1 und 2, bei weniger als sechs aufgefüllt aus dem Rest.
+ * @param {{g: object, p: number}[]} rows Griffe der Variante, geordnet
+ * @returns {{g: object, p: number}[]}
+ */
+function dialogRows(rows){
+  const list = rows.filter(r => r.p <= 2);
+  for(const r of rows){
+    if(list.length >= PER_ROW) break;
+    if(!list.includes(r)) list.push(r);
+  }
+  return list.slice(0, 4 * PER_ROW);
+}
+
+/** Zeigt den gewählten Akkord. */
+function show(){
+  const name = current;
+  document.querySelectorAll('#chords button').forEach(b => b.classList.toggle('current', b.dataset.name === name));
+  if(!parseChord(name)){
+    byId('cols').innerHTML = `<p>Der Name „${escapeHtml(name)}“ ist unbekannt.</p>`;
+    return;
+  }
+  const limit = byId('more').checked ? 400 : SHOWN;
+  const found = findGrips(name, {all: true});
+  const arranged = VARIANTS.map(v => arrange(found, v));
+  // Stelle insgesamt (Priorität, dann Reihenfolge) und heutige Priorität je Griff
+  const baseIndex = new Map(arranged[0].map((r, i) => [r.g.grip, i]));
+  const basePriority = new Map(arranged[0].map(r => [r.g.grip, r.p]));
+  const card = (r, k, label) => {
+    const index = k === 0 ? 0 : arranged[k].findIndex(x => x.g === r.g);
+    const delta = k === 0 ? 0 : baseIndex.get(r.g.grip) - index;
+    const cls = delta > 0 ? 'up' : delta < 0 ? 'down' : '';
+    const was = basePriority.get(r.g.grip);
+    const note = `${label}${k > 0 && was !== r.p ? ` · vorher Priorität ${was}` : ''}`;
+    return `<div class="grip ${cls}">${chordDiagramSvg(name, r.g.grip)}${escapeHtml(r.g.grip)}<small>${note} · Bund ${r.g.features.position}</small></div>`;
+  };
+  byId('cols').innerHTML = VARIANTS.map((variant, k) => {
+    const rows = arranged[k];
+    const dialog = dialogRows(rows);
+    const groups = [...new Set(rows.map(r => r.p))].sort();
+    const parts = groups.map(p => {
+      const list = rows.filter(r => r.p === p);
+      const cards = list.slice(0, limit).map((r, i) => card(r, k, `${i + 1}.`)).join('');
+      return `<h3>Priorität ${p} (${list.length})</h3><div class="grips">${cards}${list.length > limit ? `<span>… ${list.length - limit} weitere</span>` : ''}</div>`;
+    }).join('');
+    return `<section class="col"><h2>${escapeHtml(variant.title)}</h2><p>${escapeHtml(variant.text)}</p>`
+      + `<h3 class="dialog">Im Akkorddialog (ohne Katalog): ${dialog.length} Griffe</h3><div class="grips">${
+        dialog.map((r, i) => card(r, k, `${i + 1}. · Priorität ${r.p}`)).join('')}</div>${parts}</section>`;
+  }).join('');
+}
+
+byId('chords').innerHTML = NAMES.map(n => `<button data-name="${escapeHtml(n)}">${escapeHtml(n)}</button>`).join('');
+byId('chords').addEventListener('click', e => {
+  const b = e.target.closest('[data-name]');
+  if(!b) return;
+  current = b.dataset.name;
+  show();
+});
+byId('show').addEventListener('click', () => {
+  const name = byId('own').value.trim();
+  if(!name) return;
+  current = name;
+  show();
+});
+byId('own').addEventListener('keydown', e => { if(e.key === 'Enter') byId('show').click(); });
+byId('more').addEventListener('change', show);
+byId('cols').style.gridTemplateColumns = `repeat(${VARIANTS.length}, minmax(0, 1fr))`;
+show();
+</script>
+</body>
+</html>

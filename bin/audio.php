@@ -3,19 +3,32 @@
 /**
  * Holt für Lieder ohne Audiospur die Audiospur von YouTube und lädt sie als audio.mp3 auf den Server.
  *
- * Bearbeitet werden Lieder mit YouTube-URL in "Quelle für Audio-Datei" und ohne audio.mp3 auf dem Server. Wird im
- * Formular ein anderer Clip eingetragen, entfernt der Server die bisherige audio.mp3 (siehe update_song() in
- * api/lib/crud.php); das Lied hat dann wieder keine Audiospur. Das YouTube-Original bleibt hier im Backup-Ordner.
+ * Läuft lokal, weil dem Server yt-dlp und ffmpeg fehlen. Bearbeitet werden Lieder mit YouTube-URL in "Quelle für
+ * Audio-Datei" und ohne audio.mp3 auf dem Server. Lieder, die schon eine audio.mp3 haben, bleiben unberührt, auch wenn
+ * sie mit anderen Einstellungen (AUDIO_ARGS) entstanden sind; neu erzeugen lassen sie sich mit --override (alle) bzw. --only=SLUG --override.
+ *
+ * Wird im Formular ein anderer Clip eingetragen, entfernt der Server die bisherige audio.mp3, und der nächste Lauf holt
+ * die neue; ein Backup der alten gibt es auf dem Server nicht, das YouTube-Original bleibt aber hier im Backup-Ordner.
+ * Wird die URL nur gelöscht, bleibt die Audiospur.
  *
  * Ablauf je Lied:
  *   1. yt-dlp lädt die beste Audiospur nach <data>/backup/<slug>/youtube-<Video-ID>.<ext> (meist .webm; liegt sie
  *      dort schon, wird nicht erneut geladen).
- *   2. ffmpeg misst die Lautheit und wandelt in MP3 um (AUDIO_ARGS: Stereo, 56 kbit/s, 16 kHz wie Guitar Pro). Die
- *      Lautstärke wird nur als Ganzes auf TARGET_LUFS gebracht, höchstens bis TARGET_PEAK; die Dynamik bleibt. Am
- *      Anfang wird nichts abgeschnitten, sonst passen die Sync-Punkte in den Noten nicht mehr.
- *   3. Ergebnis nach <data>/songs/<slug>/audio.mp3, dann Upload per PUT api/audio.php.
+ *   2. ffmpeg misst die Lautheit und wandelt in MP3 um (AUDIO_ARGS: Stereo, 16 kHz, 56 kbit/s). Die
+ *      Lautstärke wird nur als Ganzes auf TARGET_LUFS gebracht, höchstens bis TARGET_PEAK; die Dynamik bleibt.
+ *   3. Die MP3 geht per PUT api/audio.php an den Server (lokal bleibt sie nicht liegen).
+ *
+ * Mit --transponieren=N wird die Audiospur um N Halbtöne verschoben (0 = Original). Eine vorhandene audio.mp3 wird nur
+ * mit --override ersetzt, sonst nie.
+ * ffmpeg benötigt für Das Transponieren den Filter `rubberband`. Fallback ist ein einfacherer Ersatz (asetrate+atempo),
+ * der bei großen Verschiebungen schlechter klingt.
+ * Prüfung, ob `rubberband` vorhanden ist: `ffmpeg -filters` (sollte `--enable-librubberband` anzeigen).
+ *
  * <data> ist --data, sonst DATA_DIR aus config.php, sonst der Ordner data/ neben bin/ (wird bei Bedarf angelegt).
- * Weicht die Länge um mehr als MAX_LENGTH_DIFF von der des Clips ab, wird trotzdem hochgeladen und gewarnt.
+ *
+ * Weicht die Länge um mehr als `MAX_LENGTH_DIFF` von der des Clips ab, wird trotzdem hochgeladen und gewarnt.
+ *
+ * Das portable Paket für einen anderen Windows-PC baut `build_audio_portable.cmd`.
  */
 
 if (isset($_SERVER['REQUEST_METHOD'])) {
@@ -38,11 +51,12 @@ if (is_file("$root/config.php")) {
 require_once "$root/public/api/lib/youtube.php"; // youtube_id()
 
 /**
- * Adresse des Gitarrenbuchs (ohne "/" am Ende); mit --remote=… abweichend. Später der Hetzner-Server.
+ * Adresse des Gitarrenbuchs (ohne "/" am Ende); mit --remote=… abweichend.
  *
  * @var string
  */
-const REMOTE_URL = 'https://gitarrenbuch.frank-rohlfing.de';
+// const REMOTE_URL = 'https://gitarrenbuch.frank-rohlfing.de'; // Hetzner-Server
+const REMOTE_URL = 'http://gitarrenbuch.test';
 
 /**
  * Basic-Auth-Benutzer, wenn --user fehlt.
@@ -74,11 +88,19 @@ const TARGET_LUFS = -16.0;
 const TARGET_PEAK = -1.5;
 
 /**
- * Format von audio.mp3 für ffmpeg (Ergebnis des PoC am Beispiel "Zombie": wie Guitar Pro, rund 2 MB für 5 Minuten).
+ * Format von audio.mp3 für ffmpeg: Stereo, 16 kHz, 56 kbit/s (rund 2 MB für 5 Minuten), wie bei den Audiospuren in
+ * Guitar-Pro-Dateien.
  *
  * @var string[]
  */
 const AUDIO_ARGS = ['-ac', '2', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '56k'];
+
+/**
+ * Größte Verschiebung bei --transponieren.
+ *
+ * @var int Halbtöne
+ */
+const MAX_SHIFT = 11;
 
 /**
  * Erlaubte Abweichung der Länge von audio.mp3 zur Länge des Clips (youtubeSeconds).
@@ -97,20 +119,26 @@ Audiospuren von YouTube holen und ins Gitarrenbuch laden
 
   Bearbeitet alle Songs mit YouTube-URL ("Quelle für Audio-Datei"), die noch keine audio.mp3 haben (nach dem
   Eintragen eines anderen Clips hat der Server die alte entfernt):
-  YouTube -> DATA\backup\<slug>\youtube-<ID>.<ext> -> DATA\songs\<slug>\audio.mp3 -> Upload (DATA: --data).
+  YouTube -> DATA\backup\<slug>\youtube-<ID>.<ext> -> MP3 -> Upload (DATA: --data).
 
     php bin/audio.php --password=… --dry-run     nur zeigen, was zu tun ist
     php bin/audio.php --password=…               holen, umwandeln, hochladen
     php bin/audio.php --update                   yt-dlp aktualisieren (YouTube ändert sich häufig)
+    php bin/audio.php --password=… --only=SLUG --transponieren=+2
+                                                 Audiospur um 2 Halbtöne höher (0 = Original); hat das
+                                                 Lied schon eine, nur zusammen mit --override
 
   Optionen
     --password=…    Basic-Auth-Passwort des Servers (oder Umgebungsvariable GITARRENBUCH_PASSWORD)
     --api-token=…   API-Token des Servers (oder GITARRENBUCH_API_TOKEN; Vorgabe: API_TOKEN aus config.php)
     --user=NAME     Basic-Auth-Benutzer, Vorgabe "frank"
     --remote=URL    Adresse des Gitarrenbuchs, Vorgabe https://gitarrenbuch.frank-rohlfing.de
-    --data=DIR      Datenordner für backup\ und songs\, wird bei Bedarf angelegt (Vorgabe: DATA_DIR aus
-                    config.php, sonst der Ordner data\ neben bin\)
+    --data=DIR      Datenordner für backup\, wird bei Bedarf angelegt (Vorgabe: DATA_DIR aus config.php, sonst der
+                    Ordner data\ neben bin\)
     --only=a,b      nur Songs, deren Slug so anfängt
+    --transponieren=N  Audiospur um N Halbtöne verschieben (-11 … +11, 0 = Original), Tempo und Länge bleiben;
+                    verlangt --only
+    --override      vorhandene audio.mp3 ersetzen
     --dry-run       nur zeigen, was zu tun ist
     --yes           ohne Rückfrage
     --update        yt-dlp aktualisieren und beenden
@@ -128,7 +156,7 @@ TXT;
  */
 $opt = ['remote' => REMOTE_URL, 'user' => REMOTE_DEFAULT_USER, 'password' => (string) getenv('GITARRENBUCH_PASSWORD'),
     'api-token' => (string) getenv('GITARRENBUCH_API_TOKEN') ?: (defined('API_TOKEN') ? API_TOKEN : ''),
-    'data' => defined('DATA_DIR') ? DATA_DIR : "$root/data", 'only' => '', 'dry-run' => false, 'yes' => false,
+    'data' => defined('DATA_DIR') ? DATA_DIR : "$root/data", 'only' => '', 'transponieren' => '', 'override' => false, 'dry-run' => false, 'yes' => false,
     'update' => false];
 /**
  * Argumente der Kommandozeile ohne Skriptnamen.
@@ -146,6 +174,24 @@ foreach ($args as $arg) {
         continue;
     }
     fwrite(STDERR, "Unbekannte Option: $arg\n\n" . HELP);
+    exit(1);
+}
+
+/**
+ * Halbtöne für --transponieren; null = normaler Lauf (Lieder ohne Audiospur holen).
+ *
+ * @var int|null $SHIFT
+ */
+$SHIFT = null;
+if ($opt['transponieren'] !== '') {
+    if (!preg_match('/^[+-]?\d{1,2}$/', $opt['transponieren']) || abs((int) $opt['transponieren']) > MAX_SHIFT) {
+        fwrite(STDERR, '--transponieren braucht eine ganze Zahl von -' . MAX_SHIFT . ' bis +' . MAX_SHIFT . ".\n");
+        exit(1);
+    }
+    $SHIFT = (int) $opt['transponieren'];
+}
+if ($SHIFT !== null && $opt['only'] === '') {
+    fwrite(STDERR, "--transponieren verlangt --only=SLUG, damit nicht alle Lieder verschoben werden.\n");
     exit(1);
 }
 
@@ -343,25 +389,47 @@ function download(string $url, string $dir): string
 }
 
 /**
- * Wandelt die geladene Audiospur in audio.mp3 um (AUDIO_ARGS, Lautstärke um $gain dB, ohne Metadaten).
+ * Audiofilter, der die Tonhöhe um Halbtöne verschiebt, ohne Tempo und Länge zu ändern.
+ *
+ * Bevorzugt "rubberband" (gute Qualität); hat die ffmpeg-Version ihn nicht, dient asetrate + atempo als Ersatz (klingt
+ * bei großen Verschiebungen schlechter).
+ *
+ * @param int $semitones Halbtöne, 0 = keine Verschiebung
+ * @return string Filterkette für -af, leer bei 0
+ */
+function pitch_filter(int $semitones): string
+{
+    if ($semitones === 0) {
+        return '';
+    }
+    $factor = 2 ** ($semitones / 12);
+    static $rubberband = null;
+    $rubberband ??= (function (): bool {
+        [, $out] = run(['ffmpeg', '-hide_banner', '-filters']);
+        return (bool) preg_match('/\brubberband\b/', $out);
+    })();
+    if ($rubberband) {
+        return sprintf('rubberband=pitch=%.6f', $factor);
+    }
+    return sprintf('asetrate=%d,aresample=%d,atempo=%.6f', (int) round(44100 * $factor), 44100, 1 / $factor);
+}
+
+/**
+ * Wandelt die geladene Audiospur in eine MP3 um (AUDIO_ARGS, Lautstärke um $gain dB, ohne Metadaten).
  *
  * @param string $src geladene Audiospur
- * @param string $target Ziel (audio.mp3)
+ * @param string $target Zieldatei, wird überschrieben
  * @param float $gain Lautstärkeänderung in dB (siehe loudness_gain())
+ * @param int $semitones Verschiebung der Tonhöhe in Halbtönen (siehe pitch_filter()), 0 = keine
  * @return void
  * @throws RuntimeException wenn ffmpeg scheitert
  */
-function encode(string $src, string $target, float $gain): void
+function encode(string $src, string $target, float $gain, int $semitones = 0): void
 {
-    $dir = dirname($target);
-    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
-        throw new RuntimeException("Ordner $dir konnte nicht angelegt werden");
-    }
-    $tmp = "$target.tmp.mp3";
     [$rc, , $err] = run(['ffmpeg', '-hide_banner', '-nostdin', '-y', '-i', $src, '-vn', '-map_metadata', '-1',
-        '-af', sprintf('volume=%.2fdB', $gain), ...AUDIO_ARGS, $tmp]);
-    if ($rc !== 0 || !rename($tmp, $target)) {
-        @unlink($tmp);
+        '-af', implode(',', array_filter([pitch_filter($semitones), sprintf('volume=%.2fdB', $gain)])),
+        ...AUDIO_ARGS, '-f', 'mp3', $target]);
+    if ($rc !== 0) {
         throw new RuntimeException('ffmpeg: ' . last_line($err));
     }
 }
@@ -377,7 +445,8 @@ try {
 $todo = [];
 $noUrl = [];
 foreach ($songs as $song) {
-    if (in_array('audio', $song['files'] ?? [], true)
+    // Eine vorhandene Audiospur wird nur mit --override ersetzt
+    if ((in_array('audio', $song['files'] ?? [], true) && !$opt['override'])
         || ($ONLY && !array_filter($ONLY, fn($p) => str_starts_with($song['slug'], $p)))) {
         continue;
     }
@@ -396,7 +465,8 @@ foreach ($todo as $song) {
 if ($noUrl) {
     echo "\nOhne Audio und ohne YouTube-URL (" . count($noUrl) . '): ' . implode(', ', $noUrl) . "\n";
 }
-echo "\n" . count($todo) . " Songs zu bearbeiten.\n";
+echo "\n" . count($todo) . ' Songs zu bearbeiten'
+    . ($SHIFT !== null ? sprintf(' (Audiospur um %+d Halbtöne)', $SHIFT) : '') . ".\n";
 if (!$todo || $opt['dry-run']) {
     exit(0);
 }
@@ -414,25 +484,27 @@ $ok = $failed = 0;
 $warnings = [];
 foreach ($todo as $song) {
     $slug = $song['slug'];
-    $target = "$DATA/songs/$slug/audio.mp3";
+    $target = (string) tempnam(sys_get_temp_dir(), 'gitarrenbuch-audio');
     try {
         $src = download($song['sources']['youtube'], "$DATA/backup/$slug");
         $gain = loudness_gain($src);
-        encode($src, $target, $gain);
+        encode($src, $target, $gain, $SHIFT ?? 0);
         $length = duration($target);
         $clip = $song['youtubeSeconds'] ?? null;
         if ($length !== null && $clip !== null && abs($length - $clip) > MAX_LENGTH_DIFF) {
             $warnings[] = sprintf('%s: audio.mp3 %.1f s, Clip laut YouTube %d s', $slug, $length, $clip);
         }
+        $size = (int) filesize($target);
         api('PUT', 'audio.php?slug=' . rawurlencode($slug), (string) file_get_contents($target), 'audio/mpeg');
+        printf("  ✓ %-55s %s, %+.1f dB, %.0f KB\n", $slug, $length !== null ? gmdate('i:s', (int) round($length)) : '?',
+            $gain, $size / 1024);
+        $ok++;
     } catch (RuntimeException $e) {
         echo "  ✗ $slug: {$e->getMessage()}\n";
         $failed++;
-        continue;
+    } finally {
+        @unlink($target);
     }
-    printf("  ✓ %-55s %s, %+.1f dB, %.0f KB\n", $slug, $length !== null ? gmdate('i:s', (int) round($length)) : '?',
-        $gain, filesize($target) / 1024);
-    $ok++;
 }
 
 echo "Fertig: $ok hochgeladen, $failed fehlgeschlagen.\n";

@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/instruments.php';
 require_once __DIR__ . '/slug.php';
 require_once __DIR__ . '/youtube.php';
 
@@ -30,7 +31,7 @@ class ConflictException extends RuntimeException
  *
  * @var string[]
  */
-const SONG_SOURCES = ['ultimateGuitar', 'youtube'];
+const SONG_SOURCES = ['youtube'];
 
 /**
  * Weitere Angaben aus der GP-Datei, beim Import 1:1 übernommen und in song.json als eigene Felder vor notes
@@ -50,6 +51,22 @@ const SONG_INFO_FIELDS = [
 ];
 
 /**
+ * Einstufungen eines Songs (Feld level in song.json): kann ich, übe ich gerade, kann ich nicht. Ohne Einstufung
+ * fehlt das Feld. Gesetzt wird sie wie der Favorit (Feld favorite) im Formular "Stammdaten" (update_song()); die
+ * Bezeichnungen stehen in js/base.js.
+ *
+ * @var string[]
+ */
+const SONG_LEVELS = ['can', 'practice', 'cannot'];
+
+/**
+ * Höchstlänge der Hinweise zur Spielweise auf dem Leadsheet (leadsheet.instructions, siehe api/leadsheet.php).
+ *
+ * @var int
+ */
+const LEADSHEET_TEXT_MAX = 5000;
+
+/**
  * Dateien im Liedordner, deren Vorhandensein die API als "files" mitliefert (Liste der Schlüssel der vorhandenen
  * Dateien). Wird bei jedem Lesen aus dem Dateisystem bestimmt und nicht in song.json gespeichert, damit es nicht
  * veralten kann.
@@ -59,7 +76,6 @@ const SONG_INFO_FIELDS = [
 const SONG_FILES = [
     'score' => 'score.atex',
     'audio' => 'audio.mp3',
-    'leadsheet' => 'leadsheet.json',
     'cover' => 'cover.jpg',
 ];
 
@@ -72,6 +88,18 @@ const SONG_FILES = [
 function song_dir(string $slug): string
 {
     return SONGS_DIR . '/' . $slug;
+}
+
+/**
+ * Absoluter Pfad zum Ordner mit dem hochgeladenen Rohmaterial eines Lieds (data/upload/<slug>, existiert nicht
+ * zwingend).
+ *
+ * @param string $slug Slug des Lieds
+ * @return string Ordnerpfad ohne "/" am Ende
+ */
+function upload_dir(string $slug): string
+{
+    return DATA_DIR . '/upload/' . $slug;
 }
 
 /**
@@ -94,8 +122,8 @@ function read_song_json(string $slug): ?array
 }
 
 /**
- * Schreibt $song als song.json (überschreibt eine vorhandene Datei vollständig). Die berechneten Felder files und
- * tracks werden nicht gespeichert.
+ * Schreibt $song als song.json (überschreibt eine vorhandene Datei vollständig). Die berechneten Felder files,
+ * tracks und instruments werden nicht gespeichert.
  *
  * @param string $slug Slug des Lieds, der Ordner muss existieren
  * @param array $song zu speichernde Felder
@@ -103,13 +131,30 @@ function read_song_json(string $slug): ?array
  */
 function write_song_json(string $slug, array $song): void
 {
-    unset($song['files'], $song['tracks']);
-    // Leeres sources muss als {} statt [] gespeichert werden (json_decode() liefert dafür ein leeres Array).
+    unset($song['files'], $song['tracks'], $song['instruments']);
+    // Leeres sources muss als {} statt [] gespeichert werden (json_decode() liefert dafür ein leeres Array), ebenso
+    // leadsheet.chords.
     $song['sources'] = (object) ($song['sources'] ?? []);
+    if (is_array($song['leadsheet'] ?? null) && array_key_exists('chords', $song['leadsheet'])) {
+        $song['leadsheet']['chords'] = (object) $song['leadsheet']['chords'];
+    }
     file_put_contents(
         song_dir($slug) . '/song.json',
         json_encode($song, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n"
     );
+}
+
+/**
+ * Angaben für das Leadsheet eines Lieds: das Feld leadsheet in song.json. Aufbau siehe api/leadsheet.php.
+ *
+ * @param string $slug Slug des Lieds
+ * @param array|null $song song.json, wenn schon gelesen
+ * @return array Angaben; leer ohne
+ */
+function read_leadsheet(string $slug, ?array $song = null): array
+{
+    $song ??= read_song_json($slug) ?? [];
+    return is_array($song['leadsheet'] ?? null) ? $song['leadsheet'] : [];
 }
 
 /**
@@ -150,24 +195,10 @@ function read_track_names(string $slug): array
 }
 
 /**
- * Rollen der Spuren: interner Name (so steht er in den Noten, ohne Groß-/Kleinschreibung) → Anzeige. Dieselbe Liste
- * steht als TRACK_ROLES in js/tracks.js.
- *
- * @var array<string, string>
- */
-const TRACK_ROLES = [
-    'vocal' => 'Gesang',
-    'strumming' => 'Schlagbegleitung',
-    'picking' => 'Zupfbegleitung',
-    'fingerstyle' => 'Fingerstyle',
-];
-
-/**
  * Liest die Spuren aus alphaTex, so weit die Konventionsprüfung sie braucht.
  *
  * @param string $tex Inhalt von score.atex
- * @return array<int, array{name: string, role: ?string, capo: int}> je Spur Name, Rolle (siehe TRACK_ROLES) und
- *               Capo (der erste im Abschnitt der Spur, 0 ohne)
+ * @return array<int, array{name: string, capo: int}> je Spur Name und Capo (der erste im Abschnitt der Spur, 0 ohne)
  */
 function read_score_tracks(string $tex): array
 {
@@ -177,11 +208,9 @@ function read_score_tracks(string $tex): array
         if (!preg_match('/^\\\\track\s*\(?\s*"((?:[^"\\\\]|\\\\.)*)"/', $part, $name)) {
             continue;
         }
-        $role = strtolower(trim(stripslashes($name[1])));
         preg_match('/\\\\capo\s+(\d+)/', $part, $capo);
         $tracks[] = [
             'name' => stripslashes($name[1]),
-            'role' => array_key_exists($role, TRACK_ROLES) ? $role : null,
             'capo' => (int) ($capo[1] ?? 0),
         ];
     }
@@ -191,16 +220,17 @@ function read_score_tracks(string $tex): array
 /**
  * Prüft, ob ein Song der Konvention aus "Spuren, Capo, Text und Akkorde" (README) entspricht. Abweichungen
  * korrigiert der Editor; bis dahin markiert die Oberfläche den Song rot und zeigt nur die wichtigste. Geprüft wird
- * nur, womit die App nicht von selbst zurechtkommt: ungleicher Capo, Sprungzeichen (D.S., D.C., Coda, Fine; im
- * Gitarrenbuch ausgeschrieben, die Ansicht "Text & Akkorde" kennt sie nicht), dann Spuren ohne Rolle. Wo Text und Akkorde
- * stehen, zählt nicht: Ohne Gesangs- bzw. Begleitspur nimmt die App die Spur mit dem meisten Text bzw. den meisten
- * Akkorden (lyricsTrack(), chordsTrack() in js/tracks.js).
+ * nur, womit die App nicht von selbst zurechtkommt: ungleicher Capo und Sprungzeichen (D.S., D.C., Coda, Fine; im
+ * Gitarrenbuch ausgeschrieben, die Ansicht "Text & Akkorde" kennt sie nicht). Spuren haben keine Rollen; Namen und
+ * Reihenfolge sind frei. Wo Text und Akkorde stehen, zählt hier nicht: Die App nimmt die Spur mit dem meisten Text
+ * bzw. den meisten Akkorden (lyricsTrack(), chordsTrack() in js/notation.js), der Editor meldet, wenn sie auch in
+ * anderen Spuren stehen.
  *
  * @param string $slug Slug des Lieds
  * @return array<int, array{label: string, hint: string, detail: string}> Abweichungen, die wichtigste zuerst: kurze
- *               Bezeichnung (z. B. "Spur ohne Rolle", auf der Kachel), Erklärung (Tooltip der Kachel, z. B. "ohne Rolle:
- *               „Guitar“") und die betroffenen Spuren (im Song hinter der Bezeichnung, z. B. "„Guitar“"); leer, wenn
- *               alles passt oder es keine Noten gibt
+ *               Bezeichnung (z. B. "Capo ungleich", auf der Kachel), Erklärung (Tooltip der Kachel) und die
+ *               Einzelheiten (im Song hinter der Bezeichnung, z. B. "„picking“ 0, „strumming“ 2"); leer, wenn alles
+ *               passt oder es keine Noten gibt
  */
 function read_score_issues(string $slug): array
 {
@@ -228,25 +258,18 @@ function read_score_issues(string $slug): array
             'detail' => $detail,
         ];
     }
-    $unnamed = array_filter($tracks, fn(array $t) => $t['role'] === null);
-    if ($unnamed) {
-        $detail = implode(', ', array_map(fn(array $t) => "„{$t['name']}“", $unnamed));
-        $issues[] = [
-            'label' => count($unnamed) === 1 ? 'Spur ohne Rolle' : 'Spuren ohne Rolle',
-            'hint' => "ohne Rolle: $detail",
-            'detail' => $detail,
-        ];
-    }
     return $issues;
 }
 
 /**
- * Ergänzt $song um die berechneten Felder files (welche Dateien im Liedordner vorhanden sind), tracks und issues.
+ * Ergänzt $song um die berechneten Felder files (welche Dateien im Liedordner vorhanden sind), tracks, instruments
+ * und issues.
  *
  * @param string $slug Slug des Lieds
  * @param array $song Inhalt von song.json
  * @return array $song mit files (Liste der Schlüssel aus SONG_FILES, deren Datei vorhanden ist, z. B.
- *               ["score", "audio", "cover"]), tracks (Spurnamen, siehe read_track_names()), issues (Abweichungen
+ *               ["score", "audio", "cover"]), tracks (Spurnamen, siehe read_track_names()), instruments (MIDI-Programme der Spuren,
+ *               siehe read_track_programs()), issues (Abweichungen
  *               von der Konvention, siehe read_score_issues()) und sources als Objekt
  */
 function with_file_flags(string $slug, array $song): array
@@ -255,6 +278,7 @@ function with_file_flags(string $slug, array $song): array
     $song['sources'] = (object) ($song['sources'] ?? []);
     $song['files'] = array_keys(array_filter(SONG_FILES, fn(string $name) => is_file($dir . '/' . $name)));
     $song['tracks'] = read_track_names($slug);
+    $song['instruments'] = read_track_programs($slug);
     $song['issues'] = read_score_issues($slug);
     return $song;
 }
@@ -351,13 +375,22 @@ function validate_song_input(array $data): array
     if (isset($data['youtubeSeconds']) && (!is_int($data['youtubeSeconds']) || $data['youtubeSeconds'] < 0)) {
         $errors[] = 'youtubeSeconds muss eine ganze Zahl ab 0 sein';
     }
+    if (isset($data['favorite']) && !is_bool($data['favorite'])) {
+        $errors[] = 'favorite muss true oder false sein';
+    }
+    if (isset($data['level']) && !in_array($data['level'], SONG_LEVELS, true)) {
+        $errors[] = 'level muss ' . implode(', ', SONG_LEVELS) . ' oder null sein';
+    }
+    if (isset($data['trackDefaults']) && !array_is_list((array) $data['trackDefaults'])) {
+        $errors[] = 'trackDefaults muss eine Liste sein';
+    }
 
     return $errors;
 }
 
 /**
  * Baut aus rohen Request-Daten die vom Store verwalteten Felder, mit Defaults/Typumwandlung. Tonart, Capo,
- * Stimmung und Tempo gehören nicht dazu: Sie stehen nur in den Noten. Eine YouTube-Quelle wird auf
+ * Tuning und Tempo gehören nicht dazu: Sie stehen nur in den Noten. Eine YouTube-Quelle wird auf
  * "https://www.youtube.com/watch?v=<ID>" gekürzt (siehe youtube_watch_url()). youtubeSeconds ist die Länge dieses
  * Clips; das Formular ermittelt sie nur, wenn sich die URL ändert, und speichert sie hier, damit YouTube nicht bei
  * jedem Öffnen abgefragt wird. Ohne YouTube-Quelle ist sie null.
@@ -447,6 +480,12 @@ function create_song(array $data): array
         'created' => $now,
         'updated' => $now,
     ]);
+    // Die Anweisungen aus der GP-Datei sind Hinweise des Tab-Autors zur Spielweise: Sie belegen die Spielweise auf dem
+    // Leadsheet vor. Das Feld instructions oben bleibt, wie es aus der Datei kam.
+    if (($fields['instructions'] ?? null) !== null) {
+        $song['leadsheet'] = ['patterns' => [], 'tabs' => [], 'chords' => [], 'links' => [],
+            'instructions' => mb_substr($fields['instructions'], 0, LEADSHEET_TEXT_MAX)];
+    }
 
     write_song_json($slug, $song);
     return with_file_flags($slug, $song);
@@ -499,6 +538,10 @@ function update_song(string $slug, array $data): array
         if (!rename($oldDir, $newDir)) {
             throw new RuntimeException('Umbenennen des Song-Ordners fehlgeschlagen');
         }
+        if (is_dir(upload_dir($slug)) && !rename(upload_dir($slug), upload_dir($newSlug))) {
+            rename($newDir, $oldDir);
+            throw new RuntimeException('Umbenennen des Upload-Ordners fehlgeschlagen');
+        }
     }
 
     // Anderer YouTube-Clip: Die Audiospur passt nicht mehr dazu (und die Sync-Punkte meist auch nicht). Wird die URL
@@ -511,6 +554,35 @@ function update_song(string $slug, array $data): array
     // $fields zweimal: Das erste bestimmt die Reihenfolge der Schlüssel (neu hinzugekommene Felder landen so an
     // ihrem Platz statt am Ende), das zweite die Werte. Übrige Felder aus $existing (created usw.) bleiben erhalten.
     $song = array_merge($fields, $existing, $fields, ['slug' => $newSlug, 'updated' => date('c')]);
+    // Einstufung und Favorit (Formular "Stammdaten"): nur gesetzt gespeichert, kein "favorite": false und kein
+    // "level": null bei jedem Song. Fehlen sie im Request (z. B. Aufruf per Skript), bleiben die gespeicherten.
+    if (array_key_exists('favorite', $data)) {
+        if ($data['favorite']) {
+            $song['favorite'] = true;
+        } else {
+            unset($song['favorite']);
+        }
+    }
+    if (array_key_exists('level', $data)) {
+        if ($data['level'] !== null) {
+            $song['level'] = $data['level'];
+        } else {
+            unset($song['level']);
+        }
+    }
+    // Vorgaben je Spur für Anzeigen und Hören (Reiter "Spuren" im Editor): je Spur show und mute, in der Reihenfolge der
+    // Spuren. Fehlt das Feld im Request, bleiben die gespeicherten; eine leere Liste löscht sie.
+    if (array_key_exists('trackDefaults', $data)) {
+        $defaults = array_map(
+            fn($t) => ['show' => (bool) ($t['show'] ?? true), 'mute' => (bool) ($t['mute'] ?? false)],
+            array_values((array) $data['trackDefaults'])
+        );
+        if ($defaults) {
+            $song['trackDefaults'] = $defaults;
+        } else {
+            unset($song['trackDefaults']);
+        }
+    }
     write_song_json($newSlug, $song);
     return with_file_flags($newSlug, $song);
 }
@@ -551,7 +623,7 @@ function touch_song(string $slug): array
 }
 
 /**
- * Entfernt den kompletten Liedordner (inkl. orig/).
+ * Entfernt den kompletten Liedordner und das hochgeladene Rohmaterial des Lieds (upload/<slug>/).
  *
  * @param string $slug Slug des Lieds
  * @return void
@@ -563,6 +635,9 @@ function delete_song(string $slug): void
         throw new NotFoundException("Song '$slug' nicht gefunden");
     }
     remove_directory_recursive(song_dir($slug));
+    if (is_dir(upload_dir($slug))) {
+        remove_directory_recursive(upload_dir($slug));
+    }
 }
 
 /**

@@ -1,25 +1,34 @@
 /**
+ * Die Ansicht "Text & Akkorde" und ihr ChordPro-Export.
+ */
+
+import {chordDiagramSvg, chordKey, diagramFirstFret, escapeHtml, gripOf, loadChordLibraryOrEmpty, parseGrip} from './base.js';
+import {
+  chordsTrack, endsLyricsLine, loadAlphaTab, lyricsTrack, mergeChords, parseScore, playOrder, readScoreInfo,
+} from './notation.js';
+
+/** @typedef {import('../../types/alphatab').model.Score} Score */
+/** @typedef {import('../../types/alphatab').model.MasterBar} MasterBar */
+/** @typedef {import('./base.js').ChordLibrary} ChordLibrary */
+
+// --------------------------------------------------------------------------------------------------------------------
+// Text und Akkorde
+// --------------------------------------------------------------------------------------------------------------------
+
+/**
  * Ansicht "Text & Akkorde": der Songtext in Zeilen, die Akkorde genau über ihrer Silbe, gegliedert nach Abschnitten,
  * darüber die Griffbilder. Alles wird aus den Noten erzeugt: der Text aus der Gesangsspur (lyricsTrack() in
- * tracks.js), die Akkorde aus allen Spuren zusammengetragen, bei verschiedenen Akkorden an einer Stelle aus der
- * ersten Begleitspur (mergeChords() in tracks.js, dieselbe Regel wie über den Noten), in Abspielreihenfolge mit
+ * notation.js), die Akkorde aus allen Spuren zusammengetragen, bei verschiedenen Akkorden an einer Stelle aus der
+ * ersten Begleitspur (mergeChords() in notation.js, dieselbe Regel wie über den Noten), in Abspielreihenfolge mit
  * Wiederholungen.
  *
  * Jeder Takt des Songs kommt vor, wie in den handgebauten Leadsheets: In Abschnitten mit Text steht über der ersten
  * Silbe eines Takts ein Taktstrich "|" (mit Akkord, wenn dort einer angeschlagen wird), Takte ohne Silbe hängen als
  * "|Am |Asus2" an der Zeile. Abschnitte ganz ohne Text (Intro, Solo) stehen als Taktzeile "| G | % | C |" da.
- * Zeilenumbrüche stehen als "\n" am Ende der letzten Silbe einer Zeile in den Noten (LYRICS_BREAK in tracks.js,
+ * Zeilenumbrüche stehen als "\n" am Ende der letzten Silbe einer Zeile in den Noten (LYRICS_BREAK in notation.js,
  * gesetzt im Reiter "Liedtext"); hat eine Strophe keine, ergeben sie sich aus Satzzeichen, Pausen und Abschnitten.
- * buildTextModel() kommt ohne DOM aus und läuft deshalb auch in Node.
+ * buildTextModel() kommt ohne DOM aus.
  */
-
-import {escapeHtml} from './api.js';
-import {gripOf} from './chords.js';
-import {chordDiagramSvg} from './svg.js';
-import {chordsTrack, endsLyricsLine, lyricsTrack, mergeChords} from './tracks.js';
-
-/** @typedef {import('../../types/alphatab').model.Score} Score */
-/** @typedef {import('../../types/alphatab').model.MasterBar} MasterBar */
 
 /**
  * Silbe mit absoluter Zeit in Abspielreihenfolge. br: Die Silbe beendet eine Zeile (gespeicherter Zeilenumbruch);
@@ -47,15 +56,22 @@ import {chordsTrack, endsLyricsLine, lyricsTrack, mergeChords} from './tracks.js
 
 /**
  * Zeile der Ansicht: Text mit Akkorden und Taktstrichen (parts) oder eine Taktzeile in einem Abschnitt ohne Text
- * (bars); closed: Die Zeile endet mit dem Ende eines Takts (die nächste beginnt mit einem neuen Takt).
- * @typedef {{t: number, parts?: LinePart[], bars?: BarCell[], closed?: boolean}} TextLine
+ * (bars); closed: Die Zeile endet mit dem Ende eines Takts (die nächste beginnt mit einem neuen Takt). hint: Die
+ * Zeile ist ein Hinweis an Stelle ausgelassener Takte (nur auf dem Leadsheet, applyCuts() in sheet.js).
+ * @typedef {{t: number, parts?: LinePart[], bars?: BarCell[], closed?: boolean, hint?: string}} TextLine
+ */
+
+/**
+ * Ein Abschnitt der Ansicht; start/end: Zeitbereich in Ticks (Abspielreihenfolge, Ende ausschließlich), mit einem Auftakt davor.
+ * @typedef {{name: string, lines: TextLine[], start: number, end: number}} TextSection
  */
 
 /**
  * Inhalt der Ansicht.
  * @typedef {Object} TextModel
- * @property {{name: string, lines: TextLine[]}[]} sections Abschnitte in Abspielreihenfolge (name leer vor dem
- *   ersten Marker)
+ * @property {TextSection[]} sections Abschnitte in
+ *   Abspielreihenfolge (name leer vor dem ersten Marker); start/end: Zeitbereich in Ticks (Abspielreihenfolge, Ende
+ *   ausschließlich), mit einem Auftakt davor
  * @property {{name: string, grip: string}[]} chords Griffbilder der Akkorde in der Reihenfolge des ersten Anschlags
  * @property {{t: number, name: string}[]} chordTimes alle Akkordwechsel in Abspielreihenfolge (t in Ticks wie das MIDI),
  *   z. B. für die Anzeige des aktuellen Akkords
@@ -80,42 +96,21 @@ const LINE_COMMA_SYLLABLES = 6;
 const BARS_PER_LINE = 8;
 
 /**
- * Takte in Abspielreihenfolge: Wiederholungen ausgeschrieben, Volta-Klammern beachtet (Sprünge wie D.S. al Coda
- * nicht).
+ * Takte in Abspielreihenfolge (playOrder() in notation.js: Wiederholungen und Volta-Klammern, Sprünge wie D.S.
+ * al Coda nicht) mit ihrer Zeit: t Beginn, end Ende in Ticks, gezählt ab dem Anfang des
+ * Songs in Abspielreihenfolge (wie TextLine.t und die Zeitbereiche der Abschnitte). Für "Abschnitte vergleichen"
+ * (sectionBars() in sheet.js), das so vom Zeitbereich eines Abschnitts zu seinen Takten kommt.
  * @param {Score} score Noten
- * @returns {{mb: MasterBar, pass: number}[]} Takt und Durchgang (1 beim ersten Mal)
+ * @returns {{mb: MasterBar, pass: number, t: number, end: number}[]}
  */
-function playOrder(score){
-  const out = [];
-  const bars = score.masterBars;
-  /** @type {Map<number, number>} */
-  const passes = new Map();
-  let i = 0;
-  let start = 0;
-  let pass = 1;
-  // Schutz gegen Endlosschleifen bei widersprüchlichen Wiederholungszeichen.
-  for(let guard = 0; i < bars.length && guard < 10000; guard++){
-    const mb = bars[i];
-    if(mb.isRepeatStart && pass === 1) start = i;
-    if(mb.alternateEndings && !(mb.alternateEndings & (1 << (pass - 1)))){
-      i++;
-      continue;
-    }
-    out.push({mb, pass});
-    if(mb.isRepeatEnd){
-      const done = passes.get(mb.index) ?? 1;
-      if(done < mb.repeatCount){
-        passes.set(mb.index, done + 1);
-        pass = done + 1;
-        i = start;
-        continue;
-      }
-      passes.delete(mb.index);
-      pass = 1;
-    }
-    i++;
-  }
-  return out;
+export function playTimeline(score){
+  let time = 0;
+  return playOrder(score).map(({bar, pass}) => {
+    const mb = score.masterBars[bar];
+    const t = time;
+    time += mb.calculateDuration();
+    return {mb, pass, t, end: time};
+  });
 }
 
 /**
@@ -125,7 +120,7 @@ function playOrder(score){
  * @param {number} pass Durchgang
  * @returns {number} Index der Strophe, -1, wenn keine Silbe
  */
-function verseFor(lyrics, pass){
+export function verseFor(lyrics, pass){
   if(lyrics[pass - 1]?.trim()) return pass - 1;
   return !lyrics.slice(1).some(s => s?.trim()) && lyrics[0]?.trim() ? 0 : -1;
 }
@@ -198,7 +193,7 @@ function splitPhrases(syllables, sections, barAt){
  * Wiederholungen), Silben eines Worts mit Bindestrich ("Frank-" "furt" → "Frank-furt"). Die Zeilen sind umbrochen wie
  * in der Ansicht "Text & Akkorde" (splitPhrases()). Vor jedem Abschnitt steht sein Name in einer eigenen Zeile, z. B.
  * "[Verse]", auch vor Abschnitten ohne Text (Intro, Solo), davor eine Leerzeile. Diese Zeilen teilen den Text beim
- * Verteilen auf die Schläge in Abschnitte (setLyricsText() in score-edit.js).
+ * Verteilen auf die Schläge in Abschnitte (setLyricsText() in notation.js).
  * @param {Score} score Noten
  * @param {import('../../types/alphatab').model.Track} track Spur mit dem Text
  * @returns {string} Text mit Zeilenumbrüchen
@@ -286,7 +281,7 @@ function layoutLyrics(score, track){
 export function buildTextModel(score){
   const textTrack = lyricsTrack(score);
   const chordTrack = chordsTrack(score);
-  /** @type {Map<number, import('./tracks.js').MergedChord[]>} Akkorde je Takt (Index des Mastertakts) */
+  /** @type {Map<number, import('./notation.js').MergedChord[]>} Akkorde je Takt (Index des Mastertakts) */
   const barChords = new Map();
   for(const merged of mergeChords(score)){
     const index = merged.beat.voice.bar.index;
@@ -306,10 +301,9 @@ export function buildTextModel(score){
   /** @type {Map<string, string>} */
   const grips = new Map();
   const explicit = versesWithBreaks(textTrack);
-  let time = 0;
-  for(const {mb, pass} of playOrder(score)){
-    const length = mb.calculateDuration();
-    bars.push({t: time, end: time + length, beats: mb.timeSignatureNumerator});
+  const timeline = playTimeline(score);
+  for(const {mb, pass, t: time, end} of timeline){
+    bars.push({t: time, end, beats: mb.timeSignatureNumerator});
     if(mb.section) sections.push({t: time, name: (mb.section.text || mb.section.marker || '').replace(/^\[|]$/g, '')});
     for(const voice of textTrack?.staves[0].bars[mb.index]?.voices ?? []) for(const beat of voice.beats){
       const verse = verseFor(beat.lyrics ?? [], pass);
@@ -321,7 +315,6 @@ export function buildTextModel(score){
       chords.push({t, name: chord.name});
       if(!grips.has(chord.name)) grips.set(chord.name, chord.strings.some(f => f >= 0) ? gripOf(chord) : '');
     }
-    time += length;
   }
   chords.sort((a, b) => a.t - b.t);
   syllables.sort((a, b) => a.t - b.t);
@@ -411,8 +404,11 @@ export function buildTextModel(score){
     if(!out.length || out.at(-1).ref !== item.section) out.push({ref: item.section, name: item.section?.name ?? '', lines: []});
     out.at(-1).lines.push(item.line);
   }
+  // Zeitbereich je Abschnitt: von seiner ersten Zeile bis zur ersten des nächsten (ein Auftakt gehört so schon zum
+  // neuen Abschnitt, wie in der Ansicht). Damit findet "Abschnitte vergleichen" zum Abschnitt seine Takte.
+  const songEnd = timeline.at(-1)?.end ?? 0;
   return {
-    sections: out.map(({name, lines}) => ({name, lines})),
+    sections: out.map(({name, lines}, i) => ({name, lines, start: lines[0].t, end: out[i + 1]?.lines[0].t ?? songEnd})),
     chords: [...grips].map(([name, grip]) => ({name, grip})),
     chordTimes: chords,
     lyricsTrack: syllables.length ? textTrack.name : '',
@@ -423,7 +419,7 @@ export function buildTextModel(score){
 // noinspection JSUnusedGlobalSymbols: für Leadsheet und Druck, noch ohne Aufrufer
 /**
  * Alle Griffbilder des Songs in der Reihenfolge des ersten Anschlags. Für Leadsheet und Druck gedacht; der Player
- * zeigt nur den aktuellen Akkord (seit 31.10.2026).
+ * zeigt nur den aktuellen Akkord.
  * @param {TextModel} model Inhalt aus buildTextModel()
  * @returns {string} HTML, leer ohne Griffbilder
  */
@@ -437,8 +433,9 @@ export function renderChordDiagrams(model){
  * über ihr, und lange Zeilen brechen auf schmalen Bildschirmen zwischen den Silben um. Jeder Teil trägt seine Zeit
  * (data-t, Ticks in Abspielreihenfolge), ein Taktanfang zusätzlich data-bar; daran hebt der Player beim Abspielen
  * den aktuellen Takt und die aktuelle Silbe hervor. Taktzeilen sehen aus wie die
- * Akkordzeile einer Textzeile, nur ohne Text.
- * @param {TextModel} model Inhalt aus buildTextModel()
+ * Akkordzeile einer Textzeile, nur ohne Text. Ein Abschnitt kann einen Zusatz neben dem Namen tragen (note, z. B.
+ * "wie oben" oder "2×" auf dem Leadsheet, siehe collapseSections() in sheet.js).
+ * @param {{sections: {name: string, lines: TextLine[], note?: string}[]}} model Inhalt aus buildTextModel()
  * @returns {string} HTML
  */
 export function renderTextView(model){
@@ -447,6 +444,7 @@ export function renderTextView(model){
   /** @type {(p: LinePart) => string} */
   const chordHtml = p => (p.bar ? barline : '') + escapeHtml(p.chords.join(' '));
   const line = l => {
+    if(l.hint !== undefined) return `<div class="tv-line tv-hint">${escapeHtml(l.hint)}</div>`;
     const parts = l.bars ? l.bars.map(b => ({t: b.t, text: '', bar: true, chords: b.chords})) : l.parts;
     // Ein Strich schließt die Zeile, wenn mit ihr ein Takt endet.
     const close = l.closed ? `<span class="tv-part tv-empty"><span class="tv-chord">${barline}</span><span class="tv-syl"> </span></span>` : '';
@@ -465,8 +463,161 @@ export function renderTextView(model){
   return `
     ${model.sections.map(s => `
       <section class="tv-section">
-        ${s.name ? `<h3>${escapeHtml(s.name)}</h3>` : ''}
+        ${s.name ? `<h3>${escapeHtml(s.name)}${s.note ? ` <span class="tv-note">${escapeHtml(s.note)}</span>` : ''}</h3>`
+          : ''}
         ${s.lines.map(line).join('')}
       </section>`).join('')}
   `;
+}
+
+// --------------------------------------------------------------------------------------------------------------------
+// ChordPro-Export
+// --------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Export als ChordPro (.cho), wie es in der Community üblich ist (chordpro.org): Kopfangaben als Direktiven, Akkorde
+ * in eckigen Klammern vor ihrer Silbe ("[G]warum hast du nichts ge[Am]lernt?"), Abschnitte als Umgebungen
+ * (start_of_verse, start_of_chorus, start_of_bridge mit label). Takte kennt ChordPro im Text nicht; sie fallen dort
+ * weg. Abschnitte ganz ohne Text (Intro, Solo) werden zu Rastern (start_of_grid) mit einer Zelle je Schlag, so
+ * bleiben dort Takte und die Lage der Wechsel erhalten.
+ *
+ * Inhalt wie in der Ansicht "Text & Akkorde" (buildTextModel() in textview.js): Text aus der Gesangsspur, Akkorde
+ * aus allen Spuren nach derselben Regel wie über den Noten (mergeChords() in notation.js), Wiederholungen
+ * ausgeschrieben. Griffe, die vom Akkordkatalog abweichen oder dort
+ * fehlen, kommen als {define} dazu.
+ */
+
+/** Takte je Zeile eines Rasters. */
+const GRID_BARS_PER_ROW = 4;
+
+/**
+ * Wert einer Direktive: Zeilenumbrüche und geschweifte Klammern würden die Direktive beenden.
+ * @param {*} value Wert
+ * @returns {string} einzeilig, ohne { und }
+ */
+function directiveValue(value){
+  return String(value).replace(/[\r\n]+/g, ' ').replace(/[{}]/g, '').trim();
+}
+
+/**
+ * Umgebung eines Abschnitts nach seinem Namen.
+ * @param {string} name Name des Abschnitts, z. B. "Chorus 1", "Strophe 2", "Bridge"
+ * @returns {string} "chorus", "bridge" oder "verse"
+ */
+function environmentOf(name){
+  if(/chorus|refrain/i.test(name)) return 'chorus';
+  if(/bridge/i.test(name)) return 'bridge';
+  return 'verse';
+}
+
+/**
+ * {define} eines Griffs, z. B. "{define: Bm base-fret 2 frets x 1 3 3 2 1}". ChordPro zählt die Bünde ab dem
+ * Grundbund (1 = base-fret).
+ * @param {string} name Akkordname
+ * @param {string} grip Griff von der tiefen E-Saite aus, z. B. "x24432"
+ * @returns {string} Direktive
+ */
+function defineLine(name, grip){
+  const frets = parseGrip(grip);
+  const base = diagramFirstFret(frets);
+  const cells = frets.map(f => f < 0 ? 'x' : f === 0 ? '0' : String(f - base + 1));
+  return `{define: ${directiveValue(name)} base-fret ${base} frets ${cells.join(' ')}}`;
+}
+
+/**
+ * Textzeile als ChordPro: Akkorde in Klammern vor ihrer Silbe, Silben eines Worts zusammengesetzt. Takte ohne Silbe
+ * bleiben als Akkorde mit Leerzeichen stehen ("lernt? [Asus2] [Am]"), Taktstriche fallen weg.
+ * @param {TextLine} line Zeile mit parts
+ * @returns {string} Zeile, leer, wenn sie weder Text noch Akkorde hat
+ */
+function lyricLine(line){
+  let out = '';
+  for(const p of line.parts){
+    out += p.chords.map(c => `[${c}]`).join('');
+    if(p.text) out += p.text.endsWith('-') ? p.text.slice(0, -1) : p.text + ' ';
+    else if(p.chords.length) out += ' ';
+  }
+  return out.trimEnd();
+}
+
+/**
+ * Taktzeilen als Raster-Zeilen: je Takt so viele Zellen wie Schläge, der Akkord in der Zelle seines Schlags, sonst
+ * "."; mehrere Akkorde auf einem Schlag mit "~" verbunden.
+ * @param {TextLine[]} lines Taktzeilen eines Abschnitts
+ * @returns {string[]} Zeilen wie "| C . G/B . | Am . F . |"
+ */
+function gridRows(lines){
+  const bars = lines.flatMap(l => l.bars);
+  const rows = [];
+  for(let i = 0; i < bars.length; i += GRID_BARS_PER_ROW){
+    const cells = bars.slice(i, i + GRID_BARS_PER_ROW).map(bar => {
+      const beats = Array.from({length: bar.beats}, () => []);
+      bar.chords.forEach((name, k) => {
+        const beat = Math.min(bar.beats - 1, Math.floor(bar.at[k] / (bar.length / bar.beats)));
+        beats[beat].push(name);
+      });
+      return beats.map(b => b.length ? b.join('~') : '.').join(' ');
+    });
+    rows.push(`| ${cells.join(' | ')} |`);
+  }
+  return rows;
+}
+
+/**
+ * Erzeugt den Inhalt einer ChordPro-Datei.
+ * @param {TextModel} model Inhalt der Ansicht "Text & Akkorde"
+ * @param {{title: string, artist?: ?string}} song Titel und Interpret
+ * @param {{key: string, shapeKey: string, capo: number, tempo: number, time: string}} info Tonart (klingend und der
+ *   Griffe), Capo, Tempo und Taktart, z. B. time "4/4"
+ * @param {ChordLibrary} library Akkordkatalog; Griffe, die davon abweichen, kommen als {define} dazu
+ * @returns {string} ChordPro
+ */
+export function toChordPro(model, song, info, library){
+  const out = [`{title: ${directiveValue(song.title)}}`];
+  if(song.artist) out.push(`{artist: ${directiveValue(song.artist)}}`);
+  // Die Akkorde sind Griffnamen relativ zum Capo; {key} ist deshalb die Tonart der Griffe.
+  if(info.shapeKey) out.push(`{key: ${info.shapeKey}}`);
+  if(info.capo) out.push(`{capo: ${info.capo}}`);
+  if(info.tempo) out.push(`{tempo: ${info.tempo}}`);
+  if(info.time) out.push(`{time: ${info.time}}`);
+
+  const defines = model.chords.filter(c => c.grip && library[chordKey(c.name)]?.[0] !== c.grip);
+  if(defines.length) out.push('', ...defines.map(c => defineLine(c.name, c.grip)));
+
+  for(const section of model.sections){
+    const label = section.name ? `: label="${directiveValue(section.name).replace(/"/g, "'")}"` : '';
+    const hasText = section.lines.some(l => l.parts);
+    const env = hasText ? environmentOf(section.name) : 'grid';
+    const body = hasText
+      ? section.lines.map(l => l.bars ? gridRows([l]).join('\n') : lyricLine(l)).filter(Boolean)
+      : gridRows(section.lines);
+    if(!body.length) continue;
+    out.push('', `{start_of_${env}${label}}`, ...body, `{end_of_${env}}`);
+  }
+  return out.join('\n') + '\n';
+}
+
+/**
+ * Erzeugt eine ChordPro-Datei für den Download.
+ * @param {import('./base.js').Song} song Song
+ * @param {string} tex Inhalt von score.atex
+ * @returns {Promise<File>} Datei, benannt "Interpret - Titel.cho"
+ */
+export async function exportChordProFile(song, tex){
+  const alphaTab = await loadAlphaTab();
+  const score = parseScore(alphaTab, tex);
+  const info = readScoreInfo(alphaTab, score);
+  // Die häufigste Taktart; der erste Takt ist oft ein kürzerer Auftakt.
+  /** @type {Map<string, number>} */
+  const times = new Map();
+  for(const mb of score.masterBars){
+    const t = `${mb.timeSignatureNumerator}/${mb.timeSignatureDenominator}`;
+    times.set(t, (times.get(t) ?? 0) + 1);
+  }
+  const time = [...times].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+  // Ohne Katalog (Netzfehler) kommen alle Griffe als {define} in die Datei.
+  const library = await loadChordLibraryOrEmpty();
+  const text = toChordPro(buildTextModel(score), song, {...info, time}, library);
+  const name = [song.artist, song.title].filter(Boolean).join(' - ').replace(/[\\/:*?"<>|]/g, '') || 'Song';
+  return new File([text], `${name}.cho`, {type: 'text/plain;charset=utf-8'});
 }

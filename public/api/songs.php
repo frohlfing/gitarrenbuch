@@ -3,7 +3,7 @@
 /**
  * JSON-API für Lieder: Listen/Lesen, Bearbeiten (inkl. Rename bei Titeländerung) und Löschen.
  * Angelegt wird ein Lied nur über import.php, weil jedes Lied Noten hat (beim manuellen Anlegen erzeugt der
- * Browser ein Gerüst, siehe createScore() in js/score.js).
+ * Browser ein Gerüst, siehe createScore() in js/notation.js).
  *
  * GET    /api/songs.php            -> {"songs": [...]}, alle Lieder, alphabetisch nach Titel sortiert. Kein Token nötig.
  * GET    /api/songs.php?slug=xyz   -> einzelnes Lied. Kein Token nötig. 404, falls unbekannt.

@@ -4,11 +4,12 @@
  * Legt ein neues Lied mit Noten an: beim Import einer Guitar-Pro-Datei oder mit dem Gerüst aus dem Formular
  * "+ Neues Lied". Die Noten kommen als alphaTex (score.atex), weil nur alphaTab im Browser die GP-Formate
  * auswerten kann: Der Browser wandelt die Datei um, prüft das Ergebnis und schickt Angaben und Noten mit. Die
- * Original-GP-Datei landet unverändert unter orig/, eine eingebettete Audiospur wird zu audio.mp3 (siehe
+ * Original-GP-Datei landet unverändert unter upload/<slug>/, eine eingebettete Audiospur wird zu audio.mp3 (siehe
  * store_new_score() in api/lib/file_store.php).
  *
  * POST /api/import.php (multipart/form-data)
- *   Felder: meta (Pflicht, JSON mit denselben Feldern wie PUT api/songs.php), score (Pflicht, alphaTex),
+ *   Felder: meta (Pflicht, JSON mit denselben Feldern wie PUT api/songs.php, dazu optional gpSource: die Quelle der
+ *   GP-Datei, z. B. die Seite des Tabs; sie wird beim Upload festgehalten), score (Pflicht, alphaTex),
  *   file (Original-GP-Datei, GP3–GP8; fehlt bei "+ Neues Lied").
  *   Token nötig (Header X-API-Token). Antwort: 201 mit dem neuen Lied.
  *   Schlägt das Speichern der Noten fehl, wird das gerade angelegte Lied wieder entfernt.
@@ -82,7 +83,13 @@ try {
 }
 
 try {
-    $song = store_new_score($song['slug'], $tex, $safeTmp, (string) ($file['name'] ?? ''));
+    $song = store_new_score(
+        $song['slug'],
+        $tex,
+        $safeTmp,
+        (string) ($file['name'] ?? ''),
+        trim((string) ($meta['gpSource'] ?? ''))
+    );
 } catch (RuntimeException $e) {
     $cleanup();
     try {

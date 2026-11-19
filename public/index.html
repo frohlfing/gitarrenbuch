@@ -6,12 +6,25 @@
 <meta name="theme-color" content="#272b34">
 <title>Gitarrenbuch</title>
 <link rel="icon" href="favicon.svg?4" type="image/svg+xml">
-<link rel="stylesheet" href="app.css?v=20261102x">
+<!-- Versionszähler: nur hier erhöhen, bei jedem Hochladen mit geänderten Dateien, damit Browser keine alten Fassungen
+     aus dem Cache nehmen. Er gilt für app.css, app.js und alle Module unter js/ (Import-Map am Ende der Seite). -->
+<script>
+const VERSION = '20261118zzh';
+document.write(`<link rel="stylesheet" href="app.css?v=${VERSION}">`);
+</script>
 </head>
 <body>
 
 <div id="libraryView">
   <header>
+    <div class="lib-menu">
+      <button class="tbtn" id="libMenuBtn" type="button" aria-label="Menü" aria-expanded="false">&#9776;</button>
+      <div class="menu" id="libMenu" hidden>
+        <button type="button" data-page="chords" title="Alle Griffbilder des Akkordkatalogs">Akkorde</button>
+        <button type="button" data-page="patterns" title="Strumming und Picking Patterns">Patterns</button>
+        <button type="button" data-page="fretboard" title="Griffbrett mit Tönen, Akkorden und Tonleitern">Griffbrett</button>
+      </div>
+    </div>
     <div class="eyebrow">Gitarre &amp; Gesang</div>
     <h1>Das Gitarrenbuch</h1>
     <p class="sub" id="subCount">wird geladen &hellip;</p>
@@ -21,15 +34,14 @@
     <input type="search" id="search" placeholder="Titel, Interpret oder Genre &hellip;" aria-label="Titel, Interpret oder Genre suchen">
     <select id="tagSel" aria-label="Nach Genre filtern"><option value="">Alle Genres</option></select>
     <select id="trackSel" aria-label="Nach Spur filtern"><option value="">Alle Spuren</option></select>
+    <select id="pickSel" aria-label="Nach Favorit oder Einstufung filtern"><option value="">Alle Songs</option></select>
     <select id="sortSel" aria-label="Sortierung">
       <option value="title">Titel</option>
       <option value="artist">Interpret</option>
+      <option value="played-desc">Zuletzt gespielt</option>
       <option value="updated-desc">Zuletzt geändert</option>
       <option value="created-desc">Zuletzt angelegt</option>
     </select>
-    <!-- Hash-Pfad der App (Router in app.js), keine Sprungmarke -->
-    <!--suppress HtmlUnknownAnchorTarget -->
-    <a class="btn" href="#/akkorde">Griffbilder</a>
     <button class="btn btn-primary" id="newSongBtn" type="button">+ Neuer Song</button>
   </div>
   <p class="count" id="resultCount"></p>
@@ -38,8 +50,6 @@
 </div>
 
 <main id="songView" hidden></main>
-
-<main id="chordView" hidden></main>
 
 <div class="overlay" id="overlay">
   <div class="sheet" id="sheet"></div>
@@ -64,30 +74,15 @@
   }, 10000);
 }
 </script>
-<!-- Versionszähler (?v=…): Bei jedem Hochladen mit geänderten Dateien hier überall erhöhen, damit Browser keine alten
-     Fassungen aus dem Cache nehmen. Die Import-Map hängt ihn an die Module unter js/, ohne die import-Zeilen zu ändern. -->
-<script type="importmap">
+<!-- Die Import-Map hängt den Versionszähler (oben im Kopf) an die Module unter js/, ohne die import-Zeilen zu ändern.
+     Ein neues Modul hier eintragen, sonst lädt es ohne Zähler (und nach einer Änderung womöglich aus dem Cache). -->
+<script>
 {
-  "imports": {
-    "./js/api.js": "./js/api.js?v=20261102x",
-    "./js/chordpro.js": "./js/chordpro.js?v=20261102x",
-    "./js/chords.js": "./js/chords.js?v=20261102x",
-    "./js/editor.js": "./js/editor.js?v=20261102x",
-    "./js/icons.js": "./js/icons.js?v=20261102x",
-    "./js/library.js": "./js/library.js?v=20261102x",
-    "./js/mixer.js": "./js/mixer.js?v=20261102x",
-    "./js/note-editor.js": "./js/note-editor.js?v=20261102x",
-    "./js/player.js": "./js/player.js?v=20261102x",
-    "./js/score-edit.js": "./js/score-edit.js?v=20261102x",
-    "./js/score.js": "./js/score.js?v=20261102x",
-    "./js/shortcuts.js": "./js/shortcuts.js?v=20261102x",
-    "./js/svg.js": "./js/svg.js?v=20261102x",
-    "./js/sync-editor.js": "./js/sync-editor.js?v=20261102x",
-    "./js/textview.js": "./js/textview.js?v=20261102x",
-    "./js/tracks.js": "./js/tracks.js?v=20261102x"
-  }
+  const modules = ['base', 'chordfile', 'chordgrips', 'chordtheory', 'editor', 'library', 'notation', 'playback', 'sheet', 'textview', 'uploads'];
+  const imports = Object.fromEntries(modules.map(m => [`./js/${m}.js`, `./js/${m}.js?v=${VERSION}`]));
+  document.write(`<script type="importmap">${JSON.stringify({imports})}<\/script>`
+    + `<script type="module" src="app.js?v=${VERSION}"><\/script>`);
 }
 </script>
-<script type="module" src="app.js?v=20261102x"></script>
 </body>
 </html>

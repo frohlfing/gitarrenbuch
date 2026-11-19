@@ -21,6 +21,20 @@ Im Archiv gab es für diese Lieder keine MP3-Datei.
 
 -> das ist ok.
 
+## Keine GP-Quelle ❌
+Diese 11 Songs haben keine GP-Quelle (keine Datei im Upload-Ordner):
+- die-feisten-nussschuesselblues (YouTube)
+- m-l-m-s-c-froehliche-weihnacht (YouTube)
+- marius-mueller-westernhagen-dicke (YouTube)
+- marius-mueller-westernhagen-geiler-is-schon (YouTube)
+- traditional-adeste-fideles
+- traditional-amarillo
+- traditional-beginner-blues
+- traditional-easy-slow-delta-blues
+- traditional-kol-dodie
+- frank-rohlfing-ich-bin-in-rente-ich-muss-gar-nichts (vermutlich eigener Song)
+- gitarrenbuch-test-struktur-editor (Testsong)
+
 ## Cover (✅ erledigt)
 
 Stand 27.10.2026 hat jedes der 42 Lieder ein Cover mit 500 × 500 px. 
@@ -168,8 +182,8 @@ Die neuen `audio.mp3` (von YouTube) beginnen nicht genau dort, wo die bisherige 
 diesen Versatz müssen alle Sync-Punkte in `score.atex` verschoben werden (negativ: Audio früher). „Gemessen“ ist
 ein Vergleich der beiden Spuren und nur ein Startwert: Bei Three Little Birds und Geboren um zu leben lag die
 Messung genau um das Doppelte daneben, bei Junge und Fröhliche Weihnacht passt 0. Maßgeblich ist das Gehör: Im
-Sync-Editor (Menü der Songansicht) mit „ms verschieben“ alle Sync-Punkte verschieben, bis Synth und Audiospur zusammen
-klingen, und speichern. Ein früher im Player eingestellter Audio-Versatz lässt sich dort mit einem Klick übernehmen.
+Sync-Editor (Bearbeitungsmodus, Reiter „Audio“) mit „ms verschieben“ alle Sync-Punkte verschieben, bis Synth und Audiospur zusammen
+klingen, und speichern.
 Sortiert nach dem gemessenen Versatz, der größte zuerst.
 
 | Lied                                            | gemessen | nach Gehör      |
@@ -212,7 +226,7 @@ Sortiert nach dem gemessenen Versatz, der größte zuerst.
 ## Sync-Punkte passen nicht zur Audiospur (4 ❌)
 
 Die Kopfzeile zeigt das rot: „(⚠ Sync-Punkte passen nicht zur Audiospur)“, wenn der letzte Sync-Punkt hinter dem Ende
-der Audiospur liegt. Ein negativer erster Sync-Punkt ist gewollt (Takt 1 beginnt vor der Aufnahme) und wird nicht
+der Audiospur liegt. Ein negativer erster Sync-Punkt ist gewollt (Takt 1 beginnt vor der Audiospur) und wird nicht
 gemeldet.
 
 - [ ] Die Ärzte – Junge: Der letzte Sync-Punkt muss ganz leicht korrigiert werden: Das Audio kommt in Takt 158 minimal zu früh.
@@ -227,9 +241,9 @@ Neu dazugekommen sind Akkorde in drei Songs:
 - [ ] Johnny Walker: 6 Akkorde aus „Guitar (P. Bursch)“
 - [ ] Losing My Religion: 1 Akkord aus „Guitar & Mandolin“     
 
-## Stimmung (1 ❌) 
+## Tuning (1 ❌) 
 
-- [ ] „Johnny Walker“: Die Stimmung steht eine Oktave zu hoch. Das ist vermutlich ein Fehler aus der GP-Datei, zudem passt die
+- [ ] „Johnny Walker“: Das Tuning steht eine Oktave zu hoch. Das ist vermutlich ein Fehler aus der GP-Datei, zudem passt die
 Anzeige nicht in den Kopf.
 
 
@@ -313,4 +327,10 @@ With or Without You
 
 Happy Birthday
 - „Happy Birthday lieber NAME!“ → „dear NAME!“                                                                                                                                 
- 
+
+## Capo
+Per Skript für vier Songs eingetragen: 
+No Woman No Cry (1), 
+Kokain (2), 
+Schlaflied (5) und 
+Geboren um zu leben (7). (Die Tonspur in der importierten GP-Datei war um 5 Halbtöne erhöht.)

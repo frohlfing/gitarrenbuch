@@ -1,19 +1,17 @@
 /**
  * Liederliste mit Suche, Tag-Filter und Sortierung sowie das Formular zum Anlegen und Bearbeiten eines Lieds
  * (Overlay wie beim Kochbuch) sowie der Import einer GP-Datei als neues Lied. alphaTab liest die Datei dabei im
- * Browser und wandelt die Noten in alphaTex um (siehe readGpFile() in score.js).
+ * Browser und wandelt die Noten in alphaTex um (siehe readGpFile() in notation.js).
  */
 
 import {
-  API_URL, apiWrite, audioUrl, coverUrl, deleteCover, escapeHtml, importSong, loadScoreText, loadSongs,
-  loadYoutubeInfo, searchCovers, setCover, uploadChordFile, uploadCover,
-} from './api.js';
-import {formatTime} from './player.js';
-import {createScore, describeScoreLoss, loadAlphaTab, parseScore, readGpFile, scoreDuration} from './score.js';
-import {trackLabel} from './tracks.js';
+  API_URL, apiWrite, audioUrl, coverUrl, deleteCover, escapeHtml, formatTime, importSong, LEVELS, loadScoreText,
+  loadSongs, loadYoutubeInfo, playedTimes, searchCovers, setCover, uploadCover,
+} from './base.js';
+import {createScore, describeScoreLoss, loadAlphaTab, parseScore, readGpFile, scoreDuration} from './notation.js';
 
-/** @typedef {import('./api.js').Song} Song */
-/** @typedef {import('./score.js').ScoreLoss} ScoreLoss */
+/** @typedef {import('./base.js').Song} Song */
+/** @typedef {import('./notation.js').ScoreLoss} ScoreLoss */
 
 /**
  * Alle geladenen Lieder (Stand des Servers, nach jeder Änderung aktualisiert).
@@ -28,6 +26,7 @@ const searchInput = document.getElementById('search');
 const sortSel = document.getElementById('sortSel');
 const tagSel = document.getElementById('tagSel');
 const trackSel = document.getElementById('trackSel');
+const pickSel = /** @type {HTMLSelectElement} */ (document.getElementById('pickSel'));
 const resultCount = document.getElementById('resultCount');
 const subCount = document.getElementById('subCount');
 
@@ -43,8 +42,9 @@ function byId(id){
 /** Schlüssel im `localStorage` für den Suchbegriff, den Genre- (Tags) und Spur-Filter und die Sortierung der Liste. */
 const VIEW_STATE_KEY = 'gitarrenbuch_view_state';
 
-// `true`, während ein Formular offen ist (ungespeicherte Eingaben sind möglich). Dann schließen nur
-// die expliziten Buttons das Overlay, nicht ein Klick daneben oder Escape.
+// `true`, während ein Dialog offen ist, in dem man etwas eingeben oder einstellen kann (ungespeicherte Eingaben sind
+// möglich). Dann schließen nur die Knöpfe des Dialogs das Overlay, nicht ein Klick daneben oder Escape. Das gilt für
+// alle Dialoge außer reinen Übersichten (openOverlay() mit modal = false).
 let formIsOpen = false;
 
 /**
@@ -96,7 +96,9 @@ function placeholderHue(slug){
  */
 function cardHtml(s){
   // Noten hat jeder Song; markiert wird nur, was fehlt.
-  const badges = s.files.includes('audio') ? '' : '<span class="badge missing" title="Keine Audiospur">Audio</span>';
+  const badges = (s.favorite ? '<span class="badge badge-fav" title="Favorit">★</span>' : '')
+    + (s.files.includes('audio') ? '' : '<span class="badge missing" title="Keine Audiospur">Audio</span>');
+  const level = LEVELS.find(l => l.value === s.level);
   const thumb = s.files.includes('cover')
     ? `<div class="thumb"><img src="${escapeHtml(coverUrl(s))}" alt="" loading="lazy">`
     : `<div class="thumb placeholder" style="--h:${placeholderHue(s.slug)}">
@@ -112,7 +114,8 @@ function cardHtml(s){
       ${issue ? `<div class="issue-badge" title="${escapeHtml(issue.hint)}">&#9888; ${escapeHtml(issue.label)}</div>` : ''}
       <h3>${escapeHtml(s.title)}</h3>
       <div class="meta">${escapeHtml(s.artist || '')}</div>
-      ${s.tags.length ? `<div class="tags">${s.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      ${s.tags.length || level ? `<div class="tags">${level ? `<span class="tag level-${level.value}">${level.short}</span>`
+        : ''}${s.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
     </div>
   </a>`;
 }
@@ -144,11 +147,22 @@ const WITH_AUDIO = ':mit-audio';
 const WITHOUT_AUDIO = ':ohne-audio';
 
 /**
- * Alle Spurnamen aus den Partituren.
+ * Alle Spurnamen aus den Partituren (auch für die Namensliste im Editor, Reiter "Spuren").
  * @returns {string[]} alphabetisch, ohne Duplikate
  */
-function knownTracks(){
+export function knownTracks(){
   return [...new Set(SONGS.flatMap(s => s.tracks))].sort((a, b) => a.localeCompare(b, 'de'));
+}
+
+/**
+ * Alle MIDI-Programme, die Spuren in den Songs nutzen (für die Vorschläge im Reiter "Spuren" des Editors).
+ * @returns {number[]} aufsteigend, ohne Duplikate
+ */
+export function usedPrograms(){
+  /** @type {Set<number>} */
+  const programs = new Set();
+  for(const song of SONGS) for(const program of song.instruments ?? []) programs.add(program);
+  return [...programs].sort((a, b) => a - b);
 }
 
 /**
@@ -159,7 +173,7 @@ function knownTracks(){
 function refreshTrackFilter(){
   const current = trackSel.value;
   trackSel.innerHTML = '<option value="">Alle Spuren</option>'
-    + knownTracks().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(trackLabel(t))}</option>`).join('')
+    + knownTracks().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('')
     + `<option disabled>──────────</option>`
     + `<option value="${WITH_AUDIO}">Mit Audio</option><option value="${WITHOUT_AUDIO}">Ohne Audio</option>`;
   trackSel.value = [...trackSel.options].some(o => !o.disabled && o.value === current) ? current : '';
@@ -177,13 +191,36 @@ function hasTrack(s, track){
   return s.tracks.includes(track);
 }
 
+/** Werte im Filter "Auswahl" (pickSel): Favoriten, Einstufung (dahinter der Wert bzw. NO_LEVEL). */
+const PICK_FAVORITES = ':favoriten';
+const PICK_LEVEL = ':stufe:';
+/** Songs ohne Einstufung. */
+const NO_LEVEL = 'ohne';
+
 /**
- * Aktualisiert Genre- und Spur-Filter, Anzahl im Kopfbereich und Liste.
+ * Baut den Filter "Auswahl" neu auf: Favoriten und die Einstufungen, je mit der Zahl der Songs. Behält die Auswahl
+ * bei.
+ * @returns {void}
+ */
+function refreshPickFilter(){
+  const current = pickSel.value;
+  const count = test => SONGS.filter(test).length;
+  pickSel.innerHTML = '<option value="">Alle Songs</option>'
+    + `<option value="${PICK_FAVORITES}">★ Favoriten (${count(s => s.favorite)})</option>`
+    + LEVELS.map(l => `<option value="${PICK_LEVEL}${l.value}">${l.label} (${count(s => s.level === l.value)})</option>`)
+      .join('')
+    + `<option value="${PICK_LEVEL}${NO_LEVEL}">Ohne Einstufung (${count(s => !s.level)})</option>`;
+  pickSel.value = [...pickSel.options].some(o => o.value === current) ? current : '';
+}
+
+/**
+ * Aktualisiert die Filter (Genre, Spur, Auswahl), Anzahl im Kopfbereich und Liste.
  * @returns {void}
  */
 function refreshLibrary(){
   refreshTagFilter();
   refreshTrackFilter();
+  refreshPickFilter();
   subCount.textContent = `${SONGS.length} ${SONGS.length === 1 ? 'Song' : 'Songs'}`;
   renderList();
 }
@@ -204,6 +241,12 @@ function renderList(){
   if(track){
     items = items.filter(s => hasTrack(s, track));
   }
+  const pick = pickSel.value;
+  if(pick === PICK_FAVORITES) items = items.filter(s => s.favorite);
+  else if(pick.startsWith(PICK_LEVEL)){
+    const level = pick.slice(PICK_LEVEL.length);
+    items = items.filter(s => level === NO_LEVEL ? !s.level : s.level === level);
+  }
   if(q){
     items = items.filter(s =>
       s.title.toLowerCase().includes(q)
@@ -213,7 +256,12 @@ function renderList(){
   }
 
   const byTitle = (a, b) => a.title.localeCompare(b.title, 'de');
+  const played = playedTimes();
   switch(sortSel.value){
+    case 'played-desc':
+      // Nie gespielte ans Ende, nach Titel.
+      items.sort((a, b) => (played[b.slug] ?? 0) - (played[a.slug] ?? 0) || byTitle(a, b));
+      break;
     case 'artist':
       items.sort((a, b) => (a.artist || '￿').localeCompare(b.artist || '￿', 'de') || byTitle(a, b));
       break;
@@ -240,13 +288,13 @@ function renderList(){
  */
 function saveViewState(){
   localStorage.setItem(VIEW_STATE_KEY, JSON.stringify({
-    search: searchInput.value, tag: tagSel.value, track: trackSel.value, sort: sortSel.value,
+    search: searchInput.value, tag: tagSel.value, track: trackSel.value, sort: sortSel.value, pick: pickSel.value,
   }));
 }
 
 /**
  * Liest den gemerkten Zustand der Liste.
- * @returns {{search?: string, tag?: string, track?: string, sort?: string}} leer, wenn nichts (Gültiges) gespeichert
+ * @returns {{search?: string, tag?: string, track?: string, sort?: string, pick?: string}} leer, wenn nichts (Gültiges) gespeichert
  *   ist
  */
 function loadViewState(){
@@ -261,10 +309,15 @@ function loadViewState(){
  * Öffnet das Overlay mit Schließen-Button und dem übergebenen Inhalt.
  * @param {string} html Inhalt des Sheets
  * @param {boolean} [small] schmales Sheet für kurze Dialoge (z. B. "Darstellung")
+ * @param {boolean} [modal] der Dialog schließt nur über seine Knöpfe (Voreinstellung); false für reine Übersichten, die
+ *   auch ein Klick daneben oder Escape schließt
+ * @param {boolean} [wide] breites Sheet für Seiten wie Akkorde und Patterns (wird auch gedruckt)
  * @returns {void}
  */
-export function openOverlay(html, small = false){
+export function openOverlay(html, small = false, modal = true, wide = false){
+  formIsOpen = modal;
   sheet.classList.toggle('sheet-small', small);
+  sheet.classList.toggle('sheet-wide', wide);
   sheet.innerHTML = `<button class="close" id="closeBtn" type="button" aria-label="Schließen">&times;</button>${html}`;
   overlay.classList.add('open');
   document.getElementById('closeBtn').addEventListener('click', closeOverlay);
@@ -280,17 +333,25 @@ const sheetStack = [];
 /**
  * Legt einen Dialog über den gerade offenen. closeOverlay() schließt dann nur ihn und zeigt den vorigen wieder.
  * @param {string} html Inhalt des Sheets
+ * @param {boolean} [modal] wie bei openOverlay()
  * @returns {void}
  */
-function openStackedOverlay(html){
+export function openStackedOverlay(html, modal = true){
   sheetStack.push({
     nodes: [...sheet.childNodes],
     formIsOpen,
     drag: [overlay.ondragover, overlay.ondragleave, overlay.ondrop],
   });
-  formIsOpen = false;
   overlay.ondragover = overlay.ondragleave = overlay.ondrop = null;
-  openOverlay(html);
+  openOverlay(html, false, modal);
+}
+
+/**
+ * Ob ein Dialog offen ist.
+ * @returns {boolean}
+ */
+export function isOverlayOpen(){
+  return overlay.classList.contains('open');
 }
 
 /**
@@ -339,30 +400,6 @@ function coverPickHtml(s){
 }
 
 /**
- * Verdrahtet das Feld "Akkorddatei" im Formular "Song bearbeiten": Hochladen per Auswahl oder Drag & Drop. Die Datei
- * wird sofort gespeichert (wie das Cover), unabhängig vom Formular.
- * @param {Song} s Lied des Formulars; updated wird nach dem Hochladen nachgeführt
- * @returns {void}
- */
-function bindChordFileField(s){
-  const hint = byId('chordFileHint');
-  const field = byId('dropzone').closest('.form-field');
-  bindDropzone(async file => {
-    field.classList.add('busy');
-    try {
-      const saved = await uploadChordFile(s.slug, file);
-      s.updated = saved.updated;
-      storeSong(saved);
-      hint.textContent = `${file.name} ist abgelegt und wird mit dem Editor in die Noten übernommen.`;
-    } catch(err){
-      hint.textContent = err.message;
-    } finally {
-      field.classList.remove('busy');
-    }
-  });
-}
-
-/**
  * Verdrahtet die Knöpfe der vorhandenen Genres unter dem Feld "Genre" (gespeichert als tags): Ein Klick nimmt das
  * Genre in die Liste im Textfeld auf oder entfernt es; Tippen im Textfeld hält die Knöpfe auf dem gleichen Stand.
  * @returns {void}
@@ -407,27 +444,51 @@ function youtubeWatchUrl(url){
 }
 
 /**
- * Verdrahtet die YouTube-Quelle im Formular: Link zur YouTube-Suche nach Interpret und Titel (wie die Trailersuche
- * der Videothek; die gefundene URL trägt man selbst ein) und die Länge des Clips neben dem Feld. Gespeichert wird die
- * Länge in song.json (youtubeSeconds); YouTube wird nur gefragt, wenn sich die URL ändert oder die Länge noch fehlt.
- * Darunter steht, wenn nötig, dass bin/audio.php die Audiospur einbinden muss (siehe updateAudioHint()).
- * @param {Song} s Lied des Formulars
- * @returns {() => ?number} liefert die Länge des Clips in Sekunden zum Speichern; null ohne URL oder solange sie
- *   unbekannt ist
+ * Element mit data-ref in einem Block.
+ * @param {HTMLElement} host Block
+ * @param {string} name Wert von data-ref
+ * @returns {?HTMLInputElement} das Element oder null
  */
-function bindYoutubeField(s){
-  const search = /** @type {HTMLAnchorElement} */ (/** @type {*} */ (byId('youtubeSearch')));
-  const updateSearch = () => {
-    const words = [byId('artistInput').value.trim(), byId('titleInput').value.trim()];
-    search.href = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(words.filter(Boolean).join(' '));
-  };
-  updateSearch();
-  ['artistInput', 'titleInput'].forEach(id => byId(id).addEventListener('input', updateSearch));
+function ref(host, name){
+  return /** @type {?HTMLInputElement} */ (host.querySelector(`[data-ref="${name}"]`));
+}
 
-  const input = byId('youtubeInput');
-  const clipLength = byId('youtubeLength');
+/**
+ * Quelle der Audiodatei im Reiter "Audio" des Bearbeitungsmodus: YouTube-URL mit Link zur YouTube-Suche nach Interpret
+ * und Titel (wie die Trailersuche der Videothek; die gefundene URL trägt man selbst ein), den Längen von Noten, Clip
+ * und MP3, damit man sieht, ob der Clip zu den Noten passt, und einem Knopf zum Speichern. Die Länge des Clips steht
+ * in song.json (youtubeSeconds); YouTube wird nur gefragt, wenn sich die URL ändert oder die Länge noch fehlt.
+ * Darunter steht, wenn nötig, dass bin/audio.php die Audiospur einbinden muss (siehe updateAudioHint()). Gespeichert
+ * wird sofort, unabhängig von den Noten.
+ * @param {HTMLElement} host leeres Element, in das der Block gezeichnet wird
+ * @param {() => ?Song} getSong liefert das aktuelle Lied (Slug und Angaben können sich im Modus ändern)
+ * @param {(saved: Song) => void} onSaved wird nach erfolgreichem Speichern aufgerufen
+ * @returns {void}
+ */
+export function renderAudioSource(host, getSong, onSaved){
+  const song = getSong();
+  if(!song){
+    host.replaceChildren();
+    return;
+  }
+  host.innerHTML = `
+    <label for="audioSourceUrl">Quelle für Audio-Datei (YouTube-URL)</label>
+    <input type="text" id="audioSourceUrl" data-ref="url" value="${escapeHtml(song.sources.youtube ?? '')}"
+      inputmode="url" placeholder="https://www.youtube.com/watch?v=…">
+    <button class="ebtn ebtn-text" type="button" data-ref="save" disabled>Quelle speichern</button>
+    <a class="field-link" data-ref="search" href="#" target="_blank" rel="noopener">Auf YouTube suchen</a>
+    <span class="lengths"><span data-ref="scoreLength"></span><span data-ref="youtubeLength"></span><span
+      data-ref="audioLength"></span></span>
+    <div class="hint" data-ref="hint" hidden></div>
+    <div class="hint" data-ref="error" hidden></div>`;
+  ref(host, 'search').href = 'https://www.youtube.com/results?search_query='
+    + encodeURIComponent([song.artist, song.title].filter(Boolean).join(' '));
+  showFileLengths(host, song);
+  const input = ref(host, 'url');
+  const save = ref(host, 'save');
+  const clipLength = ref(host, 'youtubeLength');
   /** Länge des Clips in Sekunden, null ohne URL oder solange sie unbekannt ist. */
-  let seconds = s.sources.youtube ? (s.youtubeSeconds ?? null) : null;
+  let seconds = song.sources.youtube ? (song.youtubeSeconds ?? null) : null;
   /** Zähler der Abfragen; eine Antwort zählt nur, wenn danach keine neue gestartet wurde. */
   let lookup = 0;
   const updateClipLength = async () => {
@@ -457,41 +518,98 @@ function bindYoutubeField(s){
     // Kopierte Links enthalten oft Playlist und Startzeit (&list=…&start_radio=1); nur die Video-ID bleibt.
     const short = youtubeWatchUrl(input.value);
     if(short !== input.value) input.value = short;
-    updateAudioHint(s, short);
+    save.disabled = !changedSource(song, short);
+    updateAudioHint(host, song, short);
     clearTimeout(timer);
     timer = setTimeout(() => void updateClipLength(), YOUTUBE_LOOKUP_DELAY_MS);
   });
-  updateAudioHint(s, input.value);
-  return () => seconds;
+  updateAudioHint(host, song, input.value);
+
+  save.addEventListener('click', async () => {
+    const current = getSong() ?? song;
+    const error = ref(host, 'error');
+    error.hidden = true;
+    save.disabled = true;
+    try {
+      const saved = await saveSongFields(current.slug, {
+        sources: {youtube: youtubeWatchUrl(input.value).trim()},
+        youtubeSeconds: seconds,
+      });
+      onSaved(saved);
+      renderAudioSource(host, getSong, onSaved);
+    } catch(err){
+      error.textContent = err.message;
+      error.hidden = false;
+      save.disabled = false;
+    }
+  });
+}
+
+/**
+ * Ändert einzelne Angaben eines Songs und lässt die übrigen, wie sie sind (der Server ersetzt sonst alle Felder, die
+ * der Request nennt). Der Stand kommt aus der Liste, ein im Dialog "Stammdaten" geänderter Song gilt also schon.
+ * @param {string} slug Slug des Lieds
+ * @param {Object<string, *>} changes zu ändernde Felder der API (z. B. sources, youtubeSeconds, trackDefaults)
+ * @returns {Promise<Song>} das gespeicherte Lied (auch schon in der Liste)
+ */
+export async function saveSongFields(slug, changes){
+  const s = findSong(slug);
+  if(!s) throw new Error('Song nicht gefunden.');
+  const saved = await apiWrite(`${API_URL}songs.php?slug=${encodeURIComponent(slug)}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      title: s.title,
+      artist: s.artist ?? '',
+      tags: s.tags,
+      notes: s.notes ?? '',
+      sources: {youtube: s.sources.youtube ?? ''},
+      level: s.level ?? null,
+      favorite: !!s.favorite,
+      ...changes,
+    }),
+  });
+  storeSong(saved, slug);
+  return saved;
+}
+
+/**
+ * Ob die eingegebene YouTube-URL von der gespeicherten abweicht.
+ * @param {Song} s Lied
+ * @param {string} url eingegebene YouTube-URL
+ * @returns {boolean} true bei einer anderen URL
+ */
+function changedSource(s, url){
+  return youtubeWatchUrl(url.trim()) !== youtubeWatchUrl((s.sources.youtube ?? '').trim());
 }
 
 /**
  * Hinweis unter dem YouTube-Feld: Die Audiospur holt bin/audio.php. Bei einem anderen Clip verschiebt der Server die
  * bisherige audio.mp3 beim Speichern (siehe update_song() in api/lib/crud.php).
- * @param {Song} s Lied des Formulars
+ * @param {HTMLElement} host Block der Quelle (renderAudioSource())
+ * @param {Song} s Lied
  * @param {string} url eingegebene YouTube-URL
  * @returns {void}
  */
-function updateAudioHint(s, url){
-  const hint = byId('audioHint');
+function updateAudioHint(host, s, url){
+  const hint = ref(host, 'hint');
   const hasAudio = s.files?.includes('audio') ?? false;
-  const changed = youtubeWatchUrl(url.trim()) !== youtubeWatchUrl((s.sources.youtube ?? '').trim());
   hint.textContent = !url.trim() ? ''
-    : hasAudio && changed
-      ? 'Anderer Clip: Beim Speichern wird die bisherige Audiospur entfernt. Danach bin/audio.php ausführen, um '
-        + 'die neue einzubinden, und die Sync-Punkte prüfen.'
-      : !hasAudio ? 'Noch keine Audiospur: bin/audio.php ausführen, um sie einzubinden.' : '';
+    : hasAudio && changedSource(s, url)
+      ? '⚠ Anderer Clip: Beim Speichern wird die bisherige Audiospur entfernt. Führe danach `php bin/audio.php` aus, um sie zu erneuern.'
+      : !hasAudio ? '⚠ Führe `php bin/audio.php` aus, um die Audiospur aus dem YouTube-Video zu extrahieren.' : '';
   hint.hidden = !hint.textContent;
 }
 
 /**
- * Zeigt neben den Quellen die Längen der Noten (im eigenen Tempo) und der vorhandenen MP3, damit man sieht, ob der
- * YouTube-Clip zu den Noten passt. Beides wird bei jedem Öffnen aus den eigenen Dateien gemessen.
- * @param {Song} s Lied des Formulars (nur beim Bearbeiten; ein neues Lied hat weder Noten noch MP3)
+ * Zeigt neben der Quelle die Längen der Noten (im eigenen Tempo) und der vorhandenen MP3, damit man sieht, ob der
+ * YouTube-Clip zu den Noten passt. Beides wird bei jedem Zeichnen aus den gespeicherten Dateien gemessen.
+ * @param {HTMLElement} host Block der Quelle (renderAudioSource())
+ * @param {Song} s Lied
  * @returns {void}
  */
-function showFileLengths(s){
-  const scoreLength = byId('scoreLength');
+function showFileLengths(host, s){
+  const scoreLength = ref(host, 'scoreLength');
   scoreLength.textContent = 'Noten …';
   // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
   void (async () => {
@@ -506,7 +624,7 @@ function showFileLengths(s){
 
   if(!s.files.includes('audio')) return;
   // Nur die Metadaten der MP3 laden; danach die Verbindung wieder freigeben.
-  const audioLength = byId('audioLength');
+  const audioLength = ref(host, 'audioLength');
   const audio = new Audio();
   audio.preload = 'metadata';
   audio.addEventListener('loadedmetadata', () => {
@@ -522,26 +640,25 @@ function showFileLengths(s){
 
 /**
  * Formular zum Anlegen oder Bearbeiten eines Lieds. Beim Anlegen erzeugt der Browser Noten mit leeren Takten
- * (siehe createScore() in score.js), denn jeder Song hat Noten; Tonart, Capo, Tempo und Stimmung gehen nur dort hinein
+ * (siehe createScore() in notation.js), denn jeder Song hat Noten; Tonart, Capo, Tempo und Tuning gehen nur dort hinein
  * und werden später im Editor geändert. Beim Bearbeiten steht das Cover neben Titel und Interpret; ein Klick darauf
- * öffnet den Cover-Dialog über dem Formular (Eingaben bleiben erhalten).
+ * öffnet den Cover-Dialog über dem Formular (Eingaben bleiben erhalten). Die Quelle der Audiodatei steht im Reiter
+ * "Audio" des Bearbeitungsmodus (renderAudioSource()), die Quellen der übrigen Dateien im Dialog "Uploads" (uploads.js).
  * @param {?Song} song zu bearbeitendes Lied, null zum Anlegen
  * @param {(saved: Song) => void} onSaved wird nach erfolgreichem Speichern aufgerufen
- * @param {{ultimateGuitar?: string}} [sources] Vorbelegung der Quellen beim Anlegen (z. B. aus dem Import-Dialog)
- * @param {?HTMLElement} [container] statt im Overlay in diesem Element (Bearbeitungsmodus, linkes Panel); dort
- *   setzt "Zurücksetzen" die Eingaben zurück, und nach dem Speichern bleibt das Formular stehen
+ * @param {?function(): void} [onDeleted] wird nach "Song löschen" aufgerufen; ohne gibt es den Knopf nicht
  * @returns {void}
  */
-export function openSongForm(song, onSaved, sources = {}, container = null){
+export function openSongForm(song, onSaved, onDeleted = null){
   const isEdit = song !== null;
-  const s = song ?? /** @type {Song} */ ({tags: [], sources: {...sources}});
-  if(!container) formIsOpen = true;
+  const s = song ?? /** @type {Song} */ ({tags: [], sources: {}});
+  formIsOpen = true;
 
   const nameFields = `
     ${field('titleInput', 'Titel', s.title)}
     ${field('artistInput', 'Interpret', s.artist, 'list="artistList" autocomplete="off"')}`;
-  const html = `
-    ${container ? '' : `<h2>${isEdit ? 'Song bearbeiten' : 'Neuer Song'}</h2>`}
+  openOverlay(`
+    <h2>${isEdit ? 'Stammdaten' : 'Neuer Song'}</h2>
     <div id="formError"></div>
     ${isEdit ? `<div class="form-head">
       <button class="cover-pick" id="coverPick" type="button" title="Cover ändern">${coverPickHtml(s)}</button>
@@ -555,9 +672,9 @@ export function openSongForm(song, onSaved, sources = {}, container = null){
         ${field('tempoInput', 'Tempo (BPM)', '', 'inputmode="numeric" placeholder="120"')}`}
     </div>
     ${isEdit ? '' : `<div class="form-field">
-      <label for="tuningInput">Stimmung</label>
+      <label for="tuningInput">Tuning</label>
       <input type="text" id="tuningInput" placeholder="E A D G B E">
-      <div class="hint">Tonart, Capo, Tempo und Stimmung gehen in die Noten und werden dort später geändert.</div>
+      <div class="hint">Tonart, Capo, Tempo und Tuning gehen in die Noten und werden dort später geändert.</div>
     </div>`}
     <div class="form-field">
       <label for="tagsInput">Genre</label>
@@ -567,50 +684,34 @@ export function openSongForm(song, onSaved, sources = {}, container = null){
         s.tags.includes(t) ? ' on' : ''}" type="button" data-genre="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')}</div>
       <div class="hint">Mehrere durch Komma trennen, vorhandene per Klick an- und abwählen.</div>
     </div>
-    ${field('ugInput', `Quelle für Guitar-Pro-Datei${isEdit ? '<span class="lengths" id="scoreLength"></span>' : ''}`,
-    s.sources.ultimateGuitar, 'inputmode="url"')}
-    <div class="form-field">
-      <label for="youtubeInput">Quelle für Audio-Datei (YouTube-URL)<span class="lengths"><span
-        id="youtubeLength"></span><span id="audioLength"></span></span></label>
-      <input type="text" id="youtubeInput" value="${escapeHtml(s.sources.youtube ?? '')}" inputmode="url"
-        placeholder="https://www.youtube.com/watch?v=…">
-      <a class="field-link" id="youtubeSearch" href="#" target="_blank" rel="noopener">Auf YouTube suchen</a>
-      <div class="hint" id="audioHint" hidden></div>
-    </div>
+    ${isEdit ? ratingHtml(s) : ''}
     <div class="form-field">
       <label for="notesInput">Notizen</label>
       <textarea id="notesInput" rows="6">${escapeHtml(s.notes ?? '')}</textarea>
     </div>
-    ${isEdit ? `<div class="form-field">
-      <span class="label">Akkorddatei</span>
-      <label class="dropzone" id="dropzone">
-        <input type="file" id="chordFileInput" accept=".cho,.chopro,.crd,.pro,.txt">
-        <span>ChordPro- oder Textdatei hierher ziehen oder tippen zum Auswählen</span>
-      </label>
-      <div class="hint" id="chordFileHint">Text und Akkorde stehen in den Noten. Eine Akkorddatei wird abgelegt und
-        mit dem Editor eingearbeitet; vorhandener Text hat dabei Vorrang.</div>
-    </div>` : ''}
     <div class="btn-row">
       <button class="btn btn-primary" id="saveBtn" type="button">Speichern</button>
-      <button class="btn" id="cancelBtn" type="button">${container ? 'Zurücksetzen' : 'Abbrechen'}</button>
+      <button class="btn" id="cancelBtn" type="button">Abbrechen</button>
+      ${isEdit && onDeleted ? '<button class="btn btn-danger btn-row-end" id="deleteBtn" type="button">Song löschen …</button>'
+        : ''}
     </div>
-  `;
-  if(container) container.innerHTML = html;
-  else openOverlay(html);
+  `);
 
-  byId('cancelBtn').addEventListener('click', container
-    ? () => openSongForm(findSong(s.slug) ?? s, onSaved, sources, container) : closeOverlay);
+  byId('cancelBtn').addEventListener('click', closeOverlay);
   // Das Cover wird im Dialog sofort gespeichert, unabhängig vom Speichern des Formulars.
   byId('coverPick')?.addEventListener('click', () => openCoverForm(s, saved => {
     s.files = saved.files;
     s.updated = saved.updated;
     byId('coverPick').innerHTML = coverPickHtml(s);
   }, {artist: byId('artistInput').value.trim(), title: byId('titleInput').value.trim() || s.title}));
+  byId('deleteBtn')?.addEventListener('click', async () => {
+    if(!await deleteSongUI(s)) return;
+    closeOverlay();
+    onDeleted();
+  });
 
-  if(isEdit) bindChordFileField(s);
-  const clipSeconds = bindYoutubeField(s);
   bindGenrePicks();
-  if(isEdit) showFileLengths(s);
+  bindRating();
 
   byId('saveBtn').addEventListener('click', async () => {
     const errorBox = byId('formError');
@@ -619,12 +720,14 @@ export function openSongForm(song, onSaved, sources = {}, container = null){
       title: byId('titleInput').value.trim(),
       artist: byId('artistInput').value.trim(),
       tags: byId('tagsInput').value.split(',').map(t => t.trim()).filter(Boolean),
-      sources: {
-        youtube: youtubeWatchUrl(byId('youtubeInput').value).trim(),
-        ultimateGuitar: byId('ugInput').value.trim(),
-      },
-      youtubeSeconds: clipSeconds(),
+      // Die Quelle ändert sich hier nicht (YouTube: Reiter "Audio").
+      sources: {youtube: s.sources.youtube ?? ''},
       notes: byId('notesInput').value.trim(),
+      // Einstufung und Favorit gibt es nur am vorhandenen Song (Bearbeitungsmodus).
+      ...(isEdit ? {
+        level: document.querySelector('#ratingLine [data-level][aria-pressed="true"]')?.dataset.level ?? null,
+        favorite: byId('favoriteInput').getAttribute('aria-pressed') === 'true',
+      } : {}),
     };
     if(!payload.title){
       errorBox.innerHTML = '<div class="error-box">Titel ist erforderlich.</div>';
@@ -659,9 +762,56 @@ export function openSongForm(song, onSaved, sources = {}, container = null){
     }
 
     storeSong(saved, isEdit ? s.slug : saved.slug);
-    if(container) openSongForm(saved, onSaved, sources, container);
-    else closeOverlay();
+    closeOverlay();
     onSaved(saved);
+  });
+}
+
+/** Pfade der Symbole für die Einstufung (Material Symbols, Apache 2.0; viewBox 0 -960 960 960): Daumen runter, Hand, Daumen hoch, Herz. */
+const RATING_ICONS = {
+  cannot: 'M120-320q-32 0-56-24t-24-56v-80q0-7 1.5-15t4.5-15l120-282q9-20 30-34t44-14h320q33 0 56.5 23.5T640-760v407q0 16-6.5 30.5T616-297L399-81q-15 14-35.5 17T324-71q-19-10-27.5-28t-3.5-37l45-184H120Zm680-520q33 0 56.5 23.5T880-760v360q0 33-23.5 56.5T800-320q-33 0-56.5-23.5T720-400v-360q0-33 23.5-56.5T800-840Z',
+  practice: 'M80-400q-33 0-56.5-23.5T0-480v-240q0-12 5-23t13-19l126-126q9-9 20-13.5t22-4.5q26 0 45 20t14 51l-13 75h208q17 0 28.5 11.5T480-720v50q0 6-1 11.5t-3 10.5l-90 212q-7 17-22.5 26.5T330-400H80Zm440 200q-17 0-28.5-11.5T480-240v-50q0-6 1-11.5t3-10.5l90-212q8-17 23-26.5t33-9.5h250q33 0 56.5 23.5T960-480v240q0 12-4.5 22.5T942-198L816-72q-9 9-20 13.5T774-54q-26 0-45-20t-14-51l13-75H520Z',
+  can: 'M840-640q32 0 56 24t24 56v80q0 7-1.5 15t-4.5 15L794-168q-9 20-30 34t-44 14H400q-33 0-56.5-23.5T320-200v-407q0-16 6.5-30.5T344-663l217-216q15-14 35.5-17t39.5 7q19 10 27.5 28t3.5 37l-45 184h218ZM160-120q-33 0-56.5-23.5T80-200v-360q0-33 23.5-56.5T160-640q33 0 56.5 23.5T240-560v360q0 33-23.5 56.5T160-120Z',
+  favorite: 'M451.5-152q-14.5-5-25.5-16l-69-63q-106-97-191.5-192.5T80-634q0-94 63-157t157-63q53 0 100 22.5t80 61.5q33-39 80-61.5T660-854q94 0 157 63t63 157q0 115-85 211T602-230l-68 62q-11 11-25.5 16t-28.5 5q-14 0-28.5-5Z',
+};
+
+/**
+ * Einstufung und Favorit als Knöpfe mit Symbolen: Daumen runter (Kann ich nicht), Hand (Übe ich gerade), Daumen hoch
+ * (Kann ich) und das Herz für den Favoriten. Die Einstufungen schließen sich aus, ein zweiter Klick nimmt sie zurück
+ * (bindRating()).
+ * @param {Song} s Lied
+ * @returns {string} HTML
+ */
+function ratingHtml(s){
+  const icon = path => `<svg class="rate-icon" viewBox="0 -960 960 960" aria-hidden="true"><path d="${path}"/></svg>`;
+  const levels = ['cannot', 'practice', 'can'].map(value => {
+    const level = LEVELS.find(l => l.value === value);
+    return `<button class="rate-btn" type="button" data-level="${value}" aria-pressed="${s.level === value}"
+      title="${level.label}" aria-label="${level.label}">${icon(RATING_ICONS[value])}</button>`;
+  }).join('');
+  return `<div class="form-field">
+    <span class="label">Wie gut kann ich den Song?</span>
+    <div class="rating-line" id="ratingLine">${levels}<button class="rate-btn rate-fav" type="button" id="favoriteInput"
+      aria-pressed="${!!s.favorite}" title="Favorit" aria-label="Favorit">${icon(RATING_ICONS.favorite)}</button></div>
+  </div>`;
+}
+
+/**
+ * Verdrahtet die Knöpfe von ratingHtml(): Eine Einstufung gilt allein, ein Klick auf die gewählte hebt sie auf; das
+ * Herz schaltet für sich um.
+ * @returns {void}
+ */
+function bindRating(){
+  const line = byId('ratingLine');
+  if(!line) return;
+  line.addEventListener('click', e => {
+    const button = /** @type {?HTMLElement} */ (/** @type {HTMLElement} */ (e.target).closest('.rate-btn'));
+    if(!button) return;
+    const on = button.getAttribute('aria-pressed') !== 'true';
+    if(button.dataset.level){
+      line.querySelectorAll('[data-level]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    }
+    button.setAttribute('aria-pressed', String(on));
   });
 }
 
@@ -683,7 +833,7 @@ function metaFromFileName(fileName){
  * @param {(file: File) => void} onFile wird mit der gewählten bzw. abgelegten Datei aufgerufen
  * @returns {void}
  */
-function bindDropzone(onFile){
+export function bindDropzone(onFile){
   const dropzone = document.getElementById('dropzone');
   const input = /** @type {HTMLInputElement} */ (dropzone.querySelector('input[type="file"]'));
   input.addEventListener('change', () => {
@@ -709,14 +859,14 @@ function bindDropzone(onFile){
 /**
  * Warnt im Import-Dialog, dass beim Umwandeln etwas verloren geht, und wartet auf die Entscheidung des Benutzers.
  * @param {HTMLElement} box Bereich für Meldungen im Dialog
- * @param {ScoreLoss} loss betroffene Takte (siehe exportScore() in score.js)
+ * @param {ScoreLoss} loss betroffene Takte (siehe exportScore() in notation.js)
  * @returns {Promise<boolean>} true bei "Trotzdem übernehmen", false bei "Abbrechen"
  */
 function confirmLoss(box, loss){
   box.innerHTML = `
     <div class="error-box">
       <p>Beim Umwandeln gehen Angaben verloren, die alphaTex nicht schreiben kann.
-        ${escapeHtml(describeScoreLoss(loss))} Die Originaldatei bleibt unter orig/ erhalten.</p>
+        ${escapeHtml(describeScoreLoss(loss))} Die Originaldatei bleibt unter upload/ erhalten.</p>
       <div class="btn-row">
         <button class="btn btn-primary" type="button" data-loss="accept">Trotzdem übernehmen</button>
         <button class="btn" type="button" data-loss="cancel">Abbrechen</button>
@@ -754,7 +904,7 @@ export function openImportForm(onImported){
         <a href="https://www.ultimate-guitar.com/explore?type[]=Pro" target="_blank" rel="noopener">Ultimate Guitar</a>
         (Download unter "Tabs" vom Typ "Guitar Pro").</div>
     </div>
-    ${field('importUgInput', 'Quelle', '',
+    ${field('importUgInput', 'Quelle der Datei', '',
     'inputmode="url" placeholder="https://tabs.ultimate-guitar.com/tab/…"')}
     <div class="btn-row">
       <button class="btn btn-primary" id="importSubmitBtn" type="button">Importieren</button>
@@ -773,10 +923,8 @@ export function openImportForm(onImported){
 
   byId('cancelBtn').addEventListener('click', closeOverlay);
   byId('manualBtn').addEventListener('click', () => {
-    // Eine schon eingetragene Quelle geht ins Formular mit.
-    const ultimateGuitar = byId('importUgInput').value.trim();
     closeOverlay();
-    openSongForm(null, onImported, ultimateGuitar ? {ultimateGuitar} : {});
+    openSongForm(null, onImported);
   });
   byId('importSubmitBtn').addEventListener('click', async () => {
     const errorBox = byId('formError');
@@ -799,9 +947,8 @@ export function openImportForm(onImported){
       if(!meta.title){
         Object.assign(meta, metaFromFileName(file.name), meta.artist ? {artist: meta.artist} : {});
       }
-      // Die Quelle (z. B. die Seite des Tabs bei Ultimate Guitar) gleich mitspeichern.
-      const ultimateGuitar = byId('importUgInput').value.trim();
-      const saved = await importSong({...meta, sources: ultimateGuitar ? {ultimateGuitar} : {}}, tex, file);
+      // Die Quelle der Datei (z. B. die Seite des Tabs bei Ultimate Guitar) hält der Server beim Upload fest.
+      const saved = await importSong({...meta, gpSource: byId('importUgInput').value.trim()}, tex, file);
       storeSong(saved);
       closeOverlay();
       onImported(saved);
@@ -949,7 +1096,7 @@ function openCoverForm(song, onSaved, query = song){
  * @param {Song} song zu löschendes Lied
  * @returns {Promise<boolean>} true, wenn gelöscht
  */
-export async function deleteSongUI(song){
+async function deleteSongUI(song){
   if(!window.confirm(`„${song.title}“ samt aller Dateien wirklich unwiderruflich löschen?`)) return false;
   try {
     await apiWrite(`${API_URL}songs.php?slug=${encodeURIComponent(song.slug)}`, {method: 'DELETE'});
@@ -980,10 +1127,12 @@ export async function initLibrary(){
   sortSel.addEventListener('change', onFilterChange);
   tagSel.addEventListener('change', onFilterChange);
   trackSel.addEventListener('change', onFilterChange);
+  pickSel.addEventListener('change', onFilterChange);
 
   SONGS = await loadSongs();
   refreshTagFilter();
   refreshTrackFilter();
+  refreshPickFilter();
 
   // Suchbegriff/Filter/Sortierung vom letzten Besuch wiederherstellen (Genre und Spur nur, wenn es sie noch gibt).
   const saved = loadViewState();
@@ -991,6 +1140,7 @@ export async function initLibrary(){
   if(saved.sort && [...sortSel.options].some(o => o.value === saved.sort)) sortSel.value = saved.sort;
   if(saved.tag && [...tagSel.options].some(o => o.value === saved.tag)) tagSel.value = saved.tag;
   if(saved.track && [...trackSel.options].some(o => !o.disabled && o.value === saved.track)) trackSel.value = saved.track;
+  if(saved.pick && [...pickSel.options].some(o => o.value === saved.pick)) pickSel.value = saved.pick;
 
   refreshLibrary();
 }

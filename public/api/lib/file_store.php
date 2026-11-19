@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/crud.php';
 require_once __DIR__ . '/gp_file.php';
+require_once __DIR__ . '/uploads.php';
 
 /** Eine hochgeladene Datei ist ungültig (geprüft am Inhalt, nicht an der Endung), z. B. keine GP-Datei. */
 class FileValidationException extends RuntimeException
@@ -28,22 +29,22 @@ function unique_filename(string $dir, string $baseName, string $ext): string
 }
 
 /**
- * Legt eine hochgeladene Datei als Rohmaterial unter orig/ ab. Liegt dort schon eine Datei mit gleichem Inhalt
- * (MD5), wird nichts abgelegt. Ist der Name belegt, wird ein Zähler angehängt (siehe unique_filename()): In orig/
- * wird nie etwas überschrieben oder verändert.
+ * Legt eine hochgeladene Datei als Rohmaterial unter data/upload/<slug>/ ab (siehe upload_dir()). Liegt dort schon
+ * eine Datei mit gleichem Inhalt (MD5), wird nichts abgelegt. Ist der Name belegt, wird ein Zähler angehängt (siehe
+ * unique_filename()): Im Upload-Ordner wird nie etwas überschrieben oder verändert.
  *
  * @param string $slug Lied, zu dem die Datei gehört (der Ordner muss existieren)
  * @param string $localPath lokale Datei; wird nur gelesen
- * @param string $originalName ursprünglicher Dateiname, daraus wird der Name unter orig/ gebildet
+ * @param string $originalName ursprünglicher Dateiname, daraus wird der Name im Upload-Ordner gebildet
  * @param string|null $ext Endung ohne Punkt, sonst die des ursprünglichen Namens (z. B. nach Erkennung am Inhalt)
- * @return string Dateiname unter orig/ (bei gleichem Inhalt der bereits vorhandene)
- * @throws RuntimeException wenn orig/ nicht angelegt oder die Datei nicht kopiert werden kann
+ * @return string Dateiname im Upload-Ordner (bei gleichem Inhalt der bereits vorhandene)
+ * @throws RuntimeException wenn der Upload-Ordner nicht angelegt oder die Datei nicht kopiert werden kann
  */
 function store_original(string $slug, string $localPath, string $originalName, ?string $ext = null): string
 {
-    $origDir = song_dir($slug) . '/orig';
+    $origDir = upload_dir($slug);
     if (!is_dir($origDir) && !mkdir($origDir, 0775, true) && !is_dir($origDir)) {
-        throw new RuntimeException('Ordner orig/ konnte nicht angelegt werden');
+        throw new RuntimeException('Upload-Ordner konnte nicht angelegt werden');
     }
     $hash = md5_file($localPath);
     foreach (glob("$origDir/*") ?: [] as $existing) {
@@ -55,7 +56,7 @@ function store_original(string $slug, string $localPath, string $originalName, ?
     $baseName = slugify(pathinfo($originalName, PATHINFO_FILENAME)) ?: 'datei';
     $name = unique_filename($origDir, $baseName, $ext);
     if (!copy($localPath, "$origDir/$name")) {
-        throw new RuntimeException("$originalName konnte nicht unter orig/ gespeichert werden");
+        throw new RuntimeException("$originalName konnte nicht im Upload-Ordner gespeichert werden");
     }
     return $name;
 }
@@ -92,7 +93,7 @@ function validate_score(string $tex): void
 
 /**
  * Speichert die Noten eines neuen Lieds als score.atex, beim Import zusammen mit der Original-GP-Datei: Diese
- * kommt unverändert als Rohmaterial nach orig/ (siehe store_original()), eine eingebettete Audiospur wird zu
+ * kommt unverändert als Rohmaterial in den Upload-Ordner (siehe store_original()), eine eingebettete Audiospur wird zu
  * audio.mp3 (siehe extract_gp_audio()). Die Noten wandelt der Browser vorher mit alphaTab um, ohne Titel, Interpret
  * und die übrigen Angaben (die stehen nur in song.json). Nur einmal je Lied möglich: Gibt es schon Noten, wird
  * abgelehnt.
@@ -101,11 +102,18 @@ function validate_score(string $tex): void
  * @param string $tex Noten als alphaTex
  * @param string|null $gpPath lokale Original-GP-Datei; wird nur gelesen, Aufräumen bleibt Sache des Aufrufers.
  *                            null, wenn die Noten im Formular entstanden sind
- * @param string $gpName ursprünglicher Dateiname der GP-Datei, daraus wird der Name unter orig/ gebildet
+ * @param string $gpName ursprünglicher Dateiname der GP-Datei, daraus wird der Name im Upload-Ordner gebildet
+ * @param string $gpSource Quelle der GP-Datei (meist die Seite des Tabs), wird beim Upload festgehalten
  * @return array das aktualisierte Lied
  * @throws FileValidationException|NotFoundException|ConflictException|RuntimeException
  */
-function store_new_score(string $slug, string $tex, ?string $gpPath = null, string $gpName = ''): array
+function store_new_score(
+    string $slug,
+    string $tex,
+    ?string $gpPath = null,
+    string $gpName = '',
+    string $gpSource = ''
+): array
 {
     if (read_song_json($slug) === null) {
         throw new NotFoundException("Song '$slug' nicht gefunden");
@@ -123,7 +131,8 @@ function store_new_score(string $slug, string $tex, ?string $gpPath = null, stri
     }
     if ($gpPath !== null) {
         $original = store_original($slug, $gpPath, $gpName, $ext);
-        extract_gp_audio("$dir/orig/$original", $dir);
+        record_upload($slug, $original, $gpSource !== '' ? $gpSource : null);
+        extract_gp_audio(upload_dir($slug) . "/$original", $dir);
     }
     if (file_put_contents($scorePath, $tex) === false) {
         throw new RuntimeException('Noten konnten nicht gespeichert werden');

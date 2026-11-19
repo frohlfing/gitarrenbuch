@@ -1,29 +1,29 @@
 /**
- * Einstieg des Frontends: Routing zwischen Liederliste (#/), Liedansicht (#/song/<slug>) und Griffbildern
- * (#/akkorde). Die eigentliche Arbeit steckt in den ES-Modulen unter js/.
+ * Einstieg des Frontends: Routing zwischen Liederliste (#/) und Liedansicht (#/song/<slug>); Akkorde, Patterns und
+ * Griffbrett öffnen aus dem Menü der Liederliste als Dialog. Die eigentliche Arbeit steckt in den ES-Modulen unter js/.
  */
 
-import {coverUrl, escapeHtml, loadAudio, loadChordLibrary, loadScoreText} from './js/api.js';
-import {exportChordProFile} from './js/chordpro.js';
-import {openStructureEditor} from './js/editor.js';
-import {chordDiagramSvg} from './js/svg.js';
 import {
-  closeOverlay, deleteSongUI, findSong, initLibrary, openImportForm, openOverlay, openSongForm, storeSong,
+  chordDiagramSvg, coverUrl, escapeHtml, fretboardSvg, loadAudio, loadChordLibrary, loadPatterns,
+  loadScoreText, NOTE_LABELS, structureOf, STRUCTURES,
+} from './js/base.js';
+import {NoteEditor} from './js/editor.js';
+import {
+  closeOverlay, findSong, initLibrary, openImportForm, openOverlay, openSongForm, storeSong,
 } from './js/library.js';
-import {NoteEditor} from './js/note-editor.js';
-import {Player, SCALES} from './js/player.js';
-import {describeScoreInfo, exportGpFile} from './js/score.js';
-import {SyncEditor} from './js/sync-editor.js';
+import {describeScoreInfo, exportGpFile} from './js/notation.js';
+import {Player, SCALES} from './js/playback.js';
+import {openUploads} from './js/uploads.js';
+import {patternGridHtml, TECHNIQUES} from './js/sheet.js';
+import {exportChordProFile} from './js/textview.js';
 
-/** @typedef {import('./js/api.js').Song} Song */
-/** @typedef {import('./js/score.js').ScoreInfo} ScoreInfo */
+/** @typedef {import('./js/base.js').Song} Song */
+/** @typedef {import('./js/notation.js').ScoreInfo} ScoreInfo */
 
 /** Bereich der Liederliste. */
 const libraryView = document.getElementById('libraryView');
 /** Bereich der Liedansicht. */
 const songView = document.getElementById('songView');
-/** Bereich der Griffbilder (Akkordbibliothek). */
-const chordView = document.getElementById('chordView');
 /** Button „+ Neuer Song“: öffnet den Import-Dialog (dort auch „Manuell“). */
 const newSongBtn = document.getElementById('newSongBtn');
 
@@ -34,32 +34,15 @@ const newSongBtn = document.getElementById('newSongBtn');
 let player = null;
 
 /**
- * Sync-Editor der Liedansicht, null, wenn er geschlossen ist.
- * @type {?SyncEditor}
- */
-let syncEditor = null;
-
-/**
  * Bearbeitungsmodus der Liedansicht, null, wenn er aus ist.
  * @type {?NoteEditor}
  */
 let noteEditor = null;
 
-/** Stift-Symbol (Material Icons "edit", Apache 2.0) für den Knopf "Bearbeiten" in der Leiste. */
-const EDIT_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">'
-  + '<path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 '
-  + '0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>';
-
-/**
- * Beobachtet die Höhe des Sync-Editors, null, wenn er geschlossen ist.
- * @type {?ResizeObserver}
- */
-let syncResize = null;
-
 /** Hash der Liederliste (die Seiten sind Hash-Pfade, keine Sprungmarken). */
 const LIST_HASH = '#/';
 /** Hash der Seite mit den Griffbildern. */
-const CHORDS_HASH = '#/akkorde';
+/** Hash der Seite mit dem Griffbrett. */
 
 /**
  * Hash der Liedansicht.
@@ -76,27 +59,26 @@ function songHash(slug){
  */
 function showLibrary(){
   leaveSong();
-  chordView.hidden = true;
   libraryView.hidden = false;
   document.title = 'Gitarrenbuch';
 }
 
 /**
- * Beendet die Liedansicht (Player, Sync-Editor) und leert sie.
+ * Beendet die Liedansicht (Player, Bearbeitungsmodus) und leert sie.
  * @returns {void}
  */
 function leaveSong(){
   closeNoteEditor();
-  closeSyncEditor();
   player?.destroy();
   player = null;
   songView.hidden = true;
+  songView.classList.remove('is-playing');
   songView.innerHTML = '';
 }
 
 /**
- * Akkordname zum Anzeigen: Die Bibliothek schreibt klein ("f#m", "d/f#").
- * @param {string} key Schlüssel der Bibliothek
+ * Akkordname zum Anzeigen: Der Katalog schreibt klein ("f#m", "d/f#").
+ * @param {string} key Schlüssel des Katalogs
  * @returns {string} z. B. "F#m", "D/F#"
  */
 function chordDisplayName(key){
@@ -104,27 +86,19 @@ function chordDisplayName(key){
 }
 
 /**
- * Zeigt alle Griffbilder der Akkordbibliothek, je Akkord der Standardgriff zuerst; zum Ausdrucken gedacht.
+ * Zeigt alle Griffbilder des Akkordkatalogs, je Akkord der häufigste Griff zuerst; zum Ausdrucken gedacht.
  * @returns {Promise<void>}
  */
 async function showChordLibrary(){
-  leaveSong();
-  libraryView.hidden = true;
-  chordView.hidden = false;
-  document.title = 'Griffbilder – Gitarrenbuch';
-  window.scrollTo(0, 0);
-  chordView.innerHTML = `
-    <div class="songbar">
-      <a class="btn btn-icon" href="${LIST_HASH}" aria-label="Zur Songliste">&larr;</a>
-      <div class="songbar-titles">
-        <h2>Griffbilder</h2>
-        <div class="songbar-meta">Alle Akkorde aus den Songs nach Grundton, Standardgriff zuerst</div>
-      </div>
-      <button class="btn" type="button" id="toggleChords">Alle zuklappen</button>
-      <button class="btn" type="button" id="printChords">Drucken</button>
+  openOverlay(`
+    <h2>Akkorde</h2>
+    <p class="ov-meta">Die Akkorde der Songs nach Grundton, häufigster Griff zuerst</p>
+    <div class="ov-tools">
+        <button class="btn" type="button" id="toggleChords">Alle zuklappen</button>
+        <button class="btn" type="button" id="printChords">Drucken</button>
     </div>
     <div class="chord-sheet" id="chordSheet"><p class="empty">wird geladen &hellip;</p></div>
-  `;
+  `, false, false, true);
   document.getElementById('printChords').addEventListener('click', () => window.print());
   const sheet = document.getElementById('chordSheet');
   const toggle = document.getElementById('toggleChords');
@@ -142,7 +116,7 @@ async function showChordLibrary(){
   sheet.addEventListener('toggle', updateToggle, true);
   try {
     const library = await loadChordLibrary();
-    // Nach Grundton gruppieren; die Bibliothek ist schon nach Grundton sortiert.
+    // Nach Grundton gruppieren; der Katalog ist schon nach Grundton sortiert.
     /** @type {Map<string, string>} */
     const groups = new Map();
     for(const [key, grips] of Object.entries(library)){
@@ -161,7 +135,95 @@ async function showChordLibrary(){
       <details class="chord-root" open>
         <summary>${escapeHtml(root)}</summary>
         <div class="chord-root-list">${html}</div>
-      </details>`).join('');
+      </details>`).join('') || '<p class="empty">Noch keine Akkorde: Sie erscheinen, sobald ein Song Noten mit Akkorden hat.</p>';
+  } catch(err){
+    sheet.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+  }
+}
+
+/**
+ * Zeigt den Pattern-Katalog (Strumming und Picking Patterns) zum Ansehen und Drucken, analog zu den Griffbildern.
+ * @returns {Promise<void>}
+ */
+async function showPatternLibrary(){
+  openOverlay(`
+    <h2>Patterns</h2>
+    <p class="ov-meta">Strumming und Picking Patterns</p>
+    <div class="ov-tools">
+        <button class="btn" type="button" id="toggleChords">Alle zuklappen</button>
+        <button class="btn" type="button" id="printChords">Drucken</button>
+    </div>
+    <div class="controls pattern-filter" id="patternFilter" hidden>
+      <select id="patTsSel" aria-label="Nach Taktart filtern"><option value="">Alle Taktarten</option></select>
+      <select id="patGenreSel" aria-label="Nach Genre filtern"><option value="">Alle Genres</option></select>
+    </div>
+    <div class="chord-sheet" id="chordSheet"><p class="empty">wird geladen &hellip;</p></div>
+  `, false, false, true);
+  document.getElementById('printChords').addEventListener('click', () => window.print());
+  const sheet = document.getElementById('chordSheet');
+  const toggle = document.getElementById('toggleChords');
+  const groupsOf = () => [...sheet.querySelectorAll('details.chord-root')];
+  const updateToggle = () => {
+    toggle.textContent = groupsOf().some(d => d.open) ? 'Alle zuklappen' : 'Alle aufklappen';
+  };
+  toggle.addEventListener('click', () => {
+    const open = !groupsOf().some(d => d.open);
+    for(const group of groupsOf()) group.open = open;
+    updateToggle();
+  });
+  sheet.addEventListener('toggle', updateToggle, true);
+  try {
+    const {patterns: catalog, usage, genres: genresOf = {}} = await loadPatterns();
+    // Genre eines Patterns = Genre der Songs, die es verwenden; ungenutzte Patterns haben keines.
+    const patterns = catalog.map(p => ({...p, genres: genresOf[p.id] ?? []}));
+    // Filter: "Filter für Taktart und Genre"): nur Werte, die es im Katalog gibt.
+    const fill = (select, values, all) => {
+      select.innerHTML = `<option value="">${all}</option>` + values.map(v =>
+        `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    };
+    const tsSel = /** @type {HTMLSelectElement} */ (document.getElementById('patTsSel'));
+    const genreSel = /** @type {HTMLSelectElement} */ (document.getElementById('patGenreSel'));
+    fill(tsSel, [...new Set(patterns.map(p => p.timeSignature))].sort((a, b) => a.localeCompare(b, 'de', {numeric: true})),
+      'Alle Taktarten');
+    const genres = [...new Set(patterns.flatMap(p => p.genres ?? []))].sort((a, b) => a.localeCompare(b, 'de'));
+    fill(genreSel, genres, 'Alle Genres');
+    genreSel.hidden = !genres.length;
+    document.getElementById('patternFilter').hidden = false;
+    const draw = () => {
+      const shown = patterns.filter(p => (!tsSel.value || p.timeSignature === tsSel.value)
+        && (!genreSel.value || (p.genres ?? []).includes(genreSel.value)));
+      sheet.innerHTML = Object.entries(TECHNIQUES).map(([technique, label]) => {
+        const group = shown.filter(p => p.technique === technique)
+          .sort((a, b) => a.timeSignature.localeCompare(b.timeSignature) || a.name.localeCompare(b.name));
+        if(!group.length) return '';
+        // Je Taktart und je Bauart eine Zeile, damit Patterns mit einer Zeile mehr (zweiter Bass beim Picking Pattern)
+        // nicht neben Patterns ohne stehen; in der Zeile gleich hohe Karten, das Raster unten, sodass Titel und
+        // Zählzeiten auf einer Höhe liegen. Strumming Patterns halten immer Platz für die Betonung frei.
+        /** @type {Map<string, import('./js/sheet.js').Pattern[]>} */
+        const byRow = new Map();
+        for(const p of group){
+          const key = `${p.timeSignature}|${technique === 'picking' && /q/i.test(p.steps ?? '')}`;
+          byRow.set(key, [...(byRow.get(key) ?? []), p]);
+        }
+        return `
+          <details class="chord-root" open>
+            <summary>${escapeHtml(label)}s</summary>
+            ${[...byRow.values()].map(row => `<div class="chord-root-list pattern-list">${row.map(p => `
+              <section class="chord-group pattern-card">
+                <!-- Das Raster steht nur dabei, wenn es nicht der Normalfall (Achtel) ist. -->
+                <h3>${escapeHtml(p.name)}</h3>
+                <div class="pattern-meta">${escapeHtml(p.timeSignature)}${p.grid === 16 ? ' · Sechzehntel' : ''}${
+                  usage[p.id] ? ` · ${usage[p.id]} Song${usage[p.id] === 1 ? '' : 's'}` : ''}</div>
+                ${p.genres?.length ? `<div class="pattern-meta">${escapeHtml(p.genres.join(', '))}</div>` : ''}
+                ${patternGridHtml(p, false, true)}
+              </section>`).join('')}</div>`).join('')}
+          </details>`;
+      }).join('') || `<p class="empty">${patterns.length ? 'Kein Pattern passt zu diesem Filter.' : 'Der Katalog ist noch leer.'}</p>`;
+      updateToggle();
+    };
+    tsSel.addEventListener('change', draw);
+    genreSel.addEventListener('change', draw);
+    draw();
   } catch(err){
     sheet.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
   }
@@ -208,51 +270,66 @@ function downloadFile(file){
  */
 function showSong(song){
   leaveSong();
-  chordView.hidden = true;
   libraryView.hidden = true;
   songView.hidden = false;
   document.title = `${song.title} – Gitarrenbuch`;
   window.scrollTo(0, 0);
 
-  // Oben der Kopf mit Cover und Eckdaten (scrollt weg), darunter die Leiste, die beim Spielen stehen bleibt.
+  // Lage der Bedienelemente:
+  // - Kopf: Cover, daneben Titel, Interpret und eine Zeile Eckdaten, jede mit "…" gekürzt, wenn sie nicht passt.
+  //   Hinweise (Tempo, Sync-Punkte, Fehler in den Noten) stecken hinter einem Warnzeichen am Ende der Zeile.
+  // - Streifen mit aktuellem Akkord, Griffbild und Patterns (füllt der Player): bleibt beim Scrollen stehen. Am PC
+  //   steht er rechts neben dem Kopf, und die ganze Zeile bleibt stehen (.songtop, app.css).
+  // - Schließen (zur Songliste): schwebt oben rechts, unauffällig halbtransparent, immer erreichbar.
+  // - Alles andere liegt unten in der Abspielleiste, auch das Menü (der Player stellt den Platz, el.menuWrap).
+  // - .songbar ist der Platz für die Werkzeugleiste des Bearbeitungsmodus (editor.js).
+  const issues = (song.issues ?? []).map(i => `${i.label}: ${i.detail}`);
   songView.innerHTML = `
-    <div class="songhead">
-      ${song.files.includes('cover') ? `<img class="songhead-cover" src="${escapeHtml(coverUrl(song))}" alt="">` : ''}
-      <div class="songhead-text">
-        <h2>${escapeHtml(song.title)}${song.artist
-          ? ` <span class="songhead-artist">– ${escapeHtml(song.artist)}</span>` : ''}</h2>
-        <div class="songhead-info" id="songMeta"></div>
-        ${song.issues?.length ? `
-          <div class="song-issues">
-            <strong>&#9888; ${escapeHtml(song.issues[0].label)}:</strong> ${escapeHtml(song.issues[0].detail)}
-          </div>` : ''}
-      </div>
-    </div>
-    <div class="songbar">
-      <a class="btn btn-icon" href="${LIST_HASH}" aria-label="Zur Songliste">&larr;</a>
-      <div class="songbar-controls" id="songControls"></div>
-      <div class="songbar-menu">
-        ${song.files.includes('score') ? `<button class="btn btn-icon edit-toggle" id="noteEditBtn" type="button"
-          aria-pressed="false" title="Bearbeiten">${EDIT_ICON}</button>` : ''}
-        <button class="btn btn-icon" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
-        <div class="menu" id="menu" hidden>
-          <button type="button" id="editBtn" title="Titel, Interpret, Cover, Quellen usw.">Songdaten</button>
-          <button type="button" id="displayBtn"${song.files.includes('score') ? '' : ' hidden'}>Darstellung</button>
-          <button type="button" id="structBtn"${song.files.includes('score') ? '' : ' hidden'}
-            title="Spurrollen, Capo, Tonart und Akkorde in Ordnung bringen">Struktur-Editor</button>
-          <button type="button" id="syncBtn"${song.files.includes('score') && song.files.includes('audio') ? '' : ' hidden'}
-            title="Sync-Punkte an der Audiospur ausrichten">Sync-Editor</button>
-          <button type="button" id="exportBtn"${song.files.includes('score') ? '' : ' hidden'}
-            title="Notation mit Audiospur als Guitar-Pro-Datei (.gp)">GP-Export</button>
-          <button type="button" id="chordProBtn"${song.files.includes('score') ? '' : ' hidden'}
-            title="Text und Akkorde als ChordPro-Datei (.cho)">CHO-Export</button>
-          <button type="button" id="deleteBtn" class="danger">Löschen</button>
+    <div class="songtop">
+      <div class="songhead">
+        ${song.files.includes('cover') ? `<img class="songhead-cover" src="${escapeHtml(coverUrl(song))}" alt="">` : ''}
+        <div class="songhead-text">
+          <h2 title="${escapeHtml(song.title)}">${escapeHtml(song.title)}</h2>
+          <div class="songhead-artist">${escapeHtml(song.artist ?? '')}</div>
+          <div class="songhead-info"><span id="songMeta"></span><button type="button" class="songhead-warn"
+            id="songWarn" hidden aria-expanded="false" aria-label="Hinweise" title="Hinweise">&#9888;</button></div>
         </div>
       </div>
+      <div class="songstrip" id="songStrip" hidden></div>
     </div>
+    <div class="song-notes" id="songNotes" hidden></div>
+    <a class="song-close" href="${LIST_HASH}" aria-label="Zur Songliste" title="Zur Songliste">&#10005;</a>
+    <div class="songbar"></div>
     <div id="playerRoot"></div>
-    <div id="syncRoot"></div>
   `;
+  // Menü: Knopf und Liste; der Player setzt beides in die Abspielleiste.
+  const menuWrap = document.createElement('div');
+  menuWrap.className = 'songbar-menu';
+  menuWrap.innerHTML = `
+    <button class="tbtn" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
+    <div class="menu" id="menu" hidden>
+      <button type="button" id="noteEditBtn" title="Noten, Text, Akkorde, Spuren, Leadsheet, Audio">Bearbeiten</button>
+      <button type="button" id="songDataBtn">Stammdaten</button>
+      <button type="button" id="uploadsBtn" title="Hochgeladene Dateien mit Quelle und Beschreibung">Uploads</button>
+      <button type="button" id="displayBtn">Darstellung</button>
+      <button type="button" id="exportBtn" title="Notation mit Audiospur als Guitar-Pro-Datei (.gp)">GP-Export</button>
+      <button type="button" id="chordProBtn" title="Text und Akkorde als ChordPro-Datei (.cho)">CHO-Export</button>
+    </div>`;
+  songView.querySelector('.songhead').append(menuWrap);
+  // Hinweise: Fehler in den Noten (vom Server) sofort, die aus dem Player (Tempo, Sync-Punkte) nach dem Laden.
+  const warnBtn = document.getElementById('songWarn');
+  const notesEl = document.getElementById('songNotes');
+  const showWarnings = warnings => {
+    const all = [...issues, ...warnings];
+    warnBtn.hidden = !all.length;
+    notesEl.innerHTML = all.map(w => `<div>&#9888; ${escapeHtml(w)}</div>`).join('');
+    if(!all.length) notesEl.hidden = true;
+  };
+  warnBtn.addEventListener('click', () => {
+    notesEl.hidden = !notesEl.hidden;
+    warnBtn.setAttribute('aria-expanded', String(!notesEl.hidden));
+  });
+  showWarnings([]);
 
   const menu = document.getElementById('menu');
   const menuBtn = document.getElementById('menuBtn');
@@ -262,12 +339,12 @@ function showSong(song){
   const current = () => findSong(song.slug) ?? song;
 
   /**
-   * Formular "Songdaten" im linken Panel des Bearbeitungsmodus. Ändert sich der Slug (Titel oder Interpret), gilt ab
-   * sofort der neue: für den Player (Speichern der Noten) und in der Adresszeile, ohne die Ansicht neu zu laden.
-   * @param {HTMLElement} container Element im Panel
+   * Dialog "Stammdaten" aus dem Menü, darin auch "Song löschen". Ändert sich der Slug (Titel oder Interpret), gilt ab
+   * sofort der neue: für den Player (Speichern der Noten) und in der Adresszeile. Im Bearbeitungsmodus bleibt die
+   * Ansicht stehen (✕ zeigt den Song neu), sonst wird der Song gleich neu gezeigt.
    * @returns {void}
    */
-  const renderSongData = container => {
+  const openSongData = () => {
     openSongForm(current(), saved => {
       if(saved.slug !== song.slug){
         if(player) player.slug = saved.slug;
@@ -275,30 +352,12 @@ function showSong(song){
       }
       song = saved;
       document.title = `${saved.title} – Gitarrenbuch`;
-      songDataChanged = true;
-    }, {}, container);
-  };
-  /** Ob die Songdaten im Bearbeitungsmodus geändert wurden (dann zeigt "Fertig" den Song neu). */
-  let songDataChanged = false;
-  /** Formular "Songdaten" aus dem Menü. */
-  const openSongData = () => {
-    openSongForm(current(), saved => {
-      // Rename ändert den Slug: Hash anpassen, sonst neu zeichnen.
-      if(saved.slug !== song.slug) location.replace(songHash(saved.slug));
+      if(noteEditor) songDataChanged = true;
       else showSong(saved);
-    });
+    }, () => { location.hash = LIST_HASH; });
   };
-  document.getElementById('editBtn').addEventListener('click', () => {
-    setMenu(false);
-    openSongData();
-  });
-  document.getElementById('structBtn').addEventListener('click', () => {
-    setMenu(false);
-    openStructureEditor(current(), saved => {
-      storeSong(saved);
-      showSong(saved);
-    }).catch(err => alert('Struktur-Editor: ' + err.message));
-  });
+  /** Ob die Stammdaten im Bearbeitungsmodus geändert wurden (dann zeigt ✕ den Song neu). */
+  let songDataChanged = false;
   document.getElementById('exportBtn').addEventListener('click', () => {
     setMenu(false);
     downloadGpFile(current()).catch(err => alert('Export fehlgeschlagen: ' + err.message));
@@ -307,39 +366,42 @@ function showSong(song){
     setMenu(false);
     downloadChordProFile(current()).catch(err => alert('Export fehlgeschlagen: ' + err.message));
   });
-  document.getElementById('deleteBtn').addEventListener('click', async () => {
-    setMenu(false);
-    if(await deleteSongUI(song)) location.hash = LIST_HASH;
-  });
 
   const root = document.getElementById('playerRoot');
-  if(!song.files.includes('score')){
-    root.innerHTML = `<p class="empty">Keine Noten vorhanden. Noten kommen über „+ Neuer Song“ in der Songliste.</p>`;
-    return;
-  }
-  // Ansicht (Noten, Tabs, Noten + Tabs, Chords) und Spuren stellt der Player in die Kopfzeile.
-  player = new Player(root, document.getElementById('songControls'));
-  // Tonart, Capo usw. stehen nur in den Noten und kommen deshalb erst nach dem Laden in die Kopfzeile.
-  // Element vorher merken: Ist bis dahin schon ein anderes Lied offen, trifft die Antwort nur das alte, entfernte.
+  player = new Player(root, document.getElementById('songStrip'));
+  // Das Menü gehört in die Abspielleiste.
+  player.el.menuWrap.replaceWith(menuWrap);
+  // Tonart, Capo usw. stehen nur in den Noten und kommen deshalb erst nach dem Laden in die Kopfzeile. Das Element
+  // wird vorab gemerkt: Ist bis dahin ein anderes Lied offen, landet die späte Antwort im alten, entfernten Element.
   const metaEl = document.getElementById('songMeta');
   const showMeta = (info, audioSeconds = null) => {
-    metaEl.innerHTML = describeScoreInfo(info, audioSeconds).map(line => `<div>${line}</div>`).join('');
+    const {parts, warnings} = describeScoreInfo(info, audioSeconds);
+    metaEl.innerHTML = parts.join(' · ');
+    showWarnings(warnings);
   };
   const songPlayer = player;
+  document.getElementById('songDataBtn').addEventListener('click', () => {
+    setMenu(false);
+    openSongData();
+  });
+  document.getElementById('uploadsBtn').addEventListener('click', () => {
+    setMenu(false);
+    openUploads(current().slug);
+  });
   document.getElementById('displayBtn').addEventListener('click', () => {
     setMenu(false);
     openDisplayDialog(songPlayer);
   });
-  document.getElementById('syncBtn').addEventListener('click', () => {
-    setMenu(false);
-    closeNoteEditor();
-    void openSyncEditor(current(), songPlayer, showMeta);
-  });
-  // Stift: Bearbeitungsmodus; "Fertig" zeigt den Song neu, wenn Noten oder Songdaten gespeichert wurden.
-  // Abweichungen (Capo ungleich, Sprungzeichen …) meldet der Modus selbst, mit Knöpfen zum Beheben.
+  // Beim Öffnen gilt "Stammdaten gespeichert" als zurückgesetzt; ✕ zeigt den Song neu, wenn Noten oder Stammdaten
+  // gespeichert wurden.
   document.getElementById('noteEditBtn').addEventListener('click', () => {
+    setMenu(false);
+    if(noteEditor){
+      noteEditor.finish();
+      return;
+    }
     songDataChanged = false;
-    openNoteEditor(songPlayer, renderSongData, () => songDataChanged);
+    openNoteEditor(songPlayer, () => songDataChanged);
   });
   songPlayer.load(song).then(info => {
     showMeta(info);
@@ -378,49 +440,14 @@ function openDisplayDialog(songPlayer){
 }
 
 /**
- * Öffnet den Sync-Editor unter den Noten, sobald die Audiospur geladen ist.
- * @param {Song} song Lied
+ * Schaltet die Liedansicht in den Bearbeitungsmodus (Werkzeugleiste und Panels, siehe js/editor.js). Verlassen
+ * wird er mit ✕ (Bearbeiten beenden).
  * @param {Player} songPlayer Player der Liedansicht
- * @param {function(ScoreInfo, ?number): void} showMeta zeichnet die Kopfzeile neu (Eckdaten, Länge der Audiospur)
- * @returns {Promise<void>}
- */
-async function openSyncEditor(song, songPlayer, showMeta){
-  if(syncEditor) return;
-  const seconds = await songPlayer.audioDuration;
-  if(!seconds || !songPlayer.mixer || songPlayer !== player){
-    if(songPlayer === player) alert('Die Audiospur konnte nicht geladen werden.');
-    return;
-  }
-  const root = document.getElementById('syncRoot');
-  const editor = syncEditor = new SyncEditor(root, songPlayer, song, {
-    onChange: info => showMeta(info, seconds),
-    onClose: () => closeSyncEditor(),
-  });
-  songView.classList.add('syncing');
-  // Platz für den Editor über der Transportleiste freihalten (Höhe hängt vom Umbruch der Werkzeugleiste ab).
-  syncResize = new ResizeObserver(() => {
-    songView.style.setProperty('--sync-h', `${root.firstElementChild?.offsetHeight ?? 0}px`);
-  });
-  syncResize.observe(root.firstElementChild);
-  try {
-    await editor.open();
-  } catch(err){
-    closeSyncEditor();
-    alert('Sync-Editor: ' + err.message);
-  }
-}
-
-/**
- * Schaltet die Liedansicht in den Bearbeitungsmodus (Werkzeugleiste und Panels, siehe js/note-editor.js). Ein offener
- * Sync-Editor wird geschlossen. Verlassen wird er mit "Fertig" (der Stift ist dann ausgeblendet).
- * @param {Player} songPlayer Player der Liedansicht
- * @param {function(HTMLElement): void} renderSongData zeichnet das Formular "Songdaten" in ein Element
- * @param {function(): boolean} songDataChanged ob die Songdaten im Modus gespeichert wurden
+ * @param {function(): boolean} songDataChanged ob die Stammdaten im Modus gespeichert wurden
  * @returns {void}
  */
-function openNoteEditor(songPlayer, renderSongData, songDataChanged){
+function openNoteEditor(songPlayer, songDataChanged){
   if(noteEditor || !songPlayer.api?.score) return;
-  closeSyncEditor();
   noteEditor = new NoteEditor(songView, songPlayer, {
     // Nach dem Speichern zeigt der Player wieder die Ansicht des Songs, dafür neu laden.
     onClose: saved => {
@@ -428,13 +455,9 @@ function openNoteEditor(songPlayer, renderSongData, songDataChanged){
       const song = saved || songDataChanged() ? findSong(songPlayer.slug) : null;
       if(song) showSong(song);
     },
-    onSongData: renderSongData,
     onSaved: saved => storeSong(saved),
   });
   noteEditor.open();
-  const button = document.getElementById('noteEditBtn');
-  button.setAttribute('aria-pressed', 'true');
-  button.title = 'Bearbeiten beenden';
 }
 
 /**
@@ -445,34 +468,104 @@ function closeNoteEditor(){
   if(!noteEditor) return;
   noteEditor.destroy();
   noteEditor = null;
-  const button = document.getElementById('noteEditBtn');
-  button?.setAttribute('aria-pressed', 'false');
-  if(button) button.title = 'Bearbeiten';
 }
 
 /**
- * Schließt den Sync-Editor ohne Rückfrage (beim Verlassen der Liedansicht; "Schließen" im Editor fragt selbst).
+ * Zeigt das Griffbrett bis zum 15. Bund. Kartenreiter für Ton, Akkord und Tonleiter, darunter Grundton und Art in
+ * Auswahllisten; die Punkte tragen Notennamen oder Intervalle (umschaltbar), sind je Intervall eingefärbt und werden bei
+ * Akkorden und Tonleitern durch Klammern zu Griffen bzw. Lagen zusammengefasst. Unter dem Griffbrett steht die Legende.
  * @returns {void}
  */
-function closeSyncEditor(){
-  syncResize?.disconnect();
-  syncResize = null;
-  syncEditor?.destroy();
-  syncEditor = null;
-  songView.classList.remove('syncing');
-  songView.style.removeProperty('--sync-h');
+function showFretboard(){
+  let root = 0;
+  let group = STRUCTURES[1];
+  let kind = group.items[0].id;
+  let showIntervals = false;
+  /** Index des umklammerten Griffs bzw. der Lage (-1: keiner). */
+  let active = -1;
+  openOverlay(`
+    <h2>Griffbrett</h2>
+    <p class="ov-meta">Standard-Tuning, bis zum 15. Bund</p>
+    <div class="ov-tools">
+        <button class="btn" type="button" id="printChords">Drucken</button>
+    </div>
+    <div class="chord-sheet">
+      <div class="upl-tabs" role="tablist" id="fbTabs">${STRUCTURES.map(g =>
+    `<button type="button" role="tab" data-group="${g.id}">${g.group}</button>`).join('')}</div>
+      <div class="controls pattern-filter">
+        <select id="fbRoot" aria-label="Grundton">${NOTE_LABELS.map((label, i) =>
+    `<option value="${i}">${label}</option>`).join('')}</select>
+        <select id="fbKind" aria-label="Art"></select>
+        <span class="fb-mode" role="group" aria-label="Beschriftung">
+          <button class="btn" type="button" data-mode="notes">Noten</button>
+          <button class="btn" type="button" data-mode="intervals">Intervalle</button>
+        </span>
+      </div>
+      <h3 class="fb-title" id="fbTitle"></h3>
+      <div class="fb-scroll" id="fretboard"></div>
+      <p class="fb-hint" id="fbHint"></p>
+      <div class="fb-legend" id="fbLegend"></div>
+    </div>`, false, false, true);
+  const board = document.getElementById('fretboard');
+  const kindSel = /** @type {HTMLSelectElement} */ (document.getElementById('fbKind'));
+  const tabs = [...document.querySelectorAll('#fbTabs button')];
+  const modes = [...document.querySelectorAll('.fb-mode button')];
+  const hints = {
+    chord: 'Ein Klick auf einen Grundton mit Ring umklammert einen Griff in Grundstellung: je Ton eine Saite, benachbarte '
+      + 'Saiten, der tiefste Ton ist der Grundton, alles innerhalb von vier Bünden. Weitere Klicks zeigen die anderen Griffe '
+      + 'ab diesem Ton, der letzte schaltet aus.',
+    scale: 'Ein Klick auf einen Grundton mit Ring umklammert eine Lage: die Tonleiter vom Grundton an eine Oktave lang ohne '
+      + 'Handwechsel (vier Bünde). Weitere Klicks zeigen die anderen Lagen ab diesem Ton, der letzte schaltet aus.',
+  };
+  const draw = () => {
+    const view = structureOf(root, kind);
+    document.getElementById('fbTitle').textContent = view.title;
+    board.innerHTML = fretboardSvg(view.notes, root, {intervals: showIntervals, alt: view.alt, shapes: view.shapes, active});
+    document.getElementById('fbHint').textContent = view.kind === 'note' ? ''
+      : view.shapes.length ? hints[view.kind]
+        : view.kind === 'chord' ? 'Für diesen Akkord gibt es keinen Griff in Grundstellung auf benachbarten Saiten innerhalb von vier Bünden.'
+          : 'Für diese Tonleiter gibt es keine Lage mit einer Oktave ab dem Grundton innerhalb von vier Bünden.';
+    document.getElementById('fbLegend').innerHTML = view.kind === 'note' ? '' : view.legend.map(i =>
+      `<span class="fb-key"><i style="background:${i.color}"></i><b>${i.label}</b> ${escapeHtml(i.name)}</span>`).join('');
+    for(const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.group === group.id));
+    for(const button of modes) button.setAttribute('aria-pressed', String((button.dataset.mode === 'intervals') === showIntervals));
+  };
+  const fillKinds = () => {
+    kindSel.innerHTML = group.items.map(i => `<option value="${i.id}">${i.label}</option>`).join('');
+    kindSel.value = kind;
+    kindSel.hidden = group.id === 'note';
+  };
+  board.addEventListener('click', e => {
+    const dot = /** @type {Element} */ (e.target).closest('.fb-pick');
+    if(!dot) return;
+    const list = dot.getAttribute('data-shapes').split(',').map(Number);
+    const at = list.indexOf(active);
+    active = at < 0 ? list[0] : at + 1 < list.length ? list[at + 1] : -1;
+    draw();
+  });
+  for(const tab of tabs) tab.addEventListener('click', () => {
+    active = -1;
+    group = STRUCTURES.find(g => g.id === tab.dataset.group);
+    kind = group.items[0].id;
+    fillKinds();
+    draw();
+  });
+  for(const button of modes) button.addEventListener('click', () => {
+    showIntervals = button.dataset.mode === 'intervals';
+    draw();
+  });
+  document.getElementById('fbRoot').addEventListener('change', e => { root = Number(e.target.value); active = -1; draw(); });
+  kindSel.addEventListener('change', () => { kind = kindSel.value; active = -1; draw(); });
+  document.getElementById('printChords').addEventListener('click', () => window.print());
+  fillKinds();
+  draw();
 }
 
 /**
- * Zeigt je nach Hash die Liste (#/), ein Lied (#/song/<slug>) oder die Griffbilder (#/akkorde); unbekannte Lieder
- * führen zur Liste.
+ * Zeigt je nach Hash die Liste (#/) oder ein Lied (#/song/<slug>); unbekannte Lieder führen zur Liste.
  * @returns {void}
  */
 function route(){
-  if(location.hash === CHORDS_HASH){
-    void showChordLibrary();
-    return;
-  }
   const m = location.hash.match(/^#\/song\/([^/]+)$/);
   if(!m){
     showLibrary();
@@ -490,15 +583,35 @@ function route(){
  */
 const openSaved = saved => { location.hash = songHash(saved.slug); };
 newSongBtn.addEventListener('click', () => openImportForm(openSaved));
+// Menü ☰ der Liederliste: Akkorde, Patterns und Griffbrett öffnen als Dialog.
+const libMenu = document.getElementById('libMenu');
+const libMenuBtn = document.getElementById('libMenuBtn');
+libMenuBtn.addEventListener('click', () => {
+  libMenu.hidden = !libMenu.hidden;
+  libMenuBtn.setAttribute('aria-expanded', String(!libMenu.hidden));
+});
+libMenu.addEventListener('click', e => {
+  const open = {chords: showChordLibrary, patterns: showPatternLibrary, fretboard: showFretboard}[
+    /** @type {HTMLElement} */ (e.target).closest('button')?.dataset.page];
+  if(!open) return;
+  libMenu.hidden = true;
+  libMenuBtn.setAttribute('aria-expanded', 'false');
+  void open();
+});
+document.addEventListener('click', e => {
+  if(/** @type {Element} */ (e.target).closest('.lib-menu')) return;
+  libMenu.hidden = true;
+  libMenuBtn.setAttribute('aria-expanded', 'false');
+});
 // Zugeklappte Gruppen der Griffbilder für den Druck öffnen (auch bei Strg+P) und danach wieder schließen.
 window.addEventListener('beforeprint', () => {
-  for(const group of chordView.querySelectorAll('details.chord-root:not([open])')){
+  for(const group of document.getElementById('sheet').querySelectorAll('details.chord-root:not([open])')){
     group.dataset.printOpened = '';
     group.open = true;
   }
 });
 window.addEventListener('afterprint', () => {
-  for(const group of chordView.querySelectorAll('details[data-print-opened]')){
+  for(const group of document.getElementById('sheet').querySelectorAll('details[data-print-opened]')){
     delete group.dataset.printOpened;
     group.open = false;
   }
