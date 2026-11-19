@@ -2,10 +2,10 @@
  * Dialog "Uploads": die hochgeladenen Dateien eines Lieds (Guitar-Pro-, ChordPro-, Textdateien, PDFs, …) mit Quelle und
  * Beschreibung, dazu das Hochladen weiterer Dateien. Aus dem Menü des Lieds zeigt er alles; "Spur aus GuitarPro-Datei importieren" und
  * "Chord-Datei importieren" im Bearbeitungsmodus öffnen ihn zur Auswahl (nur passende Dateien, mit "Wählen").
- * Dateien werden nie geändert oder gelöscht; nur Quelle und Beschreibung lassen sich ändern.
+ * Dateien werden nie geändert; nur Quelle und Beschreibung lassen sich ändern, und eine Datei lässt sich löschen.
  */
 
-import {addUpload, escapeHtml, fetchUpload, listUploads, updateUpload, uploadUrl} from './base.js';
+import {addUpload, deleteUpload, escapeHtml, fetchUpload, listUploads, svgIcon, updateUpload, uploadUrl} from './base.js';
 import {bindDropzone, closeOverlay, isOverlayOpen, openOverlay, openStackedOverlay} from './library.js';
 
 /** @typedef {import('./base.js').Upload} Upload */
@@ -68,7 +68,9 @@ function uploadHtml(slug, u, pick){
       <a class="upl-name" href="${escapeHtml(uploadUrl(slug, u.file))}" target="_blank" rel="noopener">${escapeHtml(u.file)}</a>
       <span class="upl-meta">${formatSize(u.size)} · ${date}</span>
       ${pick ? '<button type="button" class="btn btn-primary btn-sm" data-pick>Wählen</button>' : ''}
-      <button type="button" class="btn btn-sm" data-edit>Ändern</button>
+      <button type="button" class="ebtn" data-edit title="Quelle und Beschreibung ändern"
+        aria-label="Quelle und Beschreibung ändern">${svgIcon('edit')}</button>
+      <button type="button" class="ebtn" data-delete title="Datei löschen" aria-label="Datei löschen">${svgIcon('trash')}</button>
     </div>
     <div class="upl-info">
       ${u.source ? `<div><span class="upl-label">Quelle:</span> ${sourceHtml(u.source)}</div>` : ''}
@@ -258,6 +260,15 @@ export function openUploads(slug, pick = null){
           <button type="button" class="btn btn-primary btn-sm" data-save>Speichern</button>
           <button type="button" class="btn btn-sm" data-cancel>Abbrechen</button>
         </div>`;
+    } else if(target.closest('[data-delete]')){
+      if(!confirm(`"${upload.file}" endgültig löschen?`)) return;
+      showError('');
+      try {
+        uploads = (await deleteUpload(slug, upload.file)).uploads;
+        render();
+      } catch(err){
+        showError(err.message);
+      }
     } else if(target.closest('[data-cancel]')){
       render();
     } else if(target.closest('[data-save]')){

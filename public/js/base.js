@@ -457,6 +457,46 @@ export async function loadScoreText(slug){
 }
 
 /**
+ * @typedef {{id: string, time: string, size: number}} ScoreVersion Aufgehobene Fassung der Noten (siehe
+ *   list_score_history() in api/lib/file_store.php): id zum Laden, time "2026-10-31 22:42:55" (Zeitpunkt des
+ *   Überschreibens), size in Bytes
+ */
+
+/**
+ * Listet die aufgehobenen Fassungen der Noten eines Lieds.
+ * @param {string} slug Slug des Lieds
+ * @returns {Promise<ScoreVersion[]>} die neueste zuerst
+ */
+export async function loadScoreHistory(slug){
+  const res = await fetch(`${API_URL}score.php?slug=${encodeURIComponent(slug)}&history=1`);
+  if(!res.ok) throw new Error(`Der Verlauf konnte nicht geladen werden (HTTP ${res.status}).`);
+  return /** @type {Promise<ScoreVersion[]>} */ (res.json());
+}
+
+/**
+ * Lädt eine aufgehobene Fassung der Noten.
+ * @param {string} slug Slug des Lieds
+ * @param {string} id Kennung aus loadScoreHistory()
+ * @returns {Promise<string>} alphaTex
+ */
+export async function loadScoreVersion(slug, id){
+  const res = await fetch(`${API_URL}score.php?slug=${encodeURIComponent(slug)}&version=${encodeURIComponent(id)}`);
+  if(!res.ok) throw new Error(`Die Fassung konnte nicht geladen werden (HTTP ${res.status}).`);
+  return res.text();
+}
+
+/**
+ * Löscht einen Stand aus dem Verlauf (Noten und Angaben für das Leadsheet).
+ * @param {string} slug Slug des Lieds
+ * @param {string} id Kennung aus loadScoreHistory()
+ * @returns {Promise<ScoreVersion[]>} die übrigen Stände, die neueste zuerst
+ */
+export function deleteScoreVersion(slug, id){
+  return apiWrite(`${API_URL}score.php?slug=${encodeURIComponent(slug)}&version=${encodeURIComponent(id)}`,
+    {method: 'DELETE'});
+}
+
+/**
  * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor.
  * @param {string} slug Slug des Lieds
  * @param {string} tex Noten als alphaTex
@@ -479,10 +519,12 @@ export function saveScore(slug, tex){
 /**
  * Lädt die Angaben für das Leadsheet eines Lieds.
  * @param {string} slug Slug des Lieds
+ * @param {string} [version] Kennung eines Stands aus dem Verlauf (loadScoreHistory()); ohne den jetzigen
  * @returns {Promise<Leadsheet>} ohne Datei {patterns: [], tabs: []}
  */
-export async function loadLeadsheet(slug){
-  const res = await fetch(`${API_URL}leadsheet.php?slug=${encodeURIComponent(slug)}`);
+export async function loadLeadsheet(slug, version = ''){
+  const res = await fetch(`${API_URL}leadsheet.php?slug=${encodeURIComponent(slug)}`
+    + (version ? `&version=${encodeURIComponent(version)}` : ''));
   if(!res.ok) throw new Error(`Angaben für das Leadsheet konnten nicht geladen werden (HTTP ${res.status}).`);
   return res.json();
 }
@@ -491,10 +533,12 @@ export async function loadLeadsheet(slug){
  * Ersetzt die Angaben für das Leadsheet eines Lieds (Feld leadsheet in song.json; ohne Einträge fällt es weg).
  * @param {string} slug Slug des Lieds
  * @param {Leadsheet} leadsheet Inhalt
+ * @param {boolean} [keep] ob der bisherige Stand in den Verlauf kommt (false, wenn im selben Speichern schon die Noten
+ *   gesichert wurden)
  * @returns {Promise<Song>} das aktualisierte Lied
  */
-export function saveLeadsheet(slug, leadsheet){
-  return apiWrite(`${API_URL}leadsheet.php?slug=${encodeURIComponent(slug)}`, {
+export function saveLeadsheet(slug, leadsheet, keep = true){
+  return apiWrite(`${API_URL}leadsheet.php?slug=${encodeURIComponent(slug)}${keep ? '' : '&keep=0'}`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(leadsheet),
@@ -621,7 +665,7 @@ export async function apiWrite(url, options){
  * @param {Object} meta Angaben aus der Datei bzw. dem Formular (Felder wie bei PUT api/songs.php, dazu gpSource: die
  *   Quelle der GP-Datei)
  * @param {string} tex Noten als alphaTex (siehe readGpFile() bzw. createScore() in notation.js)
- * @param {?File} [file] Original-GP-Datei; der Server legt sie unter upload/<slug>/ ab und löst die Audiospur heraus
+ * @param {?File} [file] Original-GP-Datei; der Server legt sie unter data/songs/<slug>/upload/ ab und löst die Audiospur heraus
  * @returns {Promise<Song>} das neue Lied
  */
 export function importSong(meta, tex, file = null){
@@ -702,7 +746,7 @@ export function deleteCover(slug){
 }
 
 /**
- * Eine hochgeladene Datei eines Lieds (data/upload/<slug>/, siehe api/uploads.php).
+ * Eine hochgeladene Datei eines Lieds (data/songs/<slug>/upload/, siehe api/uploads.php).
  * @typedef {Object} Upload
  * @property {string} file Dateiname
  * @property {number} size Größe in Bytes
@@ -781,6 +825,17 @@ export function updateUpload(slug, file, info){
 }
 
 /**
+ * Löscht einen Upload samt seinen Angaben.
+ * @param {string} slug Slug des Lieds
+ * @param {string} file Dateiname
+ * @returns {Promise<{uploads: Upload[]}>} die übrigen Uploads
+ */
+export function deleteUpload(slug, file){
+  return apiWrite(`${API_URL}uploads.php?slug=${encodeURIComponent(slug)}&file=${encodeURIComponent(file)}`,
+    {method: 'DELETE'});
+}
+
+/**
  * Formatiert eine Zeitspanne.
  * @param {number} ms Millisekunden
  * @returns {string} m:ss
@@ -829,6 +884,14 @@ const PATHS = {
     + '<path d="M7.8 8.8h9" stroke-width="3"/>',
   // Transponieren: Pfeil nach oben und nach unten.
   transpose: '<path d="M7 20V5M3 9l4-4 4 4M17 4v15M13 15l4 4 4-4"/>',
+  // Uploads: Büroklammer.
+  upload: '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7"/>',
+  // Ändern: Stift.
+  edit: '<path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1zM14.5 6.5l3 3"/>',
+  // Papierkorb.
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>',
+  // Verlauf: Uhr mit Pfeil gegen den Uhrzeigersinn.
+  history: '<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5M3.5 3.5v5h5M12 7.5V12l3 2"/>',
   undo: '<path fill="currentColor" stroke="none" d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62A7.95 7.95 0 0 1 '
     + '12.5 10c3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 10.53 17.15 8 12.5 8z"/>',
   redo: '<path fill="currentColor" stroke="none" d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22'
@@ -1194,7 +1257,7 @@ export const INTERVAL_COLORS = ['#2f6fdc', '#7b4bb3', '#1b9ac4', '#e0832d', '#d6
  * @typedef {Object} Structure Ein Eintrag der Auswahl.
  * @property {string} id Kennung
  * @property {string} label Beschriftung in der Auswahlliste
- * @property {string} suffix Kurzform für die Überschrift ("C" + suffix)
+ * @property {string} [suffix] Akkordzeichen nach dem Grundton ("C" + suffix), nur bei Akkorden
  * @property {number[]} intervals Abstände der Töne vom Grundton in Halbtönen, aufsteigend
  * @property {Object<number, string>} [alt] andere Schreibweise einzelner Intervalle (Halbtöne -> Kurzschreibweise), z. B.
  *   {8: '#5'} im übermäßigen Akkord
@@ -1234,18 +1297,18 @@ export const STRUCTURES = [
     {id: '7#9', label: 'Septakkord mit #9 (7#9)', suffix: '7#9', intervals: [0, 3, 4, 7, 10], alt: {3: '#9'}},
   ]},
   {id: 'scale', group: 'Tonleiter', items: [
-    {id: 'scale-major', label: 'Dur-Tonleiter', suffix: '-Dur', intervals: [0, 2, 4, 5, 7, 9, 11]},
-    {id: 'scale-minor', label: 'Moll-Tonleiter (natürlich)', suffix: '-Moll', intervals: [0, 2, 3, 5, 7, 8, 10]},
-    {id: 'scale-harm', label: 'Moll-Tonleiter (harmonisch)', suffix: '-Moll harmonisch', intervals: [0, 2, 3, 5, 7, 8, 11]},
-    {id: 'scale-melodic', label: 'Moll-Tonleiter (melodisch)', suffix: '-Moll melodisch', intervals: [0, 2, 3, 5, 7, 9, 11]},
-    {id: 'scale-pent-major', label: 'Dur-Pentatonik', suffix: '-Dur-Pentatonik', intervals: [0, 2, 4, 7, 9]},
-    {id: 'scale-pent-minor', label: 'Moll-Pentatonik', suffix: '-Moll-Pentatonik', intervals: [0, 3, 5, 7, 10]},
-    {id: 'scale-blues', label: 'Blues-Tonleiter', suffix: '-Blues', intervals: [0, 3, 5, 6, 7, 10]},
-    {id: 'scale-dorian', label: 'Dorisch', suffix: '-Dorisch', intervals: [0, 2, 3, 5, 7, 9, 10]},
-    {id: 'scale-phrygian', label: 'Phrygisch', suffix: '-Phrygisch', intervals: [0, 1, 3, 5, 7, 8, 10]},
-    {id: 'scale-lydian', label: 'Lydisch', suffix: '-Lydisch', intervals: [0, 2, 4, 6, 7, 9, 11], alt: {6: '#4'}},
-    {id: 'scale-mixolydian', label: 'Mixolydisch', suffix: '-Mixolydisch', intervals: [0, 2, 4, 5, 7, 9, 10]},
-    {id: 'scale-locrian', label: 'Lokrisch', suffix: '-Lokrisch', intervals: [0, 1, 3, 5, 6, 8, 10]},
+    {id: 'scale-major', label: 'Dur-Tonleiter', intervals: [0, 2, 4, 5, 7, 9, 11]},
+    {id: 'scale-minor', label: 'Moll-Tonleiter (natürlich)', intervals: [0, 2, 3, 5, 7, 8, 10]},
+    {id: 'scale-harm', label: 'Moll-Tonleiter (harmonisch)', intervals: [0, 2, 3, 5, 7, 8, 11]},
+    {id: 'scale-melodic', label: 'Moll-Tonleiter (melodisch)', intervals: [0, 2, 3, 5, 7, 9, 11]},
+    {id: 'scale-pent-major', label: 'Dur-Pentatonik', intervals: [0, 2, 4, 7, 9]},
+    {id: 'scale-pent-minor', label: 'Moll-Pentatonik', intervals: [0, 3, 5, 7, 10]},
+    {id: 'scale-blues', label: 'Blues-Tonleiter', intervals: [0, 3, 5, 6, 7, 10]},
+    {id: 'scale-dorian', label: 'Dorisch', intervals: [0, 2, 3, 5, 7, 9, 10]},
+    {id: 'scale-phrygian', label: 'Phrygisch', intervals: [0, 1, 3, 5, 7, 8, 10]},
+    {id: 'scale-lydian', label: 'Lydisch', intervals: [0, 2, 4, 6, 7, 9, 11], alt: {6: '#4'}},
+    {id: 'scale-mixolydian', label: 'Mixolydisch', intervals: [0, 2, 4, 5, 7, 9, 10]},
+    {id: 'scale-locrian', label: 'Lokrisch', intervals: [0, 1, 3, 5, 6, 8, 10]},
   ]},
 ];
 
@@ -1369,9 +1432,14 @@ export function structureOf(root, id){
   });
   const shapes = group.id === 'chord' ? chordShapes(root, item.intervals)
     : group.id === 'scale' ? scaleShapes(root, item.intervals) : [];
+  const rootName = NOTE_NAMES[root];
+  const short = item.label.replace(/ \(.*\)$/, '');
+  let name = `Ton ${rootName}`;
+  if(group.id === 'chord') name = `${rootName}${item.suffix ?? ''} (${short})`;
+  else if(group.id === 'scale') name = `${rootName}-${/Tonleiter|Pentatonik/.test(short) ? short : short + '-Tonleiter'}`;
   return {
     notes,
-    title: group.id === 'note' ? `Ton ${names[0]}` : `${NOTE_NAMES[root]}${item.suffix}: ${names.join(' ')}`,
+    title: group.id === 'note' ? name : `${name}: ${names.join(' ')}`,
     alt: item.alt ?? {},
     legend,
     shapes,

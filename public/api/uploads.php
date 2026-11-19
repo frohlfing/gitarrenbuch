@@ -1,9 +1,9 @@
 <?php
 
 /**
- * Hochgeladenes Rohmaterial eines Lieds (data/upload/<slug>/): GP-Dateien, ChordPro- und Textdateien, PDFs, Bilder.
- * Jede Datei hat eine Quelle und eine Beschreibung (uploads.json im Upload-Ordner). Dateien werden nie überschrieben,
- * geändert oder gelöscht; nur Quelle und Beschreibung lassen sich später ändern. Die Logik steckt in
+ * Hochgeladenes Rohmaterial eines Lieds (data/songs/<slug>/upload/): GP-Dateien, ChordPro- und Textdateien, PDFs, Bilder.
+ * Jede Datei hat eine Quelle und eine Beschreibung (Feld uploads in song.json). Dateien werden nie überschrieben
+ * oder geändert; nur Quelle und Beschreibung lassen sich später ändern, und eine Datei lässt sich löschen (zum Aufräumen). Die Logik steckt in
  * api/lib/uploads.php.
  *
  * GET  /api/uploads.php?slug=xyz             -> {"uploads": [{file, size, source, description, added}, …]}, die ältesten
@@ -18,6 +18,8 @@
  *                                               Antwort: 201 mit dem Upload. Token nötig.
  * PUT  /api/uploads.php?slug=xyz&file=name   -> ändert Quelle und Beschreibung (JSON: source, description).
  *                                               Antwort: der Upload. Token nötig.
+ * DELETE /api/uploads.php?slug=xyz&file=name -> löscht die Datei samt ihren Angaben. Antwort: {"uploads": [...]} wie
+ *                                               beim Lesen der Liste. Token nötig.
  *
  * Token wird per Header X-API-Token erwartet (siehe api/lib/http.php: require_token()).
  */
@@ -117,6 +119,12 @@ try {
             find_upload($slug, $file);
             record_upload($slug, $file, trim((string) ($body['source'] ?? '')), trim((string) ($body['description'] ?? '')));
             json_response(200, find_upload($slug, $file));
+
+        case 'DELETE':
+            require_token();
+            find_upload($slug, $file);
+            delete_upload($slug, $file);
+            json_response(200, ['uploads' => list_uploads($slug)]);
 
         default:
             json_error(405, "Methode '$method' nicht erlaubt");

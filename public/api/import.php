@@ -4,7 +4,7 @@
  * Legt ein neues Lied mit Noten an: beim Import einer Guitar-Pro-Datei oder mit dem Gerüst aus dem Formular
  * "+ Neues Lied". Die Noten kommen als alphaTex (score.atex), weil nur alphaTab im Browser die GP-Formate
  * auswerten kann: Der Browser wandelt die Datei um, prüft das Ergebnis und schickt Angaben und Noten mit. Die
- * Original-GP-Datei landet unverändert unter upload/<slug>/, eine eingebettete Audiospur wird zu audio.mp3 (siehe
+ * Original-GP-Datei landet unverändert unter data/songs/<slug>/upload/, eine eingebettete Audiospur wird zu audio.mp3 (siehe
  * store_new_score() in api/lib/file_store.php).
  *
  * POST /api/import.php (multipart/form-data)

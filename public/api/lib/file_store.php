@@ -29,7 +29,7 @@ function unique_filename(string $dir, string $baseName, string $ext): string
 }
 
 /**
- * Legt eine hochgeladene Datei als Rohmaterial unter data/upload/<slug>/ ab (siehe upload_dir()). Liegt dort schon
+ * Legt eine hochgeladene Datei als Rohmaterial unter data/songs/<slug>/upload/ ab (siehe upload_dir()). Liegt dort schon
  * eine Datei mit gleichem Inhalt (MD5), wird nichts abgelegt. Ist der Name belegt, wird ein Zähler angehängt (siehe
  * unique_filename()): Im Upload-Ordner wird nie etwas überschrieben oder verändert.
  *
@@ -141,13 +141,12 @@ function store_new_score(
     return touch_song($slug);
 }
 
-/** Anzahl der Fassungen von score.atex, die keep_score_history() unter history/ aufhebt. */
-const SCORE_HISTORY_KEEP = 10;
-
 /**
- * Hebt die aktuelle score.atex vor dem Überschreiben unter history/score-<Zeitstempel>.atex auf, damit sich ein
- * missglücktes Speichern rückgängig machen lässt (von Hand, eine Oberfläche dafür gibt es nicht). Es bleiben die
- * letzten SCORE_HISTORY_KEEP Fassungen.
+ * Hebt den Stand eines Lieds vor dem Überschreiben auf, damit sich ein missglücktes Speichern rückgängig machen lässt
+ * (im Bearbeitungsmodus der Knopf "Verlauf", siehe list_score_history()): die aktuelle score.atex als
+ * history/score-<Zeitstempel>.atex und, daneben als score-<Zeitstempel>.json, die Angaben für das Leadsheet (Feld
+ * leadsheet aus song.json), weil sie an den Takten der Noten hängen. Es bleiben die letzten SCORE_HISTORY_KEEP Stände.
+ * Importierte Noten (store_new_score()) sind kein Stand, der Verlauf beginnt mit dem ersten Überschreiben.
  *
  * @param string $slug Slug des Lieds (score.atex muss existieren)
  * @return void
@@ -163,11 +162,91 @@ function keep_score_history(string $slug): void
     if (!copy(song_dir($slug) . '/' . SONG_FILES['score'], "$dir/$name")) {
         throw new RuntimeException('Die bisherigen Noten konnten nicht gesichert werden');
     }
+    $leadsheet = read_leadsheet($slug);
+    if (is_array($leadsheet['chords'] ?? null)) {
+        // Leeres chords muss {} bleiben (wie in write_song_json()).
+        $leadsheet['chords'] = (object) $leadsheet['chords'];
+    }
+    $json = json_encode(['leadsheet' => (object) $leadsheet], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (file_put_contents("$dir/" . basename($name, '.atex') . '.json', $json) === false) {
+        throw new RuntimeException('Die bisherigen Angaben für das Leadsheet konnten nicht gesichert werden');
+    }
     // Zeitstempel im Namen: alphabetisch = zeitlich sortiert.
     $versions = glob("$dir/score-*.atex") ?: [];
     sort($versions);
     foreach (array_slice($versions, 0, max(0, count($versions) - SCORE_HISTORY_KEEP)) as $old) {
         @unlink($old);
+        @unlink(substr($old, 0, -5) . '.json');
+    }
+}
+
+/**
+ * Listet die aufgehobenen Fassungen der Noten eines Lieds (siehe keep_score_history()), die neueste zuerst.
+ *
+ * @param string $slug Slug des Lieds
+ * @return array[] je Fassung id (Dateiname ohne .atex, z. B. "score-20261031-224255"), time (Zeitpunkt des
+ *                 Überschreibens, "2026-10-31 22:42:55") und size (Bytes)
+ */
+function list_score_history(string $slug): array
+{
+    $files = glob(song_dir($slug) . '/history/score-*.atex') ?: [];
+    rsort($files);
+    $list = [];
+    foreach ($files as $file) {
+        $id = basename($file, '.atex');
+        if (!preg_match('/^score-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d+)?$/', $id, $m)) {
+            continue;
+        }
+        $list[] = ['id' => $id, 'time' => "$m[1]-$m[2]-$m[3] $m[4]:$m[5]:$m[6]", 'size' => (int) filesize($file)];
+    }
+    return $list;
+}
+
+/**
+ * Pfad einer aufgehobenen Fassung der Noten.
+ *
+ * @param string $slug Slug des Lieds
+ * @param string $id Kennung aus list_score_history()
+ * @return string Pfad der Datei
+ * @throws NotFoundException wenn es die Fassung nicht gibt (auch bei einer Kennung, die keine ist)
+ */
+function score_history_path(string $slug, string $id): string
+{
+    if (!array_any(list_score_history($slug), static fn(array $version): bool => $version['id'] === $id)) {
+        throw new NotFoundException('Fassung nicht gefunden');
+    }
+    return song_dir($slug) . "/history/$id.atex";
+}
+
+/**
+ * Angaben für das Leadsheet eines aufgehobenen Stands (siehe keep_score_history()).
+ *
+ * @param string $slug Slug des Lieds
+ * @param string $id Kennung aus list_score_history()
+ * @return array das Feld leadsheet von damals, leer ohne Angaben
+ * @throws NotFoundException wenn es den Stand nicht gibt
+ */
+function score_history_leadsheet(string $slug, string $id): array
+{
+    $json = substr(score_history_path($slug, $id), 0, -5) . '.json';
+    $data = is_file($json) ? json_decode((string) file_get_contents($json), true) : null;
+    return is_array($data['leadsheet'] ?? null) ? $data['leadsheet'] : [];
+}
+
+/**
+ * Löscht einen aufgehobenen Stand (Noten und Angaben für das Leadsheet).
+ *
+ * @param string $slug Slug des Lieds
+ * @param string $id Kennung aus list_score_history()
+ * @return void
+ * @throws NotFoundException wenn es den Stand nicht gibt
+ */
+function delete_score_history(string $slug, string $id): void
+{
+    $path = score_history_path($slug, $id);
+    @unlink(substr($path, 0, -5) . '.json');
+    if (!unlink($path)) {
+        throw new RuntimeException('Der Stand konnte nicht gelöscht werden');
     }
 }
 

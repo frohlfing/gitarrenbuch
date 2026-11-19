@@ -30,3 +30,11 @@ const API_TOKEN = 'CHANGE_ME';
  * @var int Bytes
  */
 const MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
+
+/**
+ * Anzahl der Fassungen von score.atex, die beim Speichern der Noten unter history/ des Songs aufgehoben werden
+ * (die Ältesten fallen weg).
+ *
+ * @var int Anzahl
+ */
+const SCORE_HISTORY_KEEP = 10;

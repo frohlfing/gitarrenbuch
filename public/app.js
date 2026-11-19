@@ -13,7 +13,6 @@ import {
 } from './js/library.js';
 import {describeScoreInfo, exportGpFile} from './js/notation.js';
 import {Player, SCALES} from './js/playback.js';
-import {openUploads} from './js/uploads.js';
 import {patternGridHtml, TECHNIQUES} from './js/sheet.js';
 import {exportChordProFile} from './js/textview.js';
 
@@ -150,12 +149,12 @@ async function showPatternLibrary(){
     <h2>Patterns</h2>
     <p class="ov-meta">Strumming und Picking Patterns</p>
     <div class="ov-tools">
-        <button class="btn" type="button" id="toggleChords">Alle zuklappen</button>
-        <button class="btn" type="button" id="printChords">Drucken</button>
-    </div>
-    <div class="controls pattern-filter" id="patternFilter" hidden>
-      <select id="patTsSel" aria-label="Nach Taktart filtern"><option value="">Alle Taktarten</option></select>
-      <select id="patGenreSel" aria-label="Nach Genre filtern"><option value="">Alle Genres</option></select>
+      <div class="controls pattern-filter" id="patternFilter" hidden>
+        <select id="patTsSel" aria-label="Nach Taktart filtern"><option value="">Alle Taktarten</option></select>
+        <select id="patGenreSel" aria-label="Nach Genre filtern"><option value="">Alle Genres</option></select>
+      </div>
+      <button class="btn" type="button" id="toggleChords">Alle zuklappen</button>
+      <button class="btn" type="button" id="printChords">Drucken</button>
     </div>
     <div class="chord-sheet" id="chordSheet"><p class="empty">wird geladen &hellip;</p></div>
   `, false, false, true);
@@ -310,7 +309,6 @@ function showSong(song){
     <div class="menu" id="menu" hidden>
       <button type="button" id="noteEditBtn" title="Noten, Text, Akkorde, Spuren, Leadsheet, Audio">Bearbeiten</button>
       <button type="button" id="songDataBtn">Stammdaten</button>
-      <button type="button" id="uploadsBtn" title="Hochgeladene Dateien mit Quelle und Beschreibung">Uploads</button>
       <button type="button" id="displayBtn">Darstellung</button>
       <button type="button" id="exportBtn" title="Notation mit Audiospur als Guitar-Pro-Datei (.gp)">GP-Export</button>
       <button type="button" id="chordProBtn" title="Text und Akkorde als ChordPro-Datei (.cho)">CHO-Export</button>
@@ -383,10 +381,6 @@ function showSong(song){
   document.getElementById('songDataBtn').addEventListener('click', () => {
     setMenu(false);
     openSongData();
-  });
-  document.getElementById('uploadsBtn').addEventListener('click', () => {
-    setMenu(false);
-    openUploads(current().slug);
   });
   document.getElementById('displayBtn').addEventListener('click', () => {
     setMenu(false);

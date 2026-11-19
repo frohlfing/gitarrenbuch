@@ -91,15 +91,15 @@ function song_dir(string $slug): string
 }
 
 /**
- * Absoluter Pfad zum Ordner mit dem hochgeladenen Rohmaterial eines Lieds (data/upload/<slug>, existiert nicht
- * zwingend).
+ * Absoluter Pfad zum Ordner mit dem hochgeladenen Rohmaterial eines Lieds (data/songs/<slug>/upload, existiert nicht
+ * zwingend). Quelle und Beschreibung der Dateien stehen im Feld uploads von song.json (siehe api/lib/uploads.php).
  *
  * @param string $slug Slug des Lieds
  * @return string Ordnerpfad ohne "/" am Ende
  */
 function upload_dir(string $slug): string
 {
-    return DATA_DIR . '/upload/' . $slug;
+    return song_dir($slug) . '/upload';
 }
 
 /**
@@ -280,6 +280,8 @@ function with_file_flags(string $slug, array $song): array
     $song['tracks'] = read_track_names($slug);
     $song['instruments'] = read_track_programs($slug);
     $song['issues'] = read_score_issues($slug);
+    // Die Angaben zu den Uploads liefert api/uploads.php.
+    unset($song['uploads']);
     return $song;
 }
 
@@ -538,10 +540,6 @@ function update_song(string $slug, array $data): array
         if (!rename($oldDir, $newDir)) {
             throw new RuntimeException('Umbenennen des Song-Ordners fehlgeschlagen');
         }
-        if (is_dir(upload_dir($slug)) && !rename(upload_dir($slug), upload_dir($newSlug))) {
-            rename($newDir, $oldDir);
-            throw new RuntimeException('Umbenennen des Upload-Ordners fehlgeschlagen');
-        }
     }
 
     // Anderer YouTube-Clip: Die Audiospur passt nicht mehr dazu (und die Sync-Punkte meist auch nicht). Wird die URL
@@ -623,7 +621,7 @@ function touch_song(string $slug): array
 }
 
 /**
- * Entfernt den kompletten Liedordner und das hochgeladene Rohmaterial des Lieds (upload/<slug>/).
+ * Entfernt den kompletten Liedordner samt hochgeladenem Rohmaterial (upload/).
  *
  * @param string $slug Slug des Lieds
  * @return void
@@ -635,9 +633,6 @@ function delete_song(string $slug): void
         throw new NotFoundException("Song '$slug' nicht gefunden");
     }
     remove_directory_recursive(song_dir($slug));
-    if (is_dir(upload_dir($slug))) {
-        remove_directory_recursive(upload_dir($slug));
-    }
 }
 
 /**

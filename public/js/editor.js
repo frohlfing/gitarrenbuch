@@ -6,7 +6,7 @@
 import {
   barreFret, chordDiagramSvg, chordKey, detectKeySignature, diagramFirstFret, escapeHtml, glyph, GLYPHS,
   gripOf, INSTRUMENT_NAMES, isStandardTuning, loadChordLibraryOrEmpty, loadChordUsage, loadLeadsheet, playedStrings,
-  loadScoreText, normalizeChords, parseGrip, saveLeadsheet, saveScore, svgIcon,
+  deleteScoreVersion, loadScoreHistory, loadScoreText, loadScoreVersion, normalizeChords, parseGrip, saveLeadsheet, saveScore, svgIcon,
 } from './base.js';
 import {readChordFile, simplifyChord} from './chordfile.js';
 import {findGrips, gripToneProblem, nameGrip} from './chordgrips.js';
@@ -442,7 +442,7 @@ function parseProgram(text){
 const PANEL_KEYS = {F2: 'left', F8: 'bottom'};
 
 /** Reiter des unteren Panels: [Schlüssel, Name]. */
-const BOTTOM_TABS = [['tracks', 'Spuren'], ['leadsheet', 'Leadsheet'], ['lyrics', 'Liedtext'], ['audio', 'Audio']];
+const BOTTOM_TABS = [['tracks', 'Spuren'], ['lyrics', 'Liedtext'], ['leadsheet', 'Leadsheet'], ['audio', 'Audio']];
 
 /**
  * Eingeklappte Panels und Höhe des unteren Panels aus dem Browser.
@@ -814,6 +814,8 @@ export class NoteEditor {
         ${todoButton(svgIcon('save'), 'Speichern (Strg+S)', '', 'save')}
         ${todoButton(svgIcon('undo'), 'Rückgängig (Strg+Z)', '', 'undo')}
         ${todoButton(svgIcon('redo'), 'Wiederholen (Strg+Y)', '', 'redo')}
+        ${todoButton(svgIcon('history'), 'Verlauf: frühere gespeicherte Stände der Noten ansehen und laden', '', 'history')}
+        ${todoButton(svgIcon('upload'), 'Uploads: hochgeladene Dateien mit Quelle und Beschreibung', '', 'uploads')}
       </div>
       <div class="egroup">
         ${todoButton(svgIcon('feelStraight', 48), 'Shuffle: Achtel-Triolen-Feeling im ganzen Song ein- oder ausschalten (Strg+/)',
@@ -1326,6 +1328,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       },
       unroll: () => this.unrollRepeats(),
       transpose: () => this.openTransposeDialog(),
+      history: () => void this.openHistoryDialog(),
+      uploads: () => openUploads(this.player.slug),
       unifyCapo: () => {
         let result = {capo: 0, moved: [], octaves: 0};
         this.change(() => { result = unifyCapo(this.score); });
@@ -1585,7 +1589,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {void}
    */
   commitTex(tex, sheet = null){
-    if(tex === this.tex) return;
+    if(tex === this.tex && (sheet === null || sheet === this.sheetJson())) return;
     this.undoStack.push(this.snapshot());
     if(this.undoStack.length > UNDO_MAX) this.undoStack.shift();
     this.redoStack = [];
@@ -2463,7 +2467,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const sheet = this.sheetJson();
     try {
       let song = null;
-      if(tex !== this.savedTex){
+      const scoreSaved = tex !== this.savedTex;
+      if(scoreSaved){
         const result = parseScore(this.alphaTab, tex);
         // Ohne Katalog (Netzfehler) behalten die Akkorde ihren eigenen meistgenutzten Griff.
         normalizeChords(this.alphaTab, result, await loadChordLibraryOrEmpty(), true);
@@ -2473,7 +2478,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       // Nach den Noten: Passen sie nicht (Prüfung), bleiben auch die Angaben je Takt ungespeichert, so passen beide
       // Dateien weiter zueinander.
       if(sheet !== this.savedSheet){
-        song = await saveLeadsheet(this.player.slug, JSON.parse(sheet));
+        // Die Noten haben den bisherigen Stand schon in den Verlauf gelegt (mit den damaligen Angaben).
+        song = await saveLeadsheet(this.player.slug, JSON.parse(sheet), !scoreSaved);
         this.savedSheet = sheet;
       }
       // Zuletzt: Die Vorgaben gelten für die Spuren, wie sie nach dem Speichern der Noten sind.
@@ -2892,6 +2898,80 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       closeOverlay();
       void this.transposeSong(semitones);
     });
+  }
+
+  /**
+   * Dialog "Verlauf": die aufgehobenen Stände der Noten samt den Angaben für das Leadsheet (jedes Speichern hebt den
+   * vorigen auf, siehe keep_score_history() in api/lib/file_store.php), neueste zuerst, jeder mit Knöpfen zum Laden
+   * und zum Löschen.
+   * @param {import('./base.js').ScoreVersion[]} [known] schon geladene Liste (nach dem Löschen eines Stands)
+   * @returns {Promise<void>}
+   */
+  async openHistoryDialog(known){
+    let versions = known;
+    if(!versions){
+      try {
+        versions = await loadScoreHistory(this.player.slug);
+      } catch(err){
+        this.toast(err.message);
+        return;
+      }
+    }
+    const rows = versions.map((v, i) => {
+      const when = new Date(v.time.replace(' ', 'T')).toLocaleString('de-DE');
+      return `<li><span>${escapeHtml(when)}</span><span class="history-size">${Math.round(v.size / 1024)} KB${i ? '' : ' (zuletzt ersetzt)'}</span>
+        <button type="button" class="btn" data-version="${escapeHtml(v.id)}">Laden</button>
+        <button type="button" class="ebtn" data-delete="${escapeHtml(v.id)}" title="Diesen Stand löschen"
+          aria-label="Diesen Stand löschen">${svgIcon('trash')}</button></li>`;
+    }).join('');
+    openOverlay(`<h2>Verlauf</h2>
+      <p class="history-hint">Jedes Speichern hebt den vorigen Stand der Noten und des Leadsheets auf.
+        Geladen wird in den Editor, wie ein Schritt: Mit Rückgängig (Strg+Z) kommt der jetzige Stand zurück.
+        Gespeichert wird erst mit Speichern, dann wandert auch der jetzige Stand in den Verlauf.</p>
+      ${rows ? `<ul class="history-list">${rows}</ul>
+        <label class="history-option"><input type="checkbox" id="historySheet" checked> Angaben für das Leadsheet mit laden</label>`
+        : '<p class="empty">Es gibt noch keine früheren Stände.</p>'}`);
+    for(const button of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.history-list [data-version]'))){
+      button.addEventListener('click', () => {
+        const withSheet = /** @type {HTMLInputElement} */ (document.getElementById('historySheet')).checked;
+        closeOverlay();
+        void this.loadVersion(button.dataset.version, withSheet);
+      });
+    }
+    for(const button of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.history-list [data-delete]'))){
+      button.addEventListener('click', async () => {
+        if(!confirm('Diesen Stand endgültig löschen?')) return;
+        try {
+          await this.openHistoryDialog(await deleteScoreVersion(this.player.slug, button.dataset.delete));
+        } catch(err){
+          this.toast(`Nicht gelöscht: ${err.message}`);
+        }
+      });
+    }
+  }
+
+  /**
+   * Lädt einen aufgehobenen Stand in den Editor (ein Schritt für "Rückgängig", noch nicht gespeichert).
+   * @param {string} id Kennung des Stands (siehe loadScoreHistory())
+   * @param {boolean} withSheet ob die Angaben für das Leadsheet mitkommen (sonst bleiben die jetzigen)
+   * @returns {Promise<void>}
+   */
+  async loadVersion(id, withSheet){
+    try {
+      const slug = this.player.slug;
+      const tex = await loadScoreVersion(slug, id);
+      const sheet = withSheet ? JSON.stringify(normalizeSheet(await loadLeadsheet(slug, id))) : null;
+      // Vorab lesen: Ein Stand, der sich nicht einlesen lässt, darf den Editor nicht zerlegen.
+      parseScore(this.alphaTab, tex, this.player.api.settings);
+      if(tex === this.tex && (sheet === null || sheet === this.sheetJson())){
+        this.toast('Dieser Stand ist der jetzige.');
+        return;
+      }
+      this.commitTex(tex, sheet);
+      this.toast('Stand geladen (noch nicht gespeichert; Strg+Z macht es rückgängig).');
+    } catch(err){
+      this.toast(`Der Stand ließ sich nicht laden: ${err.message}`);
+    }
   }
 
   /**

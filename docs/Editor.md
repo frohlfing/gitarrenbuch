@@ -4,9 +4,9 @@ Funktionen, wo und in welcher Reihenfolge sie angezeigt werden, mit Tastenkürze
 Knöpfe sind umgesetzt; was noch fehlt, steht beim jeweiligen Punkt.
 
 Aufteilung: In der **Werkzeugleiste** steht, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu Speichern,
-Rückgängig, Transponieren, Hinweise, Hilfe, ✕. **Links** steht alles, was den Schlag bzw. die Note am Cursor betrifft, auch Notenwerte und
+Rückgängig, Verlauf, Uploads, Transponieren, Hinweise, Hilfe, ✕. **Links** steht alles, was den Schlag bzw. die Note am Cursor betrifft, auch Notenwerte und
 Einfügen/Löschen (wie die Palette in Guitar Pro), zuletzt vom Takt am Cursor Abschnitt, Taktart und Tempo. **Unten**
-stehen Spuren, Leadsheet, Liedtext und Audio (Sync-Editor). Der Akkord eines Schlags wird links gewählt (Auswahlliste, "+" für einen neuen mit Griff), die Griffbilder für das Blatt im Reiter "Leadsheet". Auf schmalen Bildschirmen ist das linke Panel anfangs zu; die
+stehen Spuren, Liedtext, Leadsheet und Audio (Sync-Editor). Der Akkord eines Schlags wird links gewählt (Auswahlliste, "+" für einen neuen mit Griff), die Griffbilder für das Blatt im Reiter "Leadsheet". Auf schmalen Bildschirmen ist das linke Panel anfangs zu; die
 Notenwerkzeuge erreicht man dann über F2 bzw. die Tastenkürzel.
 
 Einschalten: "Bearbeiten" im Menü ⋮ der Abspielleiste, immer direkt.
@@ -133,6 +133,11 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
   bleiben, nur die Noten ändern sich (wie beim Capo). Ist das Tuning in den Spuren ungleich, ist das Feld leer, oben steht rot
   "Tuning ungleich: …" mit "Tuning angleichen" (auf die der Akkordspur, die anderen klingen gleich). Eine Spur mit anderer Saitenzahl
   (Bass) behält ihr Tuning; sie steht im Tooltip des Felds
+- Verlauf (Uhr-Icon neben Rückgängig/Wiederholen) – Dialog mit den aufgehobenen Ständen (jedes Speichern hebt den vorigen
+  unter `history/` auf: die Noten als `score-<Zeitstempel>.atex`, die Angaben für das Leadsheet daneben als `.json`),
+  neueste zuerst, je mit Zeitpunkt, Größe, "Laden" und Papierkorb (löscht den Stand). Geladen wird in den Editor als ein
+  Schritt für "Rückgängig" und noch nicht gespeichert; das Häkchen "Angaben für das Leadsheet mit laden" ist an (ohne
+  bleiben die jetzigen Angaben). Importierte Noten sind kein Stand: Der Verlauf beginnt mit dem ersten Überschreiben.
 - Transponieren (Icon ganz links in der Leiste) – Dialog mit −6 bis +6 Halbtönen und "Anwenden": schreibt Noten, Tabs (neu gegriffen, mit Blick auf Lage der
   Greifhand und Saiten), Akkordnamen samt Griffen und Vorzeichen um; der Capo bleibt. Ein Schritt "Rückgängig"
   nimmt es zurück. Es wird keine Verschiebung gespeichert. Die Audiospur wird dabei nicht verändert; sie lässt sich lokal mit `php bin/audio.php --only=SLUG --transponieren=N` verschieben (siehe README).
@@ -161,7 +166,7 @@ Die Quelle für die Audio-Datei (YouTube-Link, "Auf YouTube suchen", Längen von
 ## Unteres Panel (F8)
 
 Die Höhe lässt sich am oberen Rand ziehen (gilt danach für alle Songs). Reiter in dieser Reihenfolge: Spuren,
-Leadsheet, Liedtext, Audio.
+Liedtext, Leadsheet, Audio.
 
 ### Leadsheet
 Aufgebaut wie der Reiter "Liedtext" (`sheet.js`): links die Eingaben für das Blatt, rechts die Vorschau

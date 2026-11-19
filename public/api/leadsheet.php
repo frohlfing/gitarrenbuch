@@ -31,14 +31,19 @@
  * "Stammdaten" getrennt davon; so überschreibt keiner die Änderungen des anderen.
  *
  * GET /api/leadsheet.php?slug=xyz   -> Inhalt, fehlende Felder leer. Kein Token nötig.
+ * GET /api/leadsheet.php?slug=xyz&version=<id>
+ *                                   -> dasselbe aus einem aufgehobenen Stand (id aus api/score.php?history=1).
  * PUT /api/leadsheet.php?slug=xyz   -> ersetzt das Feld leadsheet in song.json (ohne Einträge fällt es weg). Body wie
- *                                      oben (ohne "leadsheet"). Antwort: das
+ *                                      oben (ohne "leadsheet"). Vorher kommt der bisherige Stand in den Verlauf
+ *                                      (siehe keep_score_history()), außer mit &keep=0 (der Editor setzt es, wenn er
+ *                                      im selben Speichern schon die Noten gesichert hat). Antwort: das
  *                                      aktualisierte Lied. Token nötig.
  */
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/lib/http.php';
 require_once __DIR__ . '/lib/crud.php';
+require_once __DIR__ . '/lib/file_store.php';
 
 /**
  * Höchstzahl der Patterns und der Tab-Stellen je Song.
@@ -233,7 +238,8 @@ try {
     }
     switch ($method) {
         case 'GET':
-            $data = read_leadsheet($slug, $song);
+            $data = isset($_GET['version'])
+                ? score_history_leadsheet($slug, (string) $_GET['version']) : read_leadsheet($slug, $song);
             $result = [
                 'patterns' => is_array($data['patterns'] ?? null) ? array_values($data['patterns']) : [],
                 'tabs' => is_array($data['tabs'] ?? null) ? array_values($data['tabs']) : [],
@@ -249,6 +255,9 @@ try {
         case 'PUT':
             require_token();
             $data = validate_leadsheet(read_json_body());
+            if (($_GET['keep'] ?? '1') !== '0' && is_file(song_dir($slug) . '/' . SONG_FILES['score'])) {
+                keep_score_history($slug);
+            }
             // Das Layout steht nur da, wenn es von der Vorgabe abweicht (sonst hätte es jeder Song).
             if ($data['layout'] === LEADSHEET_LAYOUT) {
                 unset($data['layout']);

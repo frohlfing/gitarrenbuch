@@ -664,7 +664,7 @@ export function isSyncOutsideAudio(info, audioSeconds){
 }
 
 /**
- * Eckdaten eines Songs für den Kopf der Liedansicht: eine Zeile ("Tonart G · 140 BPM · Capo 3 · EADGBE") und getrennt
+ * Eckdaten eines Songs für den Kopf der Liedansicht: eine Zeile ("Tonart G · 140 BPM · Capo 3 · DADGBE"; das Tuning nur, wenn es nicht EADGBE ist) und getrennt
  * davon die Hinweise, die der Kopf hinter einem Warnzeichen zeigt (Tempo passt nicht zur Audiospur, Sync-Punkte
  * außerhalb der Audiospur).
  * @param {ScoreInfo} info Eckdaten aus den Noten
@@ -682,8 +682,8 @@ export function describeScoreInfo(info, audioSeconds = null){
       info.tempo ? (min === max ? `${min} BPM` : `${min}–${max} BPM`) : null,
       // Den Capo übersieht man leicht, deshalb fett.
       capo ? `<strong>Capo ${capo}</strong>` : null,
-      // Tuning ohne Leerzeichen ("EADGBE"); abweichende Saiten fett.
-      info.tuningStrings.length ? info.tuningStrings.map(s => {
+      // Tuning ohne Leerzeichen ("DADGBE"), abweichende Saiten fett; im Standard-Tuning (EADGBE) steht es nicht da.
+      info.tuningStrings.some(s => s.changed) ? info.tuningStrings.map(s => {
         // Ohne Oktave ("E2" → "E"): In der Zeile zählt, wie die Saiten heißen.
         const name = escapeHtml(s.name.replace(/\d+$/, ''));
         return s.changed ? `<strong>${name}</strong>` : name;

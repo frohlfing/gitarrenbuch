@@ -14,13 +14,6 @@ const UPLOAD_EXTENSIONS = [
 ];
 
 /**
- * Name der Datei mit den Angaben zu den Uploads eines Lieds (liegt im Upload-Ordner).
- *
- * @var string
- */
-const UPLOAD_INDEX = 'uploads.json';
-
-/**
  * Höchstlänge der Quelle und der Beschreibung eines Uploads.
  *
  * @var int
@@ -42,36 +35,38 @@ const UPLOAD_MAX_REDIRECTS = 3;
 const UPLOAD_DOWNLOAD_TIMEOUT = 60;
 
 /**
- * Liest die Angaben zu den Uploads eines Lieds.
+ * Liest die Angaben zu den Uploads eines Lieds (Feld uploads in song.json).
  *
  * @param string $slug Slug des Lieds
  * @return array<string, array{source: string, description: string, added: string}> Dateiname → Angaben
  */
 function read_upload_index(string $slug): array
 {
-    $path = upload_dir($slug) . '/' . UPLOAD_INDEX;
-    $data = is_file($path) ? json_decode((string) file_get_contents($path), true) : null;
+    $data = read_song_json($slug)['uploads'] ?? null;
     return is_array($data) ? $data : [];
 }
 
 /**
- * Schreibt die Angaben zu den Uploads eines Lieds. Erst daneben schreiben, dann umbenennen: Es entsteht nie eine halbe
- * Datei.
+ * Schreibt die Angaben zu den Uploads eines Lieds ins Feld uploads von song.json (ohne Einträge fällt es weg).
+ * "updated" bleibt, wie es ist: Das Lied ändert sich dadurch nicht.
  *
- * @param string $slug Slug des Lieds, der Upload-Ordner muss existieren
+ * @param string $slug Slug des Lieds
  * @param array $index Dateiname → Angaben
  * @return void
- * @throws RuntimeException wenn die Datei nicht geschrieben werden kann
+ * @throws NotFoundException wenn es das Lied nicht gibt
  */
 function write_upload_index(string $slug, array $index): void
 {
-    $path = upload_dir($slug) . '/' . UPLOAD_INDEX;
-    $tmp = "$path.tmp";
-    $json = json_encode($index, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if ($json === false || file_put_contents($tmp, $json) === false || !rename($tmp, $path)) {
-        @unlink($tmp);
-        throw new RuntimeException('Angaben zum Upload konnten nicht gespeichert werden');
+    $song = read_song_json($slug);
+    if ($song === null) {
+        throw new NotFoundException("Song '$slug' nicht gefunden");
     }
+    if ($index) {
+        $song['uploads'] = $index;
+    } else {
+        unset($song['uploads']);
+    }
+    write_song_json($slug, $song);
 }
 
 /**
@@ -116,7 +111,7 @@ function list_uploads(string $slug): array
     $uploads = [];
     foreach (glob(upload_dir($slug) . '/*') ?: [] as $path) {
         $name = basename($path);
-        if (!is_file($path) || $name === UPLOAD_INDEX || str_ends_with($name, '.tmp')) {
+        if (!is_file($path) || str_ends_with($name, '.tmp')) {
             continue;
         }
         $uploads[] = [
@@ -132,6 +127,31 @@ function list_uploads(string $slug): array
 }
 
 /**
+ * Löscht eine Datei aus dem Upload-Ordner samt ihren Angaben (Quelle, Beschreibung).
+ *
+ * @param string $slug Slug des Lieds
+ * @param string $file Dateiname, wie ihn list_uploads() nennt
+ * @return void
+ * @throws NotFoundException wenn es die Datei nicht gibt
+ * @throws RuntimeException wenn sie nicht gelöscht werden kann
+ */
+function delete_upload(string $slug, string $file): void
+{
+    $path = upload_path($slug, $file);
+    if ($path === null) {
+        throw new NotFoundException('Datei nicht gefunden');
+    }
+    if (!unlink($path)) {
+        throw new RuntimeException('Die Datei konnte nicht gelöscht werden');
+    }
+    $index = read_upload_index($slug);
+    if (isset($index[$file])) {
+        unset($index[$file]);
+        write_upload_index($slug, $index);
+    }
+}
+
+/**
  * Pfad einer Datei im Upload-Ordner.
  *
  * @param string $slug Slug des Lieds
@@ -140,7 +160,7 @@ function list_uploads(string $slug): array
  */
 function upload_path(string $slug, string $file): ?string
 {
-    if (!is_valid_slug($slug) || $file === '' || $file !== basename($file) || $file === UPLOAD_INDEX) {
+    if (!is_valid_slug($slug) || $file === '' || $file !== basename($file)) {
         return null;
     }
     $path = upload_dir($slug) . "/$file";

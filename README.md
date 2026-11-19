@@ -240,8 +240,8 @@ gitarrenbuch/                         # Projektroot
  │    │         ├── score.atex        # Noten, Tabs, Text, Akkorde, Abschnitte, Sync-Punkte (alphaTex)
  │    │         ├── audio.mp3         # Audiospur (beim Import aus der GP-Datei herausgelöst)
  │    │         ├── cover.jpg         # Albumcover, 500 px (Deezer, iTunes oder eigenes Bild)
- │    │         └── history/          # Die letzten 10 Fassungen von score.atex vor dem Überschreiben
- │    ├── upload/                     # Hochgeladenes Rohmaterial je Song (<slug>/: GP-, ChordPro-, Textdateien, PDFs)
+ │    │         ├── upload/           # Hochgeladenes Rohmaterial (GP-, ChordPro-, Textdateien, PDFs); Angaben dazu: Feld uploads in song.json
+ │    │         └── history/          # Die letzten Stände vor dem Überschreiben: score-<Zeit>.atex + .json (Leadsheet-Angaben); Anzahl: SCORE_HISTORY_KEEP in config.php
  │    └── backup/                     # Nur lokal: Rohmaterial je Song (<slug>/), u. a. die von YouTube geladene Spur
  ├── bin/
  │    ├── audio.php                   # YouTube → audio.mp3, lädt per API auf den Server hoch (läuft lokal)
@@ -263,7 +263,7 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── audio.php              # Liefert audio.mp3 (z. B. für den GP-Export)
  │    │    ├── chords.php             # Akkordkatalog ausliefern
  │    │    ├── cover.php              # Cover ausliefern, suchen, übernehmen, hochladen, entfernen
- │    │    ├── leadsheet.php          # Angaben für das Leadsheet (Feld leadsheet in song.json) lesen und ersetzen
+ │    │    ├── leadsheet.php          # Angaben für das Leadsheet (Feld leadsheet in song.json) lesen und ersetzen (auch aus dem Verlauf)
  │    │    ├── import.php             # Neuen Song mit Noten anlegen (Import oder Gerüst, inkl. Cover)
  │    │    ├── patterns.php           # Pattern-Katalog lesen (mit Verwendung je Pattern) und ersetzen
  │    │    ├── score.php              # score.atex ausliefern (für alphaTab) und ersetzen (Bearbeitungsmodus)
@@ -330,6 +330,9 @@ abdeckt.
 | DELETE  | `/api/songs.php?slug=xyz`             | Song samt Ordner (Rohmaterial inklusive) löschen                                                                                                |
 | POST    | `/api/import.php`                     | Neuen Song anlegen (`multipart/form-data`: `meta` = JSON wie bei PUT `songs.php`, `score` = alphaTex, `file` = Original-GP-Datei, optional)     |
 | GET     | `/api/score.php?slug=xyz`             | Noten `score.atex` ausliefern (für alphaTab)                                                                                                    |
+| GET     | `/api/score.php?slug=xyz&history=1`   | Liste der früheren Fassungen der Noten (id, time, size), die neueste zuerst (Knopf "Verlauf" im Bearbeitungsmodus)                              |
+| GET     | `/api/score.php?slug=xyz&version=ID`  | Ein früherer Stand als alphaTex (id aus der Liste)                                                                                            |
+| DELETE  | `/api/score.php?slug=xyz&version=ID`  | Einen früheren Stand löschen (Noten und Angaben für das Leadsheet); Antwort: die übrigen                                                        |
 | PUT     | `/api/score.php?slug=xyz`             | Noten ersetzen (Body: alphaTex als `text/plain`; Bearbeitungsmodus), alte Fassung nach `history/`. Nur für Songs mit Noten                      |
 | GET     | `/api/audio.php?slug=xyz`             | Audiospur `audio.mp3` ausliefern                                                                                                                |
 | PUT     | `/api/audio.php?slug=xyz`             | Audiospur ersetzen (Body: die MP3 als `audio/mpeg`; nutzt `bin/audio.php`)                                                                      |
@@ -343,6 +346,7 @@ abdeckt.
 | GET     | `/api/uploads.php?slug=xyz&file=name` | Eine hochgeladene Datei (PDF und Text im Browser, sonst Download)                                                                               |
 | POST    | `/api/uploads.php?slug=xyz`           | Datei ablegen (`multipart/form-data`: `file` oder `url` für einen Direktlink, dazu `source`, `description`)                                     |
 | PUT     | `/api/uploads.php?slug=xyz&file=name` | Quelle und Beschreibung ändern (Body: `{"source": "…", "description": "…"}`)                                                                    |
+| DELETE  | `/api/uploads.php?slug=xyz&file=name` | Datei samt Angaben löschen (Papierkorb im Dialog "Uploads"); Antwort: die übrigen Uploads                                                       |
 
 Jeder Song enthält zusätzlich das Feld `files`. Es listet, welche Dateien im Ordner liegen (`score`, `audio`, `cover`, 
 z. B. `["score", "audio", "cover"]`), wird bei jedem Lesen aus dem Dateisystem bestimmt und nicht gespeichert.
@@ -377,6 +381,9 @@ Geschrieben wird es nur über `PUT api/leadsheet.php` (vom Editor zusammen mit d
 unverändert. `leadsheet.instructions` (Spielweise für Seite 1) ist etwas anderes als `notes` (Notizen der Stammdaten); 
 die Felder bleiben getrennt. Beim Import einer GP-Datei wird es mit deren Anweisungen vorbelegt (`instructions` oben, 
 das bleibt daneben stehen).
+
+`uploads` hält Quelle und Beschreibung der Dateien im Ordner `upload/` des Songs (Dateiname → `source`,
+`description`, `added`). Die API liefert das Feld nicht mit dem Song aus, sondern über `api/uploads.php`.
 
 `favorite` (`true`) und `level` (`"can"`, `"practice"`, `"cannot"`) stehen nur da, wenn der Song Favorit ist bzw.
 eingestuft wurde (siehe "Übersicht"); fehlen sie in einem Request, bleiben die gespeicherten. 
@@ -469,7 +476,7 @@ alphaTab liest die Datei im Browser, weil PHP die GP-Formate nicht selbst auswer
   ein und vergleicht es Takt für Takt mit dem Modell (`exportScore()`). Geht dabei etwas verloren, warnt der Dialog
   mit den betroffenen Takten ("Abweichungen in 2 Takten (Takt 12, 30)"); der Benutzer wählt "Trotzdem übernehmen"
   oder "Abbrechen". Abgelehnt wird nur, wenn alphaTab das Ergebnis gar nicht lesen kann.
-- Der Server prüft das Format am Dateiinhalt (nicht an der Endung), legt die GP-Datei unverändert unter `upload/<slug>/` 
+- Der Server prüft das Format am Dateiinhalt (nicht an der Endung), legt die GP-Datei unverändert unter `upload/` des Songs 
   ab und speichert die Noten als `score.atex`. Danach ändert sie nur noch der Bearbeitungsmodus.
 
 Enthält eine GP8-Datei eine Audiospur (MP3), löst der Server sie aus dem Original heraus (`extract_gp_audio()`): Die
@@ -520,17 +527,18 @@ Standard-ChordPro, wie es Apps wie OnSong oder SongbookPro lesen (Format siehe "
 ### Rohmaterial
 
 Alles, was hochgeladen wird (GP-Datei beim Import, Dateien aus dem Dialog "Uploads": GP-, ChordPro-, Textdateien, PDFs,
-Bilder, Power Tab, MusicXML), landet unverändert unter `data/upload/<slug>/` (`store_original()` in
+Bilder, Power Tab, MusicXML), landet unverändert unter `data/songs/<slug>/upload/` (`store_original()` in
 `api/lib/file_store.php`):
 
 - Liegt dort schon eine Datei mit gleichem Inhalt (MD5-Hash), wird nichts abgelegt.
 - Ist der Name schon vergeben, bekommt die neue Datei einen Zähler (`text.cho`, `text-2.cho`, …).
-- Im Upload-Ordner wird nie etwas überschrieben, verändert oder gelöscht (außer mit dem ganzen Song).
+- Im Upload-Ordner wird nie etwas überschrieben oder verändert. Gelöscht wird nur auf Wunsch: mit dem Papierkorb am
+  Eintrag im Dialog "Uploads" (nach Rückfrage) oder mit dem ganzen Song.
 - Jede Datei hat eine **Quelle** (meist die URL der Seite, von der sie stammt) und eine **Beschreibung**. Sie stehen in
-  `uploads.json` im Upload-Ordner (`api/lib/uploads.php`); auch Dateien ohne Angaben erscheinen in der Liste, das
+  Feld `uploads` in `song.json` (Dateiname → `source`, `description`, `added`; `api/lib/uploads.php`); auch Dateien ohne Angaben erscheinen in der Liste, das
   Datum der Aufnahme ist dann das der Datei. Nur diese Angaben lassen sich ändern.
-- **Dialog "Uploads"** (Menü ⋮, `js/uploads.js`): Liste mit Name (Klick öffnet die Datei), Größe, Datum, Quelle und
-  Beschreibung ("Ändern"), darunter das Formular "Datei hinzufügen": eine Datei oder ein **Direktlink**, von dem der 
+- **Dialog "Uploads"** (Büroklammer in der Werkzeugleiste des Bearbeitungsmodus, `js/uploads.js`): Liste mit Name (Klick öffnet die Datei), Größe, Datum, Quelle und
+  Beschreibung (Stift zum Ändern, Papierkorb zum Löschen), darunter das Formular "Datei hinzufügen": eine Datei oder ein **Direktlink**, von dem der 
   Server sie lädt (nur http/https, nur öffentliche Adressen, höchstens 32 MB, drei Weiterleitungen, 60 Sekunden; ohne 
   eigene Quelle gilt der Link). Angenommen werden GP-Dateien, `.ptb`, MusicXML, MIDI, ChordPro, Text, PDF und Bilder. 
   Die Knöpfe "Spur aus GuitarPro-Datei importieren" und "Chord-Datei importieren" öffnen denselben Dialog zur Auswahl 
@@ -1029,8 +1037,8 @@ Capo setzt (z. B. weil die Audiospur höher klingt als notiert), muss auch `\ks`
 
 **Lage der Bedienelemente:**
 
-- **Kopf:** Cover, daneben Titel, Interpret und eine Zeile Eckdaten ("Tonart G · 140 BPM · Capo 3 · EADGBE",
-  `describeScoreInfo()`), jede mit "…" gekürzt, wenn sie nicht passt. Hinweise (Tempo passt nicht zur Audiospur,
+- **Kopf:** Cover, daneben Titel, Interpret und eine Zeile Eckdaten ("Tonart G · 140 BPM · Capo 3 · DADGBE",
+  `describeScoreInfo()`; das Tuning steht nur da, wenn es nicht EADGBE ist), jede mit "…" gekürzt, wenn sie nicht passt. Hinweise (Tempo passt nicht zur Audiospur,
   Sync-Punkte außerhalb, Abweichungen von der Konvention) stecken hinter einem roten ⚠ am Ende der Zeile; ein Klick
   zeigt sie darunter.
 - **Streifen** (`.songstrip`, füllt der Player): der Akkord, der gerade klingt, mit Griffbild (ohne den Griff als
@@ -1050,7 +1058,7 @@ Capo setzt (z. B. weil die Audiospur höher klingt als notiert), muss auch `\ks`
 - **Mixer:** je Spur ein Auge (in den Noten anzeigen; eine Spur bleibt immer an; je Song gemerkt), ein Lautsprecher
   (zu hören), der Name und darunter Regler und Wert; darunter Audiospur, Metronom und Vorzähler mit Lautsprecher.
   In "Chords" sind die Augen ohne Funktion. 
-- **⋮** Menü: Bearbeiten (im Bearbeitungsmodus mit Häkchen; ein Klick beendet ihn), Stammdaten, Uploads, Darstellung,
+- **⋮** Menü: Bearbeiten (im Bearbeitungsmodus mit Häkchen; ein Klick beendet ihn), Stammdaten, Darstellung,
   GP-Export, CHO-Export. **Stammdaten** öffnet den Dialog mit Cover, Titel, Interpret, Genre, Einstufung, Favorit und 
   Notizen, dazu "Song löschen …". Sync-Editor und Quelle der Audiodatei stehen im Bearbeitungsmodus.
   **Darstellung** öffnet einen kleinen Dialog mit der Skalierung (50 bis 150 %, gilt für Noten und Chords),
@@ -1134,9 +1142,9 @@ noch fehlt, beschreibt `docs/Editor.md`; dort steht auch, was aus Guitar Pro nic
 - **Verlassen:** ✕ oben rechts; fragt bei ungespeicherten Änderungen nach und zeigt den Song neu, wenn Noten oder
   Stammdaten gespeichert wurden.
 - **Aufteilung:** oben die Werkzeugleiste mit allem, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu 
-  Speichern, Rückgängig, Transponieren, Hinweise, Hilfe, ✕; links "Am Cursor" mit allem zum Schlag (Notenwerte, 
+  Speichern, Rückgängig, Wiederholen, Verlauf, Uploads, Transponieren, Hinweise, Hilfe, ✕; links "Am Cursor" mit allem zum Schlag (Notenwerte, 
   Einfügen/Löschen, Effekte, Akkord, Griff, Text; vom Takt Abschnitt, Taktart und Tempo), unten Spuren (samt 
-  Anzeigen/Ausblenden), Leadsheet, Liedtext und Audio (Sync-Editor, dazu das Tempo der Audiospur) mit der Statuszeile. 
+  Anzeigen/Ausblenden), Liedtext, Leadsheet und Audio (Sync-Editor, dazu das Tempo der Audiospur) mit der Statuszeile. 
   Panels klappen mit F2, F8 bzw. dem Pfeil ein.
 - **Reiter "Leadsheet"** (`js/sheet.js`): links
   die Patterns des Songs mit Freitext "wann", die Tab-Stellen (Takte, Spur, Beschriftung), die Griffbilder (je ein

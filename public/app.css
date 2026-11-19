@@ -246,7 +246,8 @@ header p.sub{
 .sheet-wide .ov-meta{margin:-.7rem 0 .8rem; font-size:.85rem; color:var(--ink-soft);}
 .sheet-wide .ov-tools{display:flex; flex-wrap:wrap; gap:.4rem; margin-bottom:.6rem;}
 .sheet-wide .chord-sheet{padding:.4rem 0;}
-.sheet-wide .pattern-filter{padding:0; margin:.2rem 0 .4rem; justify-content:flex-start;}
+.sheet-wide .pattern-filter{padding:0; margin:0; justify-content:flex-start;}
+.sheet-wide .ov-tools{align-items:center;}
 /* Menü ☰ oben rechts in der Kopfzeile der Liederliste */
 .lib-menu{position:absolute; top:.9rem; right:1rem; z-index:5;}
 .lib-menu .tbtn{font-size:1.5rem; color:#fff; background:none; border:none; cursor:pointer; padding:.2rem .6rem; line-height:1;}
@@ -637,6 +638,10 @@ header p.sub{
   body:has(.sheet-wide) .overlay{position:static; display:block; padding:0; background:none; overflow:visible;}
   .sheet-wide{max-width:none; border:0; padding:0; background:#fff;}
   .sheet-wide .close, .sheet-wide .ov-tools{display:none !important;}
+  /* Griffbrett-Dialog: kein Hinweis, keine Scrolleiste unter dem Griffbrett. */
+  .fb-hint{display:none !important;}
+  .sheet h3.fb-title{display:block !important; color:#000; font-size:1.1rem; letter-spacing:0; text-transform:none;}
+  .fb-scroll{overflow:visible !important;}
   /* Die Saitenlinien der Picking Patterns sind Hintergründe; ohne diese Angabe druckt der Browser sie nicht. */
   .pgrid-string td:not(.pgrid-label){print-color-adjust:exact; -webkit-print-color-adjust:exact;
     background:linear-gradient(#666, #666) center / 100% 1px no-repeat !important;}
@@ -987,7 +992,16 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 .ls-qr svg{display:block; width:100%; height:auto;}
 .ls-qr figcaption{margin-top:.2em; line-height:1.15;}
 /* Griffbrett (Dialog "Griffbrett"): Auswahl der Töne und die Zeichnung bis zum 15. Bund */
+.history-hint{margin:0 0 .8rem; font-size:.85rem; color:var(--ink-soft);}
+.history-list{list-style:none; margin:0; padding:0;}
+.history-list li{display:flex; align-items:center; gap:.8rem; padding:.4rem 0; border-top:1px solid var(--rule);}
+.history-list li:first-child{border-top:0;}
+.history-list li > span:first-child{flex:1;}
+.history-option{display:flex; align-items:center; gap:.4rem; margin-top:.8rem; font-size:.9rem;}
+.history-list .ebtn{flex:none;}
+.history-size{font-size:.8rem; color:var(--ink-soft);}
 .fb-title{margin:0 0 .6rem; font-size:1.1rem;}
+.sheet h3.fb-title{text-transform:none; letter-spacing:0;}
 .fb-scroll{overflow-x:auto;}
 .fretboard{width:100%; min-width:720px; height:auto; display:block; background:var(--card); border:1px solid var(--rule); border-radius:8px;}
 .fretboard .fb-fret{stroke:var(--ink-soft); stroke-width:1.5;}
