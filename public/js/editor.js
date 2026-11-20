@@ -1,5 +1,5 @@
 /**
- * Bearbeitungsmodus der Liedansicht: Werkzeugleiste und Panels, Reiter "Liedtext", Maus und Cursor, Felder,
+ * Bearbeitungsmodus der Liedansicht: Werkzeugleiste und Panels, Panel "Liedtext", Maus und Cursor, Felder,
  * Tastenkürzel.
  */
 
@@ -14,8 +14,8 @@ import {chordNoteNames, parseChord, suggestChordNames} from './chordtheory.js';
 import {closeOverlay, findSong, knownTracks, openOverlay, renderAudioSource, saveSongFields, usedPrograms} from './library.js';
 import * as edit from './notation.js';
 import {
-  chordsTrack, describeScoreLoss, KEY_NAMES, keyName, lyricsTrack, normalizeTuningText, parseScore, parseTuningText, readGpFile,
-  sameTuning, SHIFT_MAX, stringedStaves, TRACK_NAMES, trackName, transposeScore,
+  chordsTrack, describeScoreLoss, KEY_NAMES, keyName, lyricsTrack, parseScore, readGpFile,
+  sameTuning, stringedStaves, TRACK_NAMES, trackName,
   TRIPLET_FEELS, tuningStaves, unifyCapo, writeScore, writeScoreChecked,
 } from './notation.js';
 import {eyeIcon, showTrackNames, speakerIcon, SyncEditor} from './playback.js';
@@ -23,6 +23,7 @@ import {
   captureTabs, LeadsheetTab, normalizeSheet, parseTimeSignature, remapSheetByOrder, remapTabs, SECTION_NAMES,
   sectionName, TIME_SIGNATURES,
 } from './sheet.js';
+import {applyRetune, TransposeDialog} from './transposedialog.js';
 import {buildTextModel, lyricsLines, lyricsSectionStarts, renderTextView} from './textview.js';
 import {CHORD_EXTENSIONS, GP_EXTENSIONS, openUploads} from './uploads.js';
 
@@ -110,11 +111,11 @@ export function todoButton(label, title, cls = '', cmd = ''){
 }
 
 // --------------------------------------------------------------------------------------------------------------------
-// Reiter "Liedtext"
+// Panel "Liedtext"
 // --------------------------------------------------------------------------------------------------------------------
 
 /**
- * Reiter "Liedtext" des Bearbeitungsmodus (NoteEditor): links der Text zum Bearbeiten, rechts die Vorschau wie in
+ * Panel "Liedtext" des Bearbeitungsmodus (NoteEditor): oben der Text zum Bearbeiten, darunter die Vorschau wie in
  * "Text & Akkorde"; die Stelle des Cursors in den Noten ist in beiden markiert und umgekehrt. Der Text wird beim
  * Tippen auf die Schläge verteilt (setLyricsText() in notation.js).
  *
@@ -155,7 +156,7 @@ function entryBar(entry){
 /**
  * Felder der Panels im Bearbeitungsmodus (NoteEditor): füllen und übernehmen. Links, was am Cursor hängt (Schlag,
  * Akkord, Abschnitt, Taktart und Tempo des Takts), in der Werkzeugleiste, was am Song hängt (Tonart, Shuffle, Capo, Tuning), im
- * Reiter "Spuren" die Angaben je Spur.
+ * Dialog "Spuren" die Angaben je Spur.
  *
  * Die Methoden stehen am Ende der Klasse NoteEditor.
  */
@@ -241,7 +242,8 @@ export const SHORTCUTS = [
   ]],
   ['Panels', [
     ['F2', 'Panel "Am Cursor" (links) ein-/ausklappen'],
-    ['F8', 'Panel unten (Liedtext, Akkorde, Spuren, Audio) ein-/ausklappen'],
+    ['F4', 'Panel "Liedtext" (rechts) ein-/ausklappen'],
+    ['F8', 'Panel "Audio" (unten) ein-/ausklappen'],
     ['?', 'diese Übersicht'],
   ]],
 ];
@@ -337,6 +339,9 @@ const TRACK_NAME_STYLE = ['singleTrackTrackNamePolicy', 'multiTrackTrackNamePoli
 /** So lange (ms) nach dem letzten Tastendruck im Liedtext werden die Noten neu gezeichnet. */
 const LYRICS_MS = 300;
 
+/** So lange (ms) nach dem letzten Tastendruck im Liedtext rollt das Feld beim Abspielen nicht mit (man schreibt gerade). */
+const LYRICS_TYPING_MS = 3000;
+
 /** So viele Griffbilder passen im Dialog "Akkord" nebeneinander. */
 const GRIPS_PER_ROW = 6;
 
@@ -346,14 +351,26 @@ const TOAST_MS = 2200;
 /** Speicherschlüssel für eingeklappte Panels (gilt für alle Songs). */
 const PANELS_KEY = 'gitarrenbuch_editor_panels';
 
-/** Kleinste Höhe des Inhalts im unteren Panel (unter den Reitern, px). */
+/** Kleinste Höhe des Inhalts im unteren Panel (unter der Kopfzeile, px). */
 const BOTTOM_MIN_H = 60;
 
 /** Höhe des Inhalts im unteren Panel, solange sie nicht gezogen wurde (px). */
-const BOTTOM_DEFAULT_H = 150;
+const BOTTOM_DEFAULT_H = 200;
 
 /** Größte Höhe des Inhalts im unteren Panel als Anteil der Fensterhöhe. */
 const BOTTOM_MAX_SHARE = 0.7;
+
+/** Kleinste Höhe des Textfelds im rechten Panel (px); darunter die Vorschau. */
+const LYRICS_MIN_H = 80;
+
+/** Kleinste Höhe der Vorschau im rechten Panel (px). */
+const LYRICS_VIEW_MIN_H = 80;
+
+/** Kleinste Breite des rechten Panels (px). */
+const RIGHT_MIN_W = 260;
+
+/** Größte Breite des rechten Panels als Anteil der Fensterbreite. */
+const RIGHT_MAX_SHARE = 0.6;
 
 /** Knöpfe für die Dauer: Notenwert (1 = Ganze, 4 = Viertel) → Zeichen der Notenschrift. */
 const NOTE_GLYPHS = {
@@ -397,7 +414,7 @@ const EFFECTS = [
  */
 const instrumentLabel = program => `${program} ${INSTRUMENT_NAMES[program] ?? ''}`.trim();
 
-/** Lagen der Noten gegenüber dem Klang, die der Reiter "Spuren" anbietet (siehe notationPitch() in notation.js). */
+/** Lagen der Noten gegenüber dem Klang, die der Dialog "Spuren" anbietet (siehe notationPitch() in notation.js). */
 const NOTATION_PITCHES = [
   [-24, '2 Oktaven höher'],
   [-12, '1 Oktave höher (Gitarre)'],
@@ -406,7 +423,7 @@ const NOTATION_PITCHES = [
 ];
 
 /**
- * Auswahl der Notenlage einer Spur im Reiter "Spuren". Steht in der Datei ein anderer Wert, kommt er als eigener
+ * Auswahl der Notenlage einer Spur im Dialog "Spuren". Steht in der Datei ein anderer Wert, kommt er als eigener
  * Eintrag dazu. Schlagzeug hat keine Notenlage.
  * @param {import('../../types/alphatab').model.Track} track Spur
  * @returns {string} HTML
@@ -439,15 +456,12 @@ function parseProgram(text){
 }
 
 /** Tasten, die Panels ein- und ausklappen (wie Guitar Pro: F2 Palette): Taste → Seite. */
-const PANEL_KEYS = {F2: 'left', F8: 'bottom'};
-
-/** Reiter des unteren Panels: [Schlüssel, Name]. */
-const BOTTOM_TABS = [['tracks', 'Spuren'], ['lyrics', 'Liedtext'], ['leadsheet', 'Leadsheet'], ['audio', 'Audio']];
+const PANEL_KEYS = {F2: 'left', F4: 'right', F8: 'bottom'};
 
 /**
- * Eingeklappte Panels und Höhe des unteren Panels aus dem Browser.
- * @returns {{left?: boolean, right?: boolean, bottom?: boolean, bottomH?: number, tab?: string}} true = eingeklappt;
- *   bottomH: Höhe des Inhalts unten in px; tab: zuletzt gewählter Reiter unten (Schlüssel in BOTTOM_TABS)
+ * Eingeklappte Panels und Höhe des Textfelds im rechten Panel aus dem Browser.
+ * @returns {{left?: boolean, right?: boolean, bottom?: boolean, bottomH?: number, lyricsH?: number, rightW?: number}} true = eingeklappt;
+ *   bottomH: Höhe des Inhalts im unteren Panel in px; lyricsH: Höhe des Textfelds im rechten Panel in px (darunter die Vorschau); rightW: Breite des rechten Panels in px
  */
 function loadCollapsed(){
   try {
@@ -479,7 +493,7 @@ export class NoteEditor {
     /** Rückruf nach dem Speichern. */
     this.onSaved = onSaved;
     /**
-     * Sync-Editor im Reiter "Audio" (eingebettet), null, bis der Reiter zum ersten Mal gezeigt wird.
+     * Sync-Editor im unteren Panel (eingebettet), null, bis er geladen ist.
      * @type {?SyncEditor}
      */
     this.sync = null;
@@ -518,11 +532,11 @@ export class NoteEditor {
     /** Angaben für das Leadsheet wie gespeichert (sheetJson()), zum Vergleich: ungespeicherte Änderungen? */
     this.savedSheet = '';
     /**
-     * Ob Auge oder Lautsprecher im Reiter "Spuren" seit dem Speichern geändert wurden (dann speichert "Speichern" auch die
+     * Ob Auge oder Lautsprecher im Dialog "Spuren" seit dem Speichern geändert wurden (dann speichert "Speichern" auch die
      * Vorgaben je Spur, siehe trackDefaults()).
      */
     this.viewChanged = false;
-    /** Reiter "Leadsheet". */
+    /** Dialog "Leadsheet". */
     this.leadsheetTab = new LeadsheetTab(this);
     /**
      * Schritte für "Rückgängig" und "Wiederholen": Text, Angaben je Takt und Cursor vor bzw. nach der Änderung.
@@ -583,7 +597,7 @@ export class NoteEditor {
     /** alphaTex vor dem Schritt, in dem der Liedtext gerade bearbeitet wird; von dort aus wird verteilt. */
     this.lyricsBase = '';
     /**
-     * Gewählte Spur für Akkorde bzw. Text, solange der Song keine hat (Radiobuttons im Reiter "Spuren", siehe
+     * Gewählte Spur für Akkorde bzw. Text, solange der Song keine hat (Radiobuttons im Dialog "Spuren", siehe
      * contentTrack()). Mit Inhalt gilt die Spur, in der er steht.
      * @type {{chords: ?number, lyrics: ?number}}
      */
@@ -598,6 +612,13 @@ export class NoteEditor {
      * @type {?{from: number, to: number}}
      */
     this.lyricsCur = null;
+    /**
+     * Schlag mit der Silbe, die beim Abspielen zuletzt gezeigt wurde (followPlayback()), null ohne.
+     * @type {?Beat}
+     */
+    this.playedLyric = null;
+    /** Zeit des letzten Tastendrucks im Liedtext-Feld (ms, Date.now()), 0 ohne. */
+    this.lyricsInputAt = 0;
     /**
      * Ob der Liedtext Silben ohne Schlag hat: Dann bleibt der Text im Feld stehen (mit den roten Abschnitten), statt
      * aus den Noten neu gefüllt zu werden, bis er passt oder "Rückgängig" ihn zurücksetzt.
@@ -672,7 +693,8 @@ export class NoteEditor {
   }
 
   /**
-   * Schaltet in den Bearbeitungsmodus: Leisten und Panels einfügen. Die feste Leiste zeigt dann nur noch die
+   * Schaltet in den Bearbeitungsmodus: Leisten und Panels einfügen (links "Am Cursor", rechts "Liedtext", unten "Audio";
+   * Spuren und Leadsheet öffnen als Dialoge aus der Werkzeugleiste). Die feste Leiste zeigt dann nur noch die
    * Werkzeugleiste (Zurück, aktueller Akkord, Stift und Menü sind ausgeblendet). Bearbeitet wird mit Tabs: Aus
    * "Noten" oder "Chords" geht es in "Noten + Tabs"; die Ansicht unten bietet nur "Tabs" und "Noten + Tabs".
    * @returns {void}
@@ -690,9 +712,14 @@ export class NoteEditor {
     toolbar.setAttribute('aria-label', 'Bearbeiten');
     this.addPart(songbar, 'div', 'edit-notices', '').hidden = true;
     this.addPart(this.songView, 'aside', 'edit-panel edit-left', this.cursorPanelHtml(), narrow || collapsed.left);
+    const right = this.addPart(this.songView, 'aside', 'edit-panel edit-right', this.lyricsPanelHtml(), narrow || collapsed.right);
     const bottom = this.addPart(this.songView, 'section', 'edit-bottom', this.bottomHtml(), collapsed.bottom);
     this.setBottomHeight(collapsed.bottomH ?? BOTTOM_DEFAULT_H);
     bottom.querySelector('.edit-bottom-resize').addEventListener('pointerdown', e => this.startBottomResize(/** @type {PointerEvent} */ (e)));
+    this.setLyricsHeight(collapsed.lyricsH);
+    this.setRightWidth(collapsed.rightW);
+    right.querySelector('.edit-right-resize').addEventListener('pointerdown', e => this.startRightResize(/** @type {PointerEvent} */ (e)));
+    right.querySelector('.elyrics-split').addEventListener('pointerdown', e => this.startLyricsResize(/** @type {PointerEvent} */ (e)));
     this.addPart(this.songView, 'div', 'edit-toast', '').setAttribute('role', 'status');
     renderAudioSource(/** @type {HTMLElement} */ (this.part('edit-bottom').querySelector('[data-audio-source]')),
       () => findSong(this.player.slug), saved => {
@@ -728,25 +755,11 @@ export class NoteEditor {
     this.onFieldChange = e => this.applyField(/** @type {HTMLInputElement} */ (e.target));
     this.part('edit-left').addEventListener('change', this.onFieldChange);
     this.part('edit-toolbar').addEventListener('change', this.onFieldChange);
-    // Tuning-Feld: beim Bearbeiten stehen die Töne da ("Standard" = E A D G B E), danach wieder die Kurzform.
-    this.part('edit-toolbar').addEventListener('focusin', e => {
-      const input = /** @type {HTMLInputElement} */ (e.target);
-      if(input.dataset?.song !== 'tuning' || input.value !== 'Standard') return;
-      input.value = this.standardTuning(tuningStaves(this.score)[0]?.tuning.length ?? 6).names.join(' ');
-      input.select();
-    });
-    this.part('edit-toolbar').addEventListener('focusout', e => {
-      const input = /** @type {HTMLInputElement} */ (e.target);
-      if(input.dataset?.song === 'tuning') input.value = this.tuningDisplay();
-    });
-    this.part('edit-bottom').addEventListener('change', this.onFieldChange);
-    this.part('edit-bottom').addEventListener('focusin', e => this.startInstrumentInput(/** @type {HTMLInputElement} */ (e.target)));
-    this.part('edit-bottom').addEventListener('focusout', e => this.endInstrumentInput(/** @type {HTMLInputElement} */ (e.target)));
-    this.part('edit-bottom').addEventListener('input', e => this.suggestInstruments(/** @type {HTMLInputElement} */ (e.target)));
     // Liedtext: beim Schreiben (kurz nach dem letzten Tastendruck) in die Noten, ein Schritt für "Rückgängig" je
     // Bearbeitung des Felds.
-    const lyrics = /** @type {HTMLTextAreaElement} */ (this.part('edit-bottom').querySelector('[data-lyrics]'));
+    const lyrics = /** @type {HTMLTextAreaElement} */ (this.part('edit-right').querySelector('[data-lyrics]'));
     lyrics.addEventListener('input', () => {
+      this.lyricsInputAt = Date.now();
       this.showChordFileButton();
       clearTimeout(this.lyricsTimer);
       this.lyricsTimer = window.setTimeout(() => this.applyLyrics(), LYRICS_MS);
@@ -761,7 +774,7 @@ export class NoteEditor {
     });
     // Die roten Markierungen liegen hinter dem Feld und rollen mit.
     lyrics.addEventListener('scroll', () => {
-      this.part('edit-bottom').querySelector('.elyrics-marks').scrollTop = lyrics.scrollTop;
+      this.part('edit-right').querySelector('.elyrics-marks').scrollTop = lyrics.scrollTop;
     });
     // Noten und Vorschau folgen dem Cursor im Feld (Klick, Pfeil-, Bild-, Pos1- und Ende-Taste).
     lyrics.addEventListener('click', () => this.followLyricsCaret());
@@ -769,9 +782,6 @@ export class NoteEditor {
       if(/^(Arrow|Page|Home$|End$)/.test(e.key)) this.followLyricsCaret();
     });
     void this.load().catch(err => this.toast('Noten konnten nicht geladen werden: ' + err.message));
-    // Der Reiter vom letzten Mal; seine Inhalte entstehen, sobald die Noten geladen sind (load()).
-    this.activeTab = BOTTOM_TABS.some(([key]) => key === collapsed.tab) ? collapsed.tab : 'lyrics';
-    this.showTab('edit-bottom', this.activeTab);
     this.relayout();
   }
 
@@ -818,16 +828,17 @@ export class NoteEditor {
         ${todoButton(svgIcon('upload'), 'Uploads: hochgeladene Dateien mit Quelle und Beschreibung', '', 'uploads')}
       </div>
       <div class="egroup">
+        ${todoButton(svgIcon('tracks'), 'Spuren: anzeigen, hören, benennen, ordnen, hinzufügen', '', 'tracks')}
+        ${todoButton(svgIcon('leadsheet'), 'Leadsheet: Patterns, Tab-Stellen, Links und Vorschau des Blatts', '', 'leadsheet')}
+      </div>
+      <div class="egroup">
         ${todoButton(svgIcon('feelStraight', 48), 'Shuffle: Achtel-Triolen-Feeling im ganzen Song ein- oder ausschalten (Strg+/)',
           'ebtn-shuffle', 'tripletFeel')}
-        <span class="egroup-gap"></span>
-        ${todoButton(svgIcon('transpose'), 'Transponieren: Noten, Tabs, Akkorde und Vorzeichen um Halbtöne verschieben', '',
-          'transpose')}
       </div>
       <div class="egroup egroup-song">
         <label class="etool-field"><span>Tonart</span>${select(KEY_NAMES, 'data-song="key" title="Tonart des ganzen Songs"')}</label>
-        <label class="etool-field"><span>Capo</span>${num(0, 12, 'data-song="capo" title="Capo aller Spuren; die Griffe bleiben"')}</label>
-        <label class="etool-field"><span>Tuning</span><input type="text" data-song="tuning" placeholder="E A D G B E"></label>
+        ${todoButton(svgIcon('transpose'), 'Transponieren: Halbtöne, Capo und Tuning ändern, mit Vorschau', '', 'transpose')}
+        <span class="etool-info" data-song-info></span>
       </div>
       <div class="egroup edit-end">
         <button type="button" class="ebtn ebtn-text edit-hint" data-action="notices" aria-expanded="false" hidden
@@ -895,22 +906,16 @@ export class NoteEditor {
   }
 
   /**
-   * Unteres Panel: Reiter (Spuren, Leadsheet, Liedtext, Audio) mit Statuszeile. Spuren und Leadsheet füllt
-   * renderSongTabs() aus den bearbeiteten Noten.
+   * Rechtes Panel "Liedtext": oben das Textfeld, darunter die Vorschau "Text & Akkorde"; die Linie dazwischen
+   * lässt sich ziehen (startLyricsResize()).
    * @returns {string} HTML
    */
-  bottomHtml(){
+  lyricsPanelHtml(){
     return `
-      <div class="edit-bottom-resize" title="Höhe ändern (ziehen)" aria-hidden="true"></div>
-      <div class="edit-bottom-head">
-        ${this.tabsHtml(BOTTOM_TABS)}
-        <div class="edit-status">Noten werden geladen …</div>
-        <button type="button" class="ebtn ebtn-collapse" data-collapse="bottom" title="Ein-/Ausklappen (F8)"
-          aria-label="Unteres Panel ein- oder ausklappen"></button>
-      </div>
-      <div class="edit-bottom-body">
-        <div class="etab etab-lyrics" data-tab="lyrics">
-          <div class="elyrics-edit">
+      <div class="edit-right-resize" title="Breite ändern (ziehen)" aria-hidden="true"></div>
+      ${this.panelHead('Liedtext', 'right')}
+      <div class="edit-panel-body elyrics">
+        <div class="elyrics-edit">
           <div class="elyrics-tools" data-chord-tools hidden>
             ${todoButton('Chord-Datei importieren', 'ChordPro oder Akkord-über-Text', 'ebtn-text',
               'chordFile')}
@@ -922,25 +927,27 @@ export class NoteEditor {
 Jedes Leerzeichen und jeder Bindestrich geht zum nächsten Schlag, ein einzelnes _ lässt einen Schlag aus,
 mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."></textarea>
           </div>
-          </div>
-          <div class="elyrics-view" data-lyrics-view aria-label="Vorschau Text &amp; Akkorde"></div>
         </div>
-        <div class="etab" data-tab="tracks"><div class="etrack-list"></div></div>
-        <div class="etab etab-leadsheet" data-tab="leadsheet">
-          <div class="els-list"></div>
-          <div class="els-side">
-            <div class="els-preview" aria-label="Vorschau Leadsheet"><div class="ls-page"></div></div>
-            <div class="els-foot">
-              <div class="els-fit efield-hint" aria-live="polite"></div>
-              <button type="button" class="ebtn ebtn-text" data-ls-action="compare"
-                title="Zwei Abschnitte nebeneinander, Unterschiede markiert; eine Fassung für beide übernehmen">
-                Vergleichen …</button>
-              <button type="button" class="ebtn ebtn-text" data-ls-action="print"
-                title="Das Blatt drucken, wie die Vorschau es zeigt (auch als PDF)">Drucken</button>
-            </div>
-          </div>
-        </div>
-        <div class="etab etab-audio" data-tab="audio">
+        <div class="elyrics-split" role="separator" aria-orientation="horizontal" title="Höhe ändern (ziehen)"></div>
+        <div class="elyrics-view" data-lyrics-view aria-label="Vorschau Text &amp; Akkorde"></div>
+      </div>`;
+  }
+
+  /**
+   * Unteres Panel "Audio": Quelle der Audiodatei und Sync-Editor, mit Statuszeile ("Takt zu lang/kurz"). Die Höhe lässt sich ziehen (startBottomResize()); die Wellenform passt sich an.
+   * @returns {string} HTML
+   */
+  bottomHtml(){
+    return `
+      <div class="edit-bottom-resize" title="Höhe ändern (ziehen)" aria-hidden="true"></div>
+      <div class="edit-bottom-head">
+        <span class="edit-panel-title">Audio</span>
+        <div class="edit-status">Noten werden geladen …</div>
+        <button type="button" class="ebtn ebtn-collapse" data-collapse="bottom" title="Ein-/Ausklappen (F8)"
+          aria-label="Unteres Panel ein- oder ausklappen"></button>
+      </div>
+      <div class="edit-bottom-body">
+        <div class="eaudio" data-audio>
           <div class="eaudio-source" data-audio-source></div>
           <div class="eaudio-sync" data-audio-sync><p class="efield-hint">Audiospur wird geladen …</p></div>
         </div>
@@ -948,18 +955,87 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Füllt die Reiter "Liedtext", "Leadsheet" und "Spuren" und die Auswahllisten links (Abschnitte, Akkorde des Songs)
-   * aus den bearbeiteten Noten (nach jeder Änderung). Ein Feld, in dem gerade geschrieben wird, bleibt stehen.
+   * Inhalt des Dialogs "Leadsheet": links Patterns, Tab-Stellen und Links (LeadsheetTab.renderList()), rechts die Vorschau
+   * des Blatts (renderPreview()).
+   * @returns {string} HTML
+   */
+  leadsheetDialogHtml(){
+    return `
+      <div class="els-list"></div>
+      <div class="els-side">
+        <div class="els-preview" aria-label="Vorschau Leadsheet"><div class="ls-page"></div></div>
+        <div class="els-foot">
+          <div class="els-fit efield-hint" aria-live="polite"></div>
+          <button type="button" class="ebtn ebtn-text" data-ls-action="compare"
+            title="Zwei Abschnitte nebeneinander, Unterschiede markiert; eine Fassung für beide übernehmen">
+            Vergleichen …</button>
+          <button type="button" class="ebtn ebtn-text" data-ls-action="print"
+            title="Das Blatt drucken, wie die Vorschau es zeigt (auch als PDF)">Drucken</button>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Öffnet einen Dialog des Bearbeitungsmodus (Spuren, Leadsheet). Seine Knöpfe und Felder arbeiten wie die der Panels;
+   * er legt sich über die Noten, deshalb gelten die Tasten des Editors darunter nicht.
+   * @param {string} title Überschrift
+   * @param {string} cls Klasse des Inhalts (auch Kennung für ihn, z. B. "etracks-dialog")
+   * @param {string} html Inhalt
+   * @returns {HTMLElement} der Inhalt
+   */
+  openEditDialog(title, cls, html){
+    openOverlay(`<h2>${escapeHtml(title)}</h2><div class="edit-dialog ${cls}">${html}</div>`);
+    const box = /** @type {HTMLElement} */ (document.querySelector(`.sheet .${cls}`));
+    box.addEventListener('click', this.onClick);
+    box.addEventListener('change', this.onFieldChange);
+    box.addEventListener('focusin', e => this.startInstrumentInput(/** @type {HTMLInputElement} */ (e.target)));
+    box.addEventListener('focusout', e => this.endInstrumentInput(/** @type {HTMLInputElement} */ (e.target)));
+    box.addEventListener('input', e => this.suggestInstruments(/** @type {HTMLInputElement} */ (e.target)));
+    return box;
+  }
+
+  /**
+   * Dialog "Spuren": je Spur Zeigen, Hören, Name, Akkorde und Text, Instrument, Notenlage und Knöpfe (renderTracks()).
    * @returns {void}
    */
-  renderSongTabs(){
+  openTracksDialog(){
+    const box = this.openEditDialog('Spuren', 'etracks-dialog', '<div class="etrack-list"></div>');
+    // Nach einem Dialog darüber (z. B. Spur importieren) steht die Liste so, wie die Noten jetzt sind.
+    box.addEventListener('overlayshow', () => this.renderTracks());
+    this.renderTracks();
+  }
+
+  /**
+   * Dialog "Leadsheet" (LeadsheetTab): Eingaben und Vorschau des Blatts.
+   * @returns {void}
+   */
+  openLeadsheetDialog(){
+    const box = this.openEditDialog('Leadsheet', 'etab-leadsheet', this.leadsheetDialogHtml());
+    box.addEventListener('overlayshow', () => this.leadsheetTab.render());
+    this.leadsheetTab.render();
+  }
+
+  /**
+   * Füllt Liedtext, Leadsheet und Spuren und die Auswahllisten links (Abschnitte, Akkorde des Songs) aus den
+   * bearbeiteten Noten (nach jeder Änderung). Ein Feld, in dem gerade geschrieben wird, bleibt stehen. Leadsheet und
+   * Spuren sind Dialoge, gefüllt wird, was offen ist.
+   * @returns {void}
+   */
+  renderSongPanels(){
     this.fillLyrics();
     this.leadsheetTab.render();
     this.fillSectionNames();
     this.fillChordSelect();
-    const bottom = this.part('edit-bottom');
-    if(!this.score || !bottom || bottom.contains(document.activeElement) && document.activeElement !== document.body
-      && document.activeElement.matches('input, select, textarea')) return;
+    this.renderTracks();
+  }
+
+  /**
+   * Zeichnet die Liste im Dialog "Spuren" neu, falls er offen ist (nicht, während in einem ihrer Felder geschrieben wird).
+   * @returns {void}
+   */
+  renderTracks(){
+    const list = document.querySelector('.sheet .etrack-list');
+    if(!this.score || !list || list.contains(document.activeElement) && document.activeElement.matches('input, select, textarea')) return;
     const shown = new Set(this.trackIndexes);
     // Namensliste: die üblichen Namen, dazu alle aus der Bibliothek und dem Song (unübersetzt, siehe notation.js).
     const names = [...new Set([...TRACK_NAMES, ...knownTracks(), ...this.score.tracks.map(t => t.name.trim())])]
@@ -967,7 +1043,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const chordsAt = this.contentTrack('chords');
     const lyricsAt = this.contentTrack('lyrics');
     const last = this.score.tracks.length - 1;
-    bottom.querySelector('.etrack-list').innerHTML = `
+    list.innerHTML = `
       <datalist id="etrackPrograms"></datalist>
       <datalist id="etrackNames">${names.map(n => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
       <div class="etrack etrack-head"><span></span><span>Name</span>
@@ -1036,65 +1112,12 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Reiterleiste.
-   * @param {string[][]} tabs Paare aus Schlüssel und Name
-   * @returns {string} HTML
-   */
-  tabsHtml(tabs){
-    return `<div class="etabs" role="tablist">${tabs.map(([key, label]) =>
-      `<button type="button" role="tab" data-show-tab="${key}">${escapeHtml(label)}</button>`).join('')}</div>`;
-  }
-
-  /**
-   * Zeigt einen Reiter eines Panels.
-   * @param {string} cls Klasse des Panels
-   * @param {string} key Reiter
-   * @returns {void}
-   */
-  showTab(cls, key){
-    const panel = this.part(cls);
-    for(const b of panel.querySelectorAll('[data-show-tab]')){
-      b.setAttribute('aria-selected', String(/** @type {HTMLElement} */ (b).dataset.showTab === key));
-    }
-    for(const tab of /** @type {NodeListOf<HTMLElement>} */ (panel.querySelectorAll('.etab'))) tab.hidden = tab.dataset.tab !== key;
-  }
-
-  /**
-   * Wählt einen Reiter des unteren Panels, füllt seinen Inhalt und merkt ihn sich für das nächste Mal.
-   * @param {string} key Reiter (Schlüssel in BOTTOM_TABS)
-   * @returns {void}
-   */
-  selectTab(key){
-    this.activeTab = key;
-    this.showTab('edit-bottom', key);
-    this.fillTab(key);
-    const state = loadCollapsed();
-    state.tab = key;
-    try {
-      localStorage.setItem(PANELS_KEY, JSON.stringify(state));
-    } catch(err){
-      // Ohne Speicher (privates Fenster) gilt die Wahl nur bis zum Schließen.
-    }
-  }
-
-  /**
-   * Füllt den Inhalt eines Reiters des unteren Panels (Sync-Editor, Liedtext-Ansicht, Leadsheet).
-   * @param {string} key Reiter
-   * @returns {void}
-   */
-  fillTab(key){
-    if(key === 'audio') void this.openSync();
-    if(key === 'lyrics') this.renderLyricsView();
-    if(key === 'leadsheet') this.leadsheetTab.render();
-  }
-
-  /**
    * Reagiert auf Klicks in Leiste und Panels.
    * @param {HTMLElement} target angeklicktes Element
    * @returns {void}
    */
   handleClick(target){
-    const el = /** @type {?HTMLElement} */ (target.closest('[data-action], [data-collapse], [data-show-tab], '
+    const el = /** @type {?HTMLElement} */ (target.closest('[data-action], [data-collapse], '
       + '[data-duration], [data-cmd], [data-todo], [data-bar-goto], [data-ls-action], '
       + '[data-show-track], [data-track-audible], [data-clear-section]'));
     if(!el) return;
@@ -1118,10 +1141,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       openShortcutHelp();
     } else if(el.dataset.collapse){
       this.togglePanel(el.dataset.collapse);
-    } else if(el.dataset.showTab){
-      // Ein Klick auf einen Reiter klappt das zugeklappte Panel auf.
-      if(this.part('edit-bottom').classList.contains('collapsed')) this.togglePanel('bottom');
-      this.selectTab(el.dataset.showTab);
     } else if(el.dataset.duration){
       this.changeBeats(beat => edit.setDuration(beat, Number(el.dataset.duration)));
     } else if(el.dataset.todo){
@@ -1220,16 +1239,17 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Klappt ein Panel ein bzw. aus (F2, F8 oder der Pfeil am Panel).
-   * @param {string} side "left" oder "bottom"
+   * Klappt ein Panel ein bzw. aus (F2, F4, F8 oder der Pfeil am Panel).
+   * @param {string} side "left", "right" oder "bottom"
    * @returns {void}
    */
   togglePanel(side){
-    this.part(side === 'bottom' ? 'edit-bottom' : `edit-${side}`).classList.toggle('collapsed');
+    this.part(`edit-${side}`).classList.toggle('collapsed');
     this.saveCollapsed();
     this.measure();
     this.relayout();
-    if(side === 'bottom') this.renderLyricsView();
+    if(side === 'right') this.fillLyrics();
+    if(side === 'bottom') void this.openSync();
   }
 
   /**
@@ -1349,10 +1369,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       },
       mergeChords: () => this.moveContentTo('chords', chordsTrack(this.score)?.index ?? 0),
       mergeLyrics: () => this.moveContentTo('lyrics', lyricsTrack(this.score)?.index ?? 0),
-      tracksTab: () => {
-        if(this.part('edit-bottom').classList.contains('collapsed')) this.togglePanel('bottom');
-        this.showTab('edit-bottom', 'tracks');
-      },
+      tracks: () => this.openTracksDialog(),
+      leadsheet: () => this.openLeadsheetDialog(),
       trackUp: () => this.changeTracks(score => edit.moveTrack(score, Number(el.dataset.track), -1),
         Number(el.dataset.track), -1),
       trackDown: () => this.changeTracks(score => edit.moveTrack(score, Number(el.dataset.track), 1),
@@ -1624,11 +1642,11 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.pos = edit.clampPosition(this.score, movedPosition(this.pos, {track: map(this.pos.track) ?? this.trackIndexes[0]}));
     this.player.api.renderScore(this.score, this.trackIndexes);
     this.updateState();
-    this.renderSongTabs();
+    this.renderSongPanels();
   }
 
   /**
-   * Spur, die Akkorde bzw. Text trägt (Radiobuttons im Reiter "Spuren"). Steht schon etwas in den Noten, ist es die
+   * Spur, die Akkorde bzw. Text trägt (Radiobuttons im Dialog "Spuren"). Steht schon etwas in den Noten, ist es die
    * Spur damit (chordsTrack(), lyricsTrack()); sonst die zuletzt gewählte (contentChoice), ohne Wahl für Akkorde die
    * erste Spur und für Text die Spur "vocal", ohne sie die letzte (der Text steht unter den Noten).
    * @param {'chords'|'lyrics'} kind Akkorde oder Text
@@ -1645,7 +1663,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Spur, deren Liedtext der Reiter "Liedtext" bearbeitet (contentTrack()).
+   * Spur, deren Liedtext das Panel "Liedtext" bearbeitet (contentTrack()).
    * @returns {?import('../../types/alphatab').model.Track}
    */
   lyricsTarget(){
@@ -1669,7 +1687,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Stellt im Reiter "Spuren" um, welche Spur Akkorde bzw. Text trägt: Sie ziehen ganz in die gewählte Spur um
+   * Stellt im Dialog "Spuren" um, welche Spur Akkorde bzw. Text trägt: Sie ziehen ganz in die gewählte Spur um
    * (moveContent() in notation.js). Probehalber auf frisch gelesenen Noten gerechnet: Ändert sich dabei nichts an
    * der Lage und fällt nichts weg, geschieht es ohne Rückfrage; sonst fragt ein Dialog, ob Schläge eingefügt
    * (geteilt und angebunden, klingt gleich) oder Akkorde bzw. Silben auf den Schlag davor gesetzt werden sollen.
@@ -1685,7 +1703,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     if(!has){
       this.contentChoice[kind] = index;
       this.toast(chords ? `Neue Akkorde kommen in ${name}.` : `Der Liedtext kommt in ${name}.`);
-      this.renderSongTabs();
+      this.renderSongPanels();
       return;
     }
     /** @param {import('./notation.js').MoveMode} mode @returns {import('./notation.js').MoveResult} */
@@ -1739,7 +1757,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         const mode = /** @type {HTMLElement} */ (button).dataset.move;
         closeOverlay();
         if(mode) apply(/** @type {import('./notation.js').MoveMode} */ (mode));
-        else this.renderSongTabs();
+        else this.renderSongPanels();
       });
     }
   }
@@ -1759,7 +1777,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       this.toast(`In ${file.name} wurde kein Text gefunden.`);
       return;
     }
-    const area = /** @type {HTMLTextAreaElement} */ (this.part('edit-bottom').querySelector('[data-lyrics]'));
+    const area = /** @type {HTMLTextAreaElement} */ (this.part('edit-right').querySelector('[data-lyrics]'));
     area.value = text;
     this.applyLyrics();
     this.lyricsTyping = false;
@@ -1898,7 +1916,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     // renderFinished davor.
     // Beim Schreiben in einem Feld (z. B. Liedtext) rollt die Seite nicht zum Cursor.
     const redraw = () => this.drawCursor(!document.activeElement?.matches('input, textarea, select'));
-    const offs = [api.renderFinished.on(redraw), api.postRenderFinished.on(redraw)];
+    // Beim Abspielen wandert die Silbe im Liedtext und in der Vorschau mit.
+    const offs = [api.renderFinished.on(redraw), api.postRenderFinished.on(redraw),
+      api.playerPositionChanged.on(e => this.followPlayback(e.currentTick))];
     this.offRender = () => offs.forEach(off => off());
     this.cursorEl = document.createElement('div');
     this.cursorEl.className = 'edit-cursor';
@@ -1917,7 +1937,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const first = this.trackIndexes.find(i => score.tracks[i]?.staves[0]?.isStringed) ?? this.trackIndexes[0] ?? 0;
     this.pos = {track: first, bar: 0, beat: 0, string: score.tracks[first]?.staves[0]?.tuning.length || 1};
     this.setTex(this.savedTex);
-    if(this.activeTab !== 'lyrics') this.fillTab(this.activeTab);
+    if(!this.part('edit-bottom').classList.contains('collapsed')) void this.openSync();
   }
 
   /**
@@ -1959,7 +1979,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.player.mixer?.setScore(this.score);
     this.sync?.reload();
     this.updateState();
-    this.renderSongTabs();
+    this.renderSongPanels();
     this.fillSongFields();
     this.renderNotices();
   }
@@ -2008,7 +2028,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       notices.push([`Triolen-Feeling ${[...feels].map(f => TRIPLET_FEELS[f]).join(', ')}: Vorgesehen ist nur Shuffle (Achtel-Triolen).`,
         'Feeling entfernen', 'removeFeel', 'Das Triolen-Feeling im ganzen Song ausschalten (die Noten bleiben, wie sie sind)']);
     }
-    // Akkorde bzw. Text in mehr als einer Spur: Die Radiobuttons im Reiter "Spuren" zeigen dann die Spur mit den
+    // Akkorde bzw. Text in mehr als einer Spur: Die Radiobuttons im Dialog "Spuren" zeigen dann die Spur mit den
     // meisten, die übrigen sollen dorthin (eine Stelle je Information, siehe notation.js).
     for(const [kind, track, label, has] of [
       ['chords', chordsTrack(score), 'Akkorde', beat => !!beat.chordId],
@@ -2075,7 +2095,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Setzt die Höhe des unteren Panels (Inhalt unter den Reitern), in Grenzen.
+   * Setzt die Höhe des unteren Panels (Inhalt unter der Kopfzeile), in Grenzen.
    * @param {number} height Höhe in px
    * @returns {number} gesetzte Höhe
    */
@@ -2118,12 +2138,103 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Zeigt im Reiter "Audio" den Sync-Editor (wie außerhalb des Modus unter den Noten, aber eingebettet), sobald die
+   * Setzt die Höhe des Textfelds im rechten Panel (darunter die Vorschau), in Grenzen.
+   * @param {number} [height] Höhe in px; ohne Angabe teilt sich der Platz zu gleichen Teilen
+   * @returns {number} gesetzte Höhe, 0 ohne Angabe
+   */
+  setLyricsHeight(height){
+    const body = this.part('edit-right').querySelector('.elyrics');
+    if(height === undefined){
+      body.style.removeProperty('--elyrics-h');
+      return 0;
+    }
+    const room = body.clientHeight - LYRICS_VIEW_MIN_H;
+    const h = Math.round(Math.max(LYRICS_MIN_H, room > LYRICS_MIN_H ? Math.min(room, height) : height));
+    body.style.setProperty('--elyrics-h', `${h}px`);
+    return h;
+  }
+
+  /**
+   * Setzt die Breite des rechten Panels, in Grenzen.
+   * @param {number} [width] Breite in px; ohne Angabe gilt die Breite aus dem CSS
+   * @returns {number} gesetzte Breite, 0 ohne Angabe
+   */
+  setRightWidth(width){
+    if(width === undefined){
+      this.songView.style.removeProperty('--edit-right-w');
+      return 0;
+    }
+    const w = Math.round(Math.max(RIGHT_MIN_W, Math.min(window.innerWidth * RIGHT_MAX_SHARE, width)));
+    this.songView.style.setProperty('--edit-right-w', `${w}px`);
+    return w;
+  }
+
+  /**
+   * Ziehen am linken Rand des rechten Panels ändert seine Breite; sie gilt danach für alle Songs.
+   * @param {PointerEvent} e Drücken auf den Rand
+   * @returns {void}
+   */
+  startRightResize(e){
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = this.part('edit-right').offsetWidth;
+    let width = startW;
+    /** @param {PointerEvent} event Bewegung */
+    const move = event => {
+      width = this.setRightWidth(startW + startX - event.clientX);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      const state = loadCollapsed();
+      state.rightW = width;
+      try {
+        localStorage.setItem(PANELS_KEY, JSON.stringify(state));
+      } catch(err){
+        // Ohne Speicher (privates Fenster) gilt die Breite nur bis zum Schließen.
+      }
+      this.relayout();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up, {once: true});
+  }
+
+  /**
+   * Ziehen an der Linie zwischen Textfeld und Vorschau im rechten Panel ändert die Höhen; sie gelten danach für alle
+   * Songs.
+   * @param {PointerEvent} e Drücken auf die Linie
+   * @returns {void}
+   */
+  startLyricsResize(e){
+    e.preventDefault();
+    const edit = /** @type {HTMLElement} */ (this.part('edit-right').querySelector('.elyrics-edit'));
+    const startY = e.clientY;
+    const startH = edit.offsetHeight;
+    let height = startH;
+    /** @param {PointerEvent} event Bewegung */
+    const move = event => {
+      height = this.setLyricsHeight(startH + event.clientY - startY);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      const state = loadCollapsed();
+      state.lyricsH = height;
+      try {
+        localStorage.setItem(PANELS_KEY, JSON.stringify(state));
+      } catch(err){
+        // Ohne Speicher (privates Fenster) gilt die Höhe nur bis zum Schließen.
+      }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up, {once: true});
+  }
+
+  /**
+   * Zeigt im unteren Panel den Sync-Editor (wie außerhalb des Modus unter den Noten, aber eingebettet), sobald die
    * Audiospur geladen ist. Seine Änderungen sind Änderungen an den Noten (syncEdited()).
    * @returns {Promise<void>}
    */
   async openSync(){
-    const tab = /** @type {HTMLElement} */ (this.part('edit-bottom').querySelector('[data-tab="audio"]'));
+    const tab = /** @type {HTMLElement} */ (this.part('edit-bottom').querySelector('[data-audio]'));
     const sync = /** @type {HTMLElement} */ (tab.querySelector('[data-audio-sync]'));
     if(this.sync || tab.dataset.started) return;
     tab.dataset.started = '1';
@@ -2314,7 +2425,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * Beginnt die Eingabe im Feld Instrument: Das Feld wird geleert (das bisherige steht als Platzhalter da), sonst
    * zeigte die Liste nur Instrumente, die zum bisherigen Text passen. Vorgeschlagen werden die Instrumente, die
    * Songs schon nutzen.
-   * @param {HTMLInputElement} input beliebiges Feld im unteren Panel
+   * @param {HTMLInputElement} input beliebiges Feld im Dialog "Spuren"
    * @returns {void}
    */
   startInstrumentInput(input){
@@ -2326,7 +2437,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
 
   /**
    * Beendet die Eingabe im Feld Instrument: Wurde nichts gewählt, steht wieder das bisherige darin.
-   * @param {HTMLInputElement} input beliebiges Feld im unteren Panel
+   * @param {HTMLInputElement} input beliebiges Feld im Dialog "Spuren"
    * @returns {void}
    */
   endInstrumentInput(input){
@@ -2336,7 +2447,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   /**
    * Füllt die Vorschlagsliste für das Feld Instrument: ohne Eingabe die Instrumente, die schon in Songs vorkommen (und
    * das der Spur), mit Eingabe alle, deren Name den Text enthält (bei einer Zahl: deren Nummer damit beginnt).
-   * @param {HTMLInputElement} input beliebiges Feld im unteren Panel
+   * @param {HTMLInputElement} input beliebiges Feld im Dialog "Spuren"
    * @returns {void}
    */
   suggestInstruments(input){
@@ -2347,12 +2458,12 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         ? String(p).startsWith(text) : instrumentLabel(p).toLowerCase().includes(text))
       : [...new Set([...usedPrograms(), this.score.tracks[Number(input.dataset.track)].playbackInfo.program])]
         .sort((a, b) => a - b);
-    this.part('edit-bottom').querySelector('#etrackPrograms').innerHTML = programs
+    document.getElementById('etrackPrograms').innerHTML = programs
       .map(p => `<option value="${escapeHtml(instrumentLabel(p))}">`).join('');
   }
 
   /**
-   * Blendet eine Spur in den Noten ein oder aus (Auge im Reiter "Spuren"); mindestens eine bleibt angezeigt.
+   * Blendet eine Spur in den Noten ein oder aus (Auge im Dialog "Spuren"); mindestens eine bleibt angezeigt.
    * @param {number} index Index der Spur
    * @returns {void}
    */
@@ -2366,7 +2477,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Schaltet eine Spur zwischen zu hören und stumm um (Lautsprecher im Reiter "Spuren"). Wie im Mixer gilt es gleich
+   * Schaltet eine Spur zwischen zu hören und stumm um (Lautsprecher im Dialog "Spuren"). Wie im Mixer gilt es gleich
    * für dieses Gerät, "Speichern" macht es zur Vorgabe des Songs.
    * @param {number} index Index der Spur
    * @returns {void}
@@ -2375,11 +2486,11 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.player.toggleTrackMute(index);
     this.viewChanged = true;
     this.updateState();
-    this.renderSongTabs();
+    this.renderSongPanels();
   }
 
   /**
-   * Zeigt andere Spuren (Augen im Reiter "Spuren", siehe Player.showTracks()).
+   * Zeigt andere Spuren (Augen im Dialog "Spuren", siehe Player.showTracks()).
    * @param {number[]} indexes Indizes der Spuren
    * @returns {void}
    */
@@ -2390,7 +2501,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.pos = edit.clampPosition(this.score, this.pos);
     this.player.api.renderScore(this.score, this.trackIndexes);
     this.updateState();
-    this.renderSongTabs();
+    this.renderSongPanels();
   }
 
   /**
@@ -2519,6 +2630,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     state.bottom = this.part('edit-bottom').classList.contains('collapsed');
     if(matchMedia(WIDE_LAYOUT).matches){
       state.left = this.part('edit-left').classList.contains('collapsed');
+      state.right = this.part('edit-right').classList.contains('collapsed');
     }
     try {
       localStorage.setItem(PANELS_KEY, JSON.stringify(state));
@@ -2536,6 +2648,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.songView.style.setProperty('--edit-top', `${songbar.getBoundingClientRect().bottom}px`);
     this.songView.style.setProperty('--edit-bottom-h', `${this.part('edit-bottom').offsetHeight}px`);
     this.songView.classList.toggle('edit-left-open', !this.part('edit-left').classList.contains('collapsed'));
+    this.songView.classList.toggle('edit-right-open', !this.part('edit-right').classList.contains('collapsed'));
   }
 
   /**
@@ -2599,9 +2712,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.score = null;
     for(const part of this.parts) part.remove();
     this.parts = [];
-    this.songView.classList.remove('editing', 'edit-left-open');
+    this.songView.classList.remove('editing', 'edit-left-open', 'edit-right-open');
     this.songView.style.removeProperty('--edit-top');
     this.songView.style.removeProperty('--edit-bottom-h');
+    this.songView.style.removeProperty('--edit-right-w');
     this.relayout();
   }
 
@@ -2613,6 +2727,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    */
   handlePointer(e){
     if(e.button !== 0 || !this.score) return;
+    // Ein Klick in die Noten beendet das Schreiben im Liedtext, sonst folgt dieser dem Cursor nicht.
+    const lyrics = this.part('edit-right').querySelector('[data-lyrics]');
+    if(document.activeElement === lyrics) /** @type {HTMLElement} */ (lyrics).blur();
     const rect = this.player.el.at.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -2718,19 +2835,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Inhalt des Tuning-Felds: "Standard" für das Standard-Tuning, sonst die Töne von tief nach hoch; leer, wenn die Spuren
-   * verschieden gestimmt sind.
-   * @returns {string}
-   */
-  tuningDisplay(){
-    const tuned = tuningStaves(this.score);
-    if(!tuned.length || !sameTuning(this.score)) return '';
-    const text = this.tuningText(tuned[0]);
-    return text === this.standardTuning(tuned[0].tuning.length).names.join(' ') ? 'Standard' : text;
-  }
-
-  /**
-   * Füllt die Felder der Werkzeugleiste (Tonart, Shuffle, Capo, Tuning) mit den Werten des Songs (erster Takt, erste Spur mit
+   * Füllt die Leiste (Tonart, Shuffle, Anzeige von Capo und Tuning) mit den Werten des Songs (erster Takt, erste Spur mit
    * Saiten) und die Felder "Taktart" und "Tempo" im linken Panel mit den Werten am Cursor.
    * @returns {void}
    */
@@ -2750,23 +2855,12 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     shuffleButton.setAttribute('aria-pressed', String(shuffle));
     shuffleButton.title = shuffle ? 'Shuffle: Achtel als Triolen (Viertel + Achtel); Klick schaltet aus (Strg+/)'
       : 'Kein Shuffle: Achtel gerade; Klick schaltet Shuffle ein (Strg+/)';
-    const staves = stringedStaves(score);
-    const differ = new Set(staves.map(st => st.capo)).size > 1;
-    this.fillField(toolbar, '[data-song="capo"]', differ ? '' : staff.capo);
-    const capoInput = /** @type {HTMLInputElement} */ (toolbar.querySelector('[data-song="capo"]'));
-    capoInput.placeholder = differ ? 'je Spur' : '';
-    // Tuning: eines für alle Spuren mit so vielen Saiten wie die Akkordspur (tuningStaves()). Bei Abweichung bleibt
-    // das Feld leer, der Hinweis oben nennt die Spuren und bietet "Tuning angleichen".
-    const tuned = tuningStaves(score);
-    const equal = sameTuning(score);
-    this.fillField(toolbar, '[data-song="tuning"]', this.tuningDisplay());
-    const tuningInput = /** @type {HTMLInputElement} */ (toolbar.querySelector('[data-song="tuning"]'));
-    tuningInput.placeholder = equal ? 'Standard' : 'je Spur verschieden';
-    tuningInput.disabled = !tuned.length;
-    // Spuren mit anderer Saitenzahl (Bass) behalten ihr Tuning; sie stehen nur im Tooltip.
-    const other = staves.filter(st => !tuned.includes(st));
-    tuningInput.title = 'Tuning aller Spuren mit so vielen Saiten wie die Akkordspur, von tief nach hoch (z. B. D A D G B E, "Standard" für E A D G B E); die Bünde bleiben. Eingaben werden beim Verlassen korrigiert'
-      + (other.length ? `. Unverändert: ${other.map(st => `${trackName(st.track)}: ${this.tuningText(st)}`).join(', ')}` : '');
+    // Capo und Tuning nur als Anzeige wie im Kopf des Players (fett: Capo und abweichende Saiten); geändert wird im Dialog.
+    const parts = edit.capoTuningParts(edit.readScoreInfo(this.alphaTab, score));
+    const info = /** @type {HTMLElement} */ (toolbar.querySelector('[data-song-info]'));
+    info.innerHTML = parts.join(' · ');
+    info.hidden = !parts.length;
+    info.title = 'Capo und Tuning (ändern im Dialog Transponieren)';
     this.fillBarSignature();
   }
 
@@ -2798,7 +2892,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Übernimmt ein geändertes Feld: Schlag am Cursor (linkes Panel), Spur oder Spurwahl (Reiter "Spuren").
+   * Übernimmt ein geändertes Feld: Schlag am Cursor (linkes Panel), Spur oder Spurwahl (Dialog "Spuren").
    * @param {HTMLInputElement} input Feld
    * @returns {void}
    */
@@ -2878,26 +2972,11 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Dialog zum Transponieren (Knopf in der Leiste oben).
+   * Dialog zum Transponieren (Knopf in der Leiste oben): Halbtöne, Capo und Tuning mit Vorschau (transposedialog.js).
    * @returns {void}
    */
   openTransposeDialog(){
-    let options = '';
-    for(let n = SHIFT_MAX; n >= -SHIFT_MAX; n--){
-      options += `<option value="${n}"${n ? '' : ' selected'}>${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n)} Halbtöne</option>`;
-    }
-    openOverlay(`<h2>Transponieren</h2>
-      <div class="form-field"><label for="transposeSteps">Um wie viele Halbtöne?</label>
-        <select id="transposeSteps">${options}</select>
-        <div class="hint">Schreibt Noten, Tabs und Akkorde um. Die Audiospur bleibt unverändert. Gespichert wird nichts.</div>
-      </div>
-      <div class="struct-actions"><button class="btn btn-primary" type="button" id="transposeApply">Anwenden</button></div>`,
-    true);
-    document.getElementById('transposeApply').addEventListener('click', () => {
-      const semitones = Number(/** @type {HTMLSelectElement} */ (document.getElementById('transposeSteps')).value);
-      closeOverlay();
-      void this.transposeSong(semitones);
-    });
+    void new TransposeDialog(this).open();
   }
 
   /**
@@ -3182,15 +3261,15 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   // ----------------------------------------------------------------------------------------------------
-  // Reiter "Liedtext"
+  // Panel "Liedtext"
   // ----------------------------------------------------------------------------------------------------
   /**
-   * Füllt den Reiter "Liedtext" mit dem Text der Spur mit dem Liedtext (außer während darin geschrieben wird).
+   * Füllt das Panel "Liedtext" mit dem Text der Spur mit dem Liedtext (außer während darin geschrieben wird).
    * @returns {void}
    */
   fillLyrics(){
-    const bottom = this.part('edit-bottom');
-    const area = /** @type {?HTMLTextAreaElement} */ (bottom?.querySelector('[data-lyrics]'));
+    const panel = this.part('edit-right');
+    const area = /** @type {?HTMLTextAreaElement} */ (panel?.querySelector('[data-lyrics]'));
     const track = this.lyricsTarget();
     if(!area || !track) return;
     // Die Vorschau gilt auch, während geschrieben wird (dann ruft applyLyrics() fillLyrics() nicht).
@@ -3209,10 +3288,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {void}
    */
   showChordFileButton(){
-    const bottom = this.part('edit-bottom');
-    const area = /** @type {HTMLTextAreaElement} */ (bottom.querySelector('[data-lyrics]'));
+    const panel = this.part('edit-right');
+    const area = /** @type {HTMLTextAreaElement} */ (panel.querySelector('[data-lyrics]'));
     const empty = area.value.split('\n').every(line => !line.trim() || /^\s*\[[^\]]*]\s*$/.test(line));
-    const tools = /** @type {HTMLElement} */ (bottom.querySelector('[data-chord-tools]'));
+    const tools = /** @type {HTMLElement} */ (panel.querySelector('[data-chord-tools]'));
     tools.hidden = !empty;
   }
 
@@ -3228,23 +3307,46 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Zeigt rechts neben dem Liedtext die Ansicht "Text & Akkorde" der bearbeiteten Noten, wie im Player. Nur bei
-   * sichtbarem Reiter; beim Schreiben einmal je Übernahme (applyLyrics(), also schon verzögert).
+   * Zeigt unter dem Liedtext die Ansicht "Text & Akkorde" der bearbeiteten Noten, wie im Player. Nur bei
+   * offenem Panel; beim Schreiben einmal je Übernahme (applyLyrics(), also schon verzögert).
    * @returns {void}
    */
   renderLyricsView(){
-    const bottom = this.part('edit-bottom');
-    const view = /** @type {?HTMLElement} */ (bottom?.querySelector('[data-lyrics-view]'));
-    if(!view || !this.score || bottom.classList.contains('collapsed') || view.closest('.etab').hidden) return;
+    const panel = this.part('edit-right');
+    const view = /** @type {?HTMLElement} */ (panel?.querySelector('[data-lyrics-view]'));
+    if(!view || !this.score || panel.classList.contains('collapsed')) return;
     const top = view.scrollTop;
     view.innerHTML = renderTextView(buildTextModel(this.score));
     view.scrollTop = top;
-    const area = bottom.querySelector('[data-lyrics]');
+    const area = panel.querySelector('[data-lyrics]');
     // Es gilt der Cursor, der gerade bedient wird: im Feld oder in den Noten.
     const focused = document.activeElement === area;
     const beat = focused ? this.lyricsCaretBeat() : this.lyricsBeatAt(edit.beatAt(this.score, this.pos));
     if(beat) this.markLyricsView(beat);
     else if(focused) this.scrollLyricsView();
+  }
+
+  /**
+   * Zeigt beim Abspielen die Silbe an der Abspielposition im Liedtext-Feld und in der Vorschau (nur bei offenem Panel).
+   * @param {number} tick Abspielposition (Ticks)
+   * @returns {void}
+   */
+  followPlayback(tick){
+    const ticks = this.player.api.tickCache;
+    const track = this.lyricsTarget();
+    if(!this.score || !ticks || !track || this.part('edit-right').classList.contains('collapsed')) return;
+    let found = null;
+    search: for(const bar of track.staves[0].bars) for(const beat of bar.voices[0]?.beats ?? []){
+      if(!beat.lyrics?.[0]?.trim()) continue;
+      if(ticks.getBeatStart(beat) > tick) break search;
+      found = beat;
+    }
+    if(!found || found === this.playedLyric) return;
+    this.playedLyric = found;
+    // Auch mit dem Cursor im Feld (nach einem Klick dorthin) läuft alles mit, nur nicht, solange man gerade schreibt:
+    // Dann folgt allein die Vorschau.
+    if(Date.now() - this.lyricsInputAt < LYRICS_TYPING_MS) this.markLyricsView(found);
+    else this.showLyricsAt(found, true);
   }
 
   /**
@@ -3273,7 +3375,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {?{from: number, to: number}}
    */
   lyricsRangeOf(beat){
-    const area = /** @type {HTMLTextAreaElement} */ (this.part('edit-bottom').querySelector('[data-lyrics]'));
+    const area = /** @type {HTMLTextAreaElement} */ (this.part('edit-right').querySelector('[data-lyrics]'));
     const track = this.lyricsTarget();
     if(!track || this.lyricsOverflow) return null;
     const time = b => b.voice.bar.masterBar.start + b.playbackStart;
@@ -3298,26 +3400,27 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   /**
    * Zeigt im Liedtext-Feld und in der Vorschau die Silbe zum Schlag am Cursor der Noten (hinterlegt, ins Bild
    * gerollt). Nicht, solange im Feld geschrieben wird oder der Cursor dort steht (dann gilt er, followLyricsCaret()),
-   * und nur bei sichtbarem Reiter.
+   * und nur bei offenem Panel. Beim Abspielen (playing) gilt die Abspielposition auch mit dem Cursor im Feld.
    * @param {?Beat} beat Schlag am Cursor (irgendeine Spur)
+   * @param {boolean} [playing] Aufruf beim Abspielen (followPlayback())
    * @returns {void}
    */
-  showLyricsAt(beat){
-    const bottom = this.part('edit-bottom');
-    const area = /** @type {?HTMLTextAreaElement} */ (bottom?.querySelector('[data-lyrics]'));
-    if(!area || !this.score || bottom.classList.contains('collapsed') || area.closest('.etab').hidden) return;
-    if(document.activeElement === area){
+  showLyricsAt(beat, playing = false){
+    const panel = this.part('edit-right');
+    const area = /** @type {?HTMLTextAreaElement} */ (panel?.querySelector('[data-lyrics]'));
+    if(!area || !this.score || panel.classList.contains('collapsed')) return;
+    if(document.activeElement === area && !playing){
       this.drawLyricsMarks();
       return;
     }
     const lyricBeat = this.lyricsBeatAt(beat);
     this.lyricsCur = lyricBeat ? this.lyricsRangeOf(lyricBeat) : null;
-    const cur = this.drawLyricsMarks();
+    const cur = this.drawLyricsMarks(playing);
     if(cur){
       const top = cur.offsetTop;
       if(top < area.scrollTop || top > area.scrollTop + area.clientHeight - 24){
         area.scrollTop = Math.max(0, top - area.clientHeight / 3);
-        const marks = /** @type {HTMLElement} */ (bottom.querySelector('.elyrics-marks'));
+        const marks = /** @type {HTMLElement} */ (panel.querySelector('.elyrics-marks'));
         marks.scrollTop = area.scrollTop;
       }
     }
@@ -3331,7 +3434,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {?Beat}
    */
   lyricsCaretBeat(){
-    const area = /** @type {?HTMLTextAreaElement} */ (this.part('edit-bottom')?.querySelector('[data-lyrics]'));
+    const area = /** @type {?HTMLTextAreaElement} */ (this.part('edit-right')?.querySelector('[data-lyrics]'));
     const track = this.lyricsTarget();
     if(!area || !track || !this.score || this.lyricsOverflow) return null;
     const text = area.value;
@@ -3357,6 +3460,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   /**
    * Setzt den Cursor in den Noten auf die Silbe, an der der Cursor im Liedtext-Feld steht, rollt dorthin und hebt sie
    * in der Vorschau "Text & Akkorde" hervor. Ist die Spur mit dem Text nicht zu sehen, geht der Cursor in ihren Takt.
+   * Läuft die Wiedergabe, springt sie zu dieser Silbe und spielt von dort weiter.
    * @returns {void}
    */
   followLyricsCaret(){
@@ -3372,6 +3476,13 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.updateState();
     this.drawCursor(true);
     this.markLyricsView(beat);
+    // Beim Abspielen springt die Wiedergabe mit (Noten, Audiospur), wie ein Klick in "Text & Akkorde" im Player.
+    const api = this.player.api;
+    const tick = this.player.isPlaying ? api.tickCache?.getBeatStart(beat) : undefined;
+    if(tick !== undefined){
+      this.playedLyric = beat;
+      api.tickPosition = tick;
+    }
   }
 
   /**
@@ -3382,7 +3493,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {void}
    */
   markLyricsView(beat){
-    const view = /** @type {?HTMLElement} */ (this.part('edit-bottom')?.querySelector('[data-lyrics-view]'));
+    const view = /** @type {?HTMLElement} */ (this.part('edit-right')?.querySelector('[data-lyrics-view]'));
     if(!view) return;
     for(const el of view.querySelectorAll('.tv-now-syl')) el.classList.remove('tv-now-syl');
     const ticks = this.player.api.tickCache;
@@ -3402,9 +3513,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {void}
    */
   scrollLyricsView(){
-    const bottom = this.part('edit-bottom');
-    const area = /** @type {HTMLTextAreaElement} */ (bottom.querySelector('[data-lyrics]'));
-    const view = /** @type {HTMLElement} */ (bottom.querySelector('[data-lyrics-view]'));
+    const panel = this.part('edit-right');
+    const area = /** @type {HTMLTextAreaElement} */ (panel.querySelector('[data-lyrics]'));
+    const view = /** @type {HTMLElement} */ (panel.querySelector('[data-lyrics-view]'));
     const line = area.value.slice(0, area.selectionStart).split('\n').length - 1;
     const block = edit.splitLyricsBlocks(area.value).filter(b => b.line <= line).at(-1);
     const name = block?.text.match(/^\s*\[([^\]]*)]/)?.[1].trim();
@@ -3427,15 +3538,16 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
 
   /**
    * Zeichnet die Ebene hinter dem Liedtext-Feld: rote Abschnitte (lyricsRed) und, solange das Feld nicht den Fokus
-   * hat, die Silbe am Cursor der Noten (lyricsCur).
+   * hat (beim Abspielen auch mit Fokus), die Silbe am Cursor der Noten bzw. an der Abspielposition (lyricsCur).
+   * @param {boolean} [playing] beim Abspielen: die Silbe auch zeigen, wenn das Feld den Fokus hat
    * @returns {?HTMLElement} Markierung der Silbe am Cursor, null ohne
    */
-  drawLyricsMarks(){
-    const bottom = this.part('edit-bottom');
-    const area = /** @type {HTMLTextAreaElement} */ (bottom.querySelector('[data-lyrics]'));
-    const marks = /** @type {HTMLElement} */ (bottom.querySelector('.elyrics-marks'));
+  drawLyricsMarks(playing = false){
+    const panel = this.part('edit-right');
+    const area = /** @type {HTMLTextAreaElement} */ (panel.querySelector('[data-lyrics]'));
+    const marks = /** @type {HTMLElement} */ (panel.querySelector('.elyrics-marks'));
     const red = new Set(this.lyricsRed.flatMap(b => Array.from({length: b.lines}, (_, i) => b.line + i)));
-    const cur = document.activeElement === area ? null : this.lyricsCur;
+    const cur = document.activeElement === area && !playing ? null : this.lyricsCur;
     if(!red.size && !cur){
       marks.innerHTML = '';
       return null;
@@ -3454,7 +3566,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Verteilt den Text aus dem Reiter "Liedtext" auf die Schläge (setLyricsText()) und zeichnet die Noten neu, während
+   * Verteilt den Text aus dem Panel "Liedtext" auf die Schläge (setLyricsText()) und zeichnet die Noten neu, während
    * geschrieben wird. Alles bis zum Verlassen des Felds ist ein Schritt für "Rückgängig". Verteilt wird immer vom
    * Stand vor diesem Schritt aus (lyricsBase): Ein zu langer Abschnitt rückt seine Silben Schlag für Schlag nach und
    * füllt dabei Lücken; wird er wieder gekürzt, stehen die Silben so wieder wie vorher. Silben, für die keine Schläge
@@ -3463,8 +3575,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    */
   applyLyrics(){
     this.lyricsTimer = 0;
-    const bottom = this.part('edit-bottom');
-    const area = /** @type {HTMLTextAreaElement} */ (bottom?.querySelector('[data-lyrics]'));
+    const panel = this.part('edit-right');
+    const area = /** @type {HTMLTextAreaElement} */ (panel?.querySelector('[data-lyrics]'));
     const track = this.lyricsTarget();
     if(!area || !track) return;
     const index = track.index;
@@ -3664,22 +3776,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
           edit.setTempo(at, this.score, bar, same ? null : bpm);
           break;
         }
-        case 'capo': {
-          edit.setCapo(this.score, Math.max(0, Math.min(12, Number(value) || 0)));
-          break;
-        }
-        case 'tuning': {
-          const staves = tuningStaves(this.score);
-          const standard = this.standardTuning(staves[0]?.tuning.length ?? 6);
-          // Die Eingabe wird korrigiert (normalizeTuningText()), nichts Ungültiges kommt in die Noten.
-          const text = normalizeTuningText(value, standard.names);
-          input.value = text;
-          const tuning = parseTuningText(text, standard.midi);
-          if(!tuning) break;
-          // Wie beim Capo ändern sich nur die Noten, die Bünde bleiben.
-          for(const staff of staves) edit.setTuning(at, staff, tuning, false);
-          break;
-        }
       }
     });
     this.fillSongFields();
@@ -3700,30 +3796,27 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
 
 
   /**
-   * Transponiert den Song um die Halbtöne: Noten, Tabs, Akkorde und Vorzeichen (transposeScore() in notation.js),
-   * als ein Schritt für "Rückgängig". Gespeichert wird keine Verschiebung.
-   * @param {number} semitones Halbtöne nach oben (negativ nach unten)
+   * Wendet die Änderungen des Dialogs "Transponieren" an (applyRetune() in transposedialog.js): Halbtöne, Capo, Tuning und
+   * Tonart, als ein Schritt für "Rückgängig". Gespeichert wird keine Verschiebung.
+   * @param {import('./transposedialog.js').Retune} change Änderung
    * @returns {Promise<void>}
    */
-  async transposeSong(semitones){
-    if(!semitones){
-      this.toast('Erst die Halbtöne wählen, z. B. +2.');
-      return;
-    }
+  async retuneSong(change){
     const library = await loadChordLibraryOrEmpty();
     /** @type {?import('./notation.js').TransposeResult} */
     let result = null;
-    this.change(() => { result = transposeScore(this.alphaTab, this.score, semitones, library); });
+    this.change(() => { result = applyRetune(this.alphaTab, this.score, change, library); });
     if(!result) return;
-    const sign = semitones > 0 ? '+' : '−';
-    this.toast(`${result.notes} Noten um ${sign}${Math.abs(semitones)} Halbtöne verschoben`
-      + (result.octaves ? `; ${result.octaves} passten nur eine Oktave näher auf das Griffbrett` : '')
-      + (result.skipped ? `; ${result.skipped} Noten blieben unverändert` : '')
-      + '.');
+    const parts = [];
+    if(change.semitones) parts.push(`${result.notes} Noten um ${change.semitones > 0 ? '+' : '−'}${Math.abs(change.semitones)} Halbtöne verschoben`);
+    if(change.capo !== null) parts.push(`Capo ${change.capo}`);
+    if(result.octaves) parts.push(`${result.octaves} Noten um eine Oktave versetzt`);
+    if(result.skipped) parts.push(`${result.skipped} Noten blieben unverändert`);
+    this.toast(parts.length ? parts.join('; ') + '.' : 'Angewendet.');
   }
 
   /**
-   * Übernimmt ein Feld einer Spur im Reiter "Spuren": Name und Instrument. (Das Tuning gilt für alle Spuren und
+   * Übernimmt ein Feld einer Spur im Dialog "Spuren": Name und Instrument. (Das Tuning gilt für alle Spuren und
    * steht in der Werkzeugleiste, siehe applySongField().)
    * @param {HTMLInputElement} input Feld (data-track-field, data-track)
    * @returns {void}
@@ -3736,7 +3829,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       // Namen sind frei (Auswahlliste mit den üblichen, siehe TRACK_NAMES), nur leer nicht.
       if(!value){
         this.toast('Die Spur braucht einen Namen.');
-        this.renderSongTabs();
+        this.renderSongPanels();
         return;
       }
       this.change(() => { track.name = track.shortName = value; });

@@ -1,5 +1,5 @@
 /**
- * Leadsheet: Pattern-Katalog, Generator für das Blatt, Tab-Stellen darin und der Reiter "Leadsheet" im
+ * Leadsheet: Pattern-Katalog, Generator für das Blatt, Tab-Stellen darin und der Dialog "Leadsheet" im
  * Bearbeitungsmodus.
  */
 
@@ -8,7 +8,7 @@ import {
   ATTRIBUTION_TEXT, chordDiagramSvg, chordKey, COMMON_CHORDS, creditHtml, escapeHtml, glyph, GLYPHS, loadChordLibrary,
   loadChordLibraryOrEmpty, loadPatterns, parseGrip, savePatterns, useCreditLogos,
 } from './base.js';
-import {closeOverlay, findSong, openOverlay} from './library.js';
+import {closeOverlay, findSong, isOverlayOpen, openOverlay, openStackedOverlay} from './library.js';
 import * as edit from './notation.js';
 import {
   chordsTrack, compareTuning, deleteBar, hasStrings, keyName, parseScore, shapeKey, splitTicks, stringedStaves,
@@ -556,7 +556,7 @@ export function suggestPatterns(score, trackIndex, catalog){
 
 /**
  * Leadsheet: die Angaben dafür (Feld leadsheet in song.json) und der Generator, der daraus und aus den Noten das Blatt
- * macht (Vorschau und Druck im Reiter "Leadsheet" des Bearbeitungsmodus).
+ * macht (Vorschau und Druck im Dialog "Leadsheet" des Bearbeitungsmodus).
  *
  * Das Blatt hat zwei Teile: Seite 1 "Spielanleitung" (Kopf mit QR-Codes der Links, Patterns, Griffbilder, Tab-Stellen,
  * Spielweise, Hinweise) und Seite 2 "Text & Akkorde" (die Ansicht aus textview.js). Passt beides auf eine Seite, steht
@@ -590,7 +590,7 @@ export function suggestPatterns(score, trackIndex, catalog){
  * - Gleiche Abschnitte stehen nur einmal da (collapseSections()): Gleich heißt gleicher Text und gleiche Akkorde
  *   in derselben Gruppe ("Chorus", "Chorus 2", "Refrain"). Spätere Vorkommen stehen nur mit Namen und "wie oben" da,
  *   direkt aufeinander folgende als "2×" beim ersten.
- * - Wie das Blatt gesetzt wird, bestimmt das Layout in den Angaben (SheetLayout, Kontrollkästchen im Reiter): eine
+ * - Wie das Blatt gesetzt wird, bestimmt das Layout in den Angaben (SheetLayout, Kontrollkästchen im Dialog): eine
  *   oder zwei Seiten, Text zweispaltig, Schrift, Tabs zusammenfassen (Wiederholungen gleicher Takte als
  *   Wiederholungszeichen, sheet.js), Griffbilder klein, gleiche Abschnitte einmal.
  * - Gedruckt wird, was die Vorschau zeigt (printLeadsheet()): Die Größen sind relativ zur Breite der Seite, so passt
@@ -2053,6 +2053,57 @@ export class SheetTabs {
 }
 
 /**
+ * Zeichnet Noten mit alphaTab als SVG: Notensystem mit Schlüssel und Vorzeichen, darunter die Tab. Für kleine
+ * Vorschauen im Editor (Dialog "Transponieren"); gezeichnet wird die erste Spur in einer Zeile (ohne Umbruch).
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Score} score Noten
+ * @param {number} width Breite des Behälters in px (die Zeichnung ist so breit wie die Noten)
+ * @returns {Promise<string>} SVG (bzw. ein Hinweis, wenn alphaTab scheitert)
+ */
+export async function renderMiniScore(alphaTab, score, width){
+  // Unsichtbar, aber mit Breite: alphaTab zeichnet nur in ein Element, das Platz einnimmt.
+  const host = document.createElement('div');
+  host.style.cssText = `position:absolute; left:-20000px; top:0; width:${width}px; visibility:hidden;`;
+  document.body.append(host);
+  const api = new alphaTab.AlphaTabApi(host, {
+    core: {fontDirectory: VENDOR_URL + 'font/', enableLazyLoading: false, useWorkers: false},
+    display: {staveProfile: 'ScoreTab', layoutMode: 'Horizontal', scale: 0.5, padding: [2, 0],
+      resources: {barNumberColor: '#00000000'}},
+    notation: {rhythmMode: 'ShowWithBars'},
+  });
+  try {
+    for(const element of HIDDEN_ELEMENTS){
+      const id = alphaTab.NotationElement[element];
+      if(id !== undefined) api.settings.notation.elements.set(id, false);
+    }
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Zeitüberschreitung')), RENDER_TIMEOUT);
+      api.renderFinished.on(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+      api.error.on(err => {
+        clearTimeout(timer);
+        reject(err);
+      });
+      api.renderScore(score, [0]);
+    });
+    // Alles in einer Zeile: Die Breite ist die des Inhalts (nicht der Behälter).
+    const left = host.getBoundingClientRect().left;
+    const used = Math.ceil(Math.max(0, ...[...host.querySelectorAll('svg')].map(svg => svg.getBoundingClientRect().right - left)));
+    // Mit fester Größe (Breite und Höhe der Zeichnung): Sie wächst nicht, wenn der Platz größer ist als die Noten.
+    return new SheetTabs(alphaTab).compose(host, '', Math.max(used, 1))
+      .replace(/<svg class="ls-at-svg" viewBox="0 0 (\d+) (\d+)"/, (all, w, h) => `${all} width="${w}" height="${h}" style="width:${w}px; height:${h}px"`);
+  } catch(err){
+    console.error(err);
+    return `<p class="ls-soft">Die Vorschau konnte nicht gezeichnet werden (${escapeHtml(err.message)}).</p>`;
+  } finally {
+    api.destroy();
+    host.remove();
+  }
+}
+
+/**
  * Füllt die Platzhalter der Tab-Stellen in einem gesetzten Blatt (.ls-at[data-tab][data-from][data-to], siehe
  * renderInstructions() in sheet.js): gemerkte Zeichnungen sofort, die übrigen, sobald alphaTab sie gezeichnet hat.
  * @param {HTMLElement} view Behälter mit den Seiten
@@ -2108,11 +2159,11 @@ export async function fillCompareTabs(box, tabs, tex){
 }
 
 // --------------------------------------------------------------------------------------------------------------------
-// Reiter "Leadsheet"
+// Dialog "Leadsheet"
 // --------------------------------------------------------------------------------------------------------------------
 
 /**
- * Reiter "Leadsheet" im unteren Panel des Bearbeitungsmodus. Aufgebaut wie der Reiter "Liedtext": links die Eingaben
+ * Dialog "Leadsheet" des Bearbeitungsmodus (Knopf in der Werkzeugleiste): links die Eingaben
  * für das Blatt, rechts die Vorschau (sheet.js): Seite 1 "Spielanleitung", Seite 2 "Text & Akkorde"; passt beides
  * auf eine Seite, nur eine.
  *
@@ -2195,7 +2246,18 @@ function editPattern(pattern, kind, slot){
 }
 
 /**
- * Reiter "Leadsheet" eines NoteEditor.
+ * Öffnet einen Dialog der Leadsheet-Werkzeuge: aus dem Dialog "Leadsheet" heraus gelegt über ihn (Schließen zeigt ihn wieder),
+ * sonst allein (Menü der Werkzeugleiste).
+ * @param {string} html Inhalt
+ * @returns {void}
+ */
+function openDialog(html){
+  if(isOverlayOpen()) openStackedOverlay(html);
+  else openOverlay(html);
+}
+
+/**
+ * Dialog "Leadsheet" eines NoteEditor.
  */
 export class LeadsheetTab {
   /**
@@ -2239,12 +2301,11 @@ export class LeadsheetTab {
   }
 
   /**
-   * Der Reiter im unteren Panel.
+   * Inhalt des Dialogs "Leadsheet" (editor.js), null, solange er nicht zu sehen ist.
    * @returns {?HTMLElement}
    */
   get tab(){
-    return /** @type {?HTMLElement} */ (this.editor.part('edit-bottom')?.querySelector('.etab[data-tab="leadsheet"]')
-      ?? null);
+    return /** @type {?HTMLElement} */ (document.querySelector('.sheet .etab-leadsheet'));
   }
 
   /**
@@ -2461,7 +2522,7 @@ export class LeadsheetTab {
   }
 
   /**
-   * Zeichnet die Vorschau rechts neu, nur bei sichtbarem Reiter: Der Generator erzeugt das Blatt und setzt es nach
+   * Zeichnet die Vorschau rechts neu, nur bei offenem Dialog: Der Generator erzeugt das Blatt und setzt es nach
    * dem Layout (generateLeadsheet(), layoutLeadsheet() in sheet.js), darunter steht, ob es passt; wenn nicht,
    * rot und mit dem, was hilft.
    * Haben die Spuren verschiedenen Capo, steht das auch rot da: Auf dem Blatt steht der Capo der Akkordspur.
@@ -2475,7 +2536,7 @@ export class LeadsheetTab {
     const ed = this.editor;
     const tab = this.tab;
     const view = /** @type {?HTMLElement} */ (tab?.querySelector('.els-preview'));
-    if(!view || !ed.score || tab.hidden || ed.part('edit-bottom').classList.contains('collapsed')) return;
+    if(!view || !ed.score) return;
     const sheet = {...ed.sheet, ...draft};
     const top = view.scrollTop;
     const parts = generateLeadsheet(ed.alphaTab, ed.score, sheet, this.catalog, this.library);
@@ -2500,7 +2561,7 @@ export class LeadsheetTab {
   }
 
   /**
-   * Übernimmt ein Feld des Reiters als einen Schritt für "Rückgängig".
+   * Übernimmt ein Feld des Dialogs als einen Schritt für "Rückgängig".
    * @param {HTMLInputElement} input Feld (data-ls, data-ls-index)
    * @returns {void}
    */
@@ -2616,7 +2677,7 @@ export class LeadsheetTab {
   }
 
   /**
-   * Knöpfe des Reiters (data-ls-action): Patterns verschieben bzw. herausnehmen, Tab-Stelle anlegen bzw. entfernen.
+   * Knöpfe des Dialogs (data-ls-action): Patterns verschieben bzw. herausnehmen, Tab-Stelle anlegen bzw. entfernen.
    * @param {HTMLElement} button Knopf
    * @returns {void}
    */
@@ -2667,7 +2728,7 @@ export class LeadsheetTab {
         return;
       }
       case 'print': {
-        // Gedruckt wird die Vorschau; ist der Reiter gerade zu, wird sie vorher gezeichnet.
+        // Gedruckt wird die Vorschau, frisch gezeichnet.
         // Erst drucken, wenn alphaTab die Tabs gezeichnet hat.
         this.renderPreview().then(() => {
           const view = /** @type {?HTMLElement} */ (this.tab?.querySelector('.els-preview'));
@@ -2744,7 +2805,7 @@ export class LeadsheetTab {
       return;
     }
     const preferred = tracks.find(t => /^(strumming|picking)/i.test(t.name.trim())) ?? tracks[0];
-    openOverlay(`
+    openDialog(`
       <h2>Patterns aus Spur vorschlagen</h2>
       <div class="struct-form">
         <div class="form-field"><label for="patternSource">Begleitspur</label>
@@ -2908,7 +2969,7 @@ export class LeadsheetTab {
       const k = groups.findIndex((g, i) => g && groups.indexOf(g) < i);
       [a, b] = first ? [first.like, first.index] : k >= 0 ? [groups.indexOf(groups[k]), k] : [0, 1];
     }
-    openOverlay('<h2>Abschnitte vergleichen</h2><div class="cmp" id="cmpBox"></div>');
+    openDialog('<h2>Abschnitte vergleichen</h2><div class="cmp" id="cmpBox"></div>');
     const box = /** @type {HTMLElement} */ (document.getElementById('cmpBox'));
     // Übernahmen in diesem Dialog: so oft geht "Rückgängig" hier (Strg+Z wirkt nicht, solange ein Dialog offen ist).
     let taken = 0;
@@ -3025,13 +3086,13 @@ export class LeadsheetTab {
     const byId = new Map(this.catalog.map(p => [p.id, p]));
     const usable = ed.sheet.patterns.filter(e => byId.has(e.id)).map(entry => ({entry, pattern: byId.get(entry.id)}));
     if(!usable.length){
-      ed.toast('Erst ein Pattern für den Song wählen (Reiter „Leadsheet“).');
+      ed.toast('Erst ein Pattern für den Song wählen (Dialog „Leadsheet“).');
       return;
     }
     const tracks = stringedTracks(score, true);
     const parts = sections(score);
     const sel = ed.selection;
-    openOverlay(`
+    openDialog(`
       <h2>Pattern auf Spur ausrollen</h2>
       <form class="struct-form" id="rollOutForm">
         <div class="form-field"><label for="rollPattern">Pattern</label>
@@ -3148,7 +3209,7 @@ export class LeadsheetTab {
         </tr>`).join('');
     }).join('');
     const p = current ?? {id: '', name: '', technique: 'strumming', timeSignature: '4/4', grid: 8};
-    openOverlay(`
+    openDialog(`
       <h2>Pattern-Katalog</h2>
       <table class="ebar-table ebar-catalog"><tbody>${rows}</tbody></table>
       <form class="struct-form" id="patternForm">

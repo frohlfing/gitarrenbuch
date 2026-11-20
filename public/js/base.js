@@ -356,7 +356,7 @@ export const COMMON_CHORDS = ['C', 'D', 'E', 'G', 'A', 'Am', 'Dm', 'Em', 'C7', '
  * @property {string[]} tracks Namen der Spuren aus der Partitur (berechnet die API bei jedem Lesen), z. B. ["Guitar"]
  * @property {number[]} instruments MIDI-Programme der Spuren, ohne Duplikate (berechnet die API bei jedem Lesen)
  * @property {{show: boolean, mute: boolean}[]} [trackDefaults] Vorgaben je Spur (in der Reihenfolge der Spuren), ob sie in
- *   den Noten angezeigt und gehört wird; gesetzt im Reiter "Spuren" des Editors. Was ein Gerät im Mixer einstellt,
+ *   den Noten angezeigt und gehört wird; gesetzt im Dialog "Spuren" des Editors. Was ein Gerät im Mixer einstellt,
  *   hat dort Vorrang. Fehlt, wenn nie gesetzt.
  * @property {{label: string, hint: string, detail: string}[]} issues Abweichungen von der Konvention für Spuren und
  *   Capo, die wichtigste zuerst (berechnet die API bei jedem Lesen), z. B. {label: "Capo ungleich", hint: "Capo nicht
@@ -928,6 +928,11 @@ const PATHS = {
   // Arpeggio: Wellenlinie senkrecht mit Pfeilspitze, Richtung wie bei den Anschlagpfeilen
   arpeggioDown: '<path d="M12 21q-3-2 0-4t0-4 0-4 0-5"/><path d="M8 8l4-4 4 4"/>',
   arpeggioUp: '<path d="M12 3q3 2 0 4t0 4 0 4 0 5"/><path d="M8 16l4 4 4-4"/>',
+  copy: '<path fill="currentColor" stroke="none" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11'
+    + 'a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/>',
+  // Spuren: drei Zeilen mit Punkt; Leadsheet: Blatt mit Zeilen
+  tracks: '<path d="M10 6h10M10 12h10M10 18h10"/><path fill="currentColor" d="M5 6m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M5 12m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M5 18m-1.5 0a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"/>',
+  leadsheet: '<path d="M6 3h8l4 4v14H6zM14 3v4h4M9 11h6M9 14h6M9 17h4"/>',
 };
 
 /**
@@ -1053,7 +1058,7 @@ export function chordDiagramSvg(name, grip){
  */
 
 /**
- * Namen der 128 General-MIDI-Instrumente, Index = MIDI-Programm (0 bis 127), wie sie der Editor im Reiter "Spuren"
+ * Namen der 128 General-MIDI-Instrumente, Index = MIDI-Programm (0 bis 127), wie sie der Editor im Dialog "Spuren"
  * zeigt und die Testseite dev/instruments.html.
  * @type {string[]}
  */

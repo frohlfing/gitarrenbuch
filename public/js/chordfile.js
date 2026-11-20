@@ -7,7 +7,7 @@ import {chordKey} from './base.js';
 import {findGrips} from './chordgrips.js';
 import {parseChord} from './chordtheory.js';
 
-/** Zeile mit einem Abschnittsnamen, z. B. "[Verse]" (wie im Reiter "Liedtext", siehe SECTION_LINE in notation.js). */
+/** Zeile mit einem Abschnittsnamen, z. B. "[Verse]" (wie im Panel "Liedtext", siehe SECTION_LINE in notation.js). */
 const SECTION_LINE = /^\s*\[([^\]]+)]\s*$/;
 
 /**

@@ -1758,7 +1758,7 @@ export class Player {
   }
 
   /**
-   * Reihenfolge der angezeigten Spuren: die der Datei. Sie wird im Editor festgelegt (Reiter "Spuren", ↑/↓), statt
+   * Reihenfolge der angezeigten Spuren: die der Datei. Sie wird im Editor festgelegt (Dialog "Spuren", ↑/↓), statt
    * sie hier nach Rollen umzusortieren; so steht jede Spur dort, wo man sie hingestellt hat. Text und Akkorde zeichnet
    * alphaTab an der Spur, die sie trägt.
    * @param {Track[]} tracks anzuzeigende Spuren
@@ -1956,7 +1956,7 @@ export class Player {
   }
 
   /**
-   * Schaltet eine Spur zwischen zu hören und stumm um (Lautsprecher im Reiter "Spuren" des Editors).
+   * Schaltet eine Spur zwischen zu hören und stumm um (Lautsprecher im Dialog "Spuren" des Editors).
    * @param {number} index Index der Spur
    * @returns {void}
    */
@@ -2033,7 +2033,7 @@ export class Player {
  * Audiospur mit einem Marker je Sync-Punkt; Marker lassen sich ziehen, setzen und löschen. Dazu Anfang und Ende der
  * Audiospur erkennen, alle Punkte verschieben und das Tempo an die Audiospur anpassen.
  *
- * Der Editor liegt im Reiter "Audio" des Bearbeitungsmodus (Rückruf onEdit). Jede Änderung wirkt sofort auf den Player
+ * Der Editor liegt im Panel "Audio" des Bearbeitungsmodus (Rückruf onEdit). Jede Änderung wirkt sofort auf den Player
  * (Noten und Mixer); Speichern und Rückgängig übernimmt der Bearbeitungsmodus. Ändern sich dort die Noten, liest
  * reload() die Sync-Punkte neu.
  */

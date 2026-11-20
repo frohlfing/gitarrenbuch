@@ -147,7 +147,7 @@ const WITH_AUDIO = ':mit-audio';
 const WITHOUT_AUDIO = ':ohne-audio';
 
 /**
- * Alle Spurnamen aus den Partituren (auch für die Namensliste im Editor, Reiter "Spuren").
+ * Alle Spurnamen aus den Partituren (auch für die Namensliste im Editor, Dialog "Spuren").
  * @returns {string[]} alphabetisch, ohne Duplikate
  */
 export function knownTracks(){
@@ -155,7 +155,7 @@ export function knownTracks(){
 }
 
 /**
- * Alle MIDI-Programme, die Spuren in den Songs nutzen (für die Vorschläge im Reiter "Spuren" des Editors).
+ * Alle MIDI-Programme, die Spuren in den Songs nutzen (für die Vorschläge im Dialog "Spuren" des Editors).
  * @returns {number[]} aufsteigend, ohne Duplikate
  */
 export function usedPrograms(){
@@ -355,7 +355,8 @@ export function isOverlayOpen(){
 }
 
 /**
- * Schließt den obersten Dialog. Lag darunter ein verdrängter Dialog, erscheint dieser wieder; sonst wird das
+ * Schließt den obersten Dialog. Lag darunter ein verdrängter Dialog, erscheint dieser wieder (seine Elemente erhalten das
+ * Ereignis "overlayshow"); sonst wird das
  * Overlay geschlossen, geleert und die Drag-&-Drop-Handler werden entfernt.
  * @returns {void}
  */
@@ -365,6 +366,8 @@ export function closeOverlay(){
     sheet.replaceChildren(...previous.nodes);
     formIsOpen = previous.formIsOpen;
     [overlay.ondragover, overlay.ondragleave, overlay.ondrop] = previous.drag;
+    // Wer Inhalt im verdrängten Dialog hat, kann ihn neu zeichnen (Ereignis "overlayshow" am Element).
+    for(const node of previous.nodes) node.dispatchEvent(new Event('overlayshow'));
     return;
   }
   formIsOpen = false;
@@ -454,7 +457,7 @@ function ref(host, name){
 }
 
 /**
- * Quelle der Audiodatei im Reiter "Audio" des Bearbeitungsmodus: YouTube-URL mit Link zur YouTube-Suche nach Interpret
+ * Quelle der Audiodatei im Panel "Audio" des Bearbeitungsmodus: YouTube-URL mit Link zur YouTube-Suche nach Interpret
  * und Titel (wie die Trailersuche der Videothek; die gefundene URL trägt man selbst ein), den Längen von Noten, Clip
  * und MP3, damit man sieht, ob der Clip zu den Noten passt, und einem Knopf zum Speichern. Die Länge des Clips steht
  * in song.json (youtubeSeconds); YouTube wird nur gefragt, wenn sich die URL ändert oder die Länge noch fehlt.
@@ -720,7 +723,7 @@ export function openSongForm(song, onSaved, onDeleted = null){
       title: byId('titleInput').value.trim(),
       artist: byId('artistInput').value.trim(),
       tags: byId('tagsInput').value.split(',').map(t => t.trim()).filter(Boolean),
-      // Die Quelle ändert sich hier nicht (YouTube: Reiter "Audio").
+      // Die Quelle ändert sich hier nicht (YouTube: Panel "Audio").
       sources: {youtube: s.sources.youtube ?? ''},
       notes: byId('notesInput').value.trim(),
       // Einstufung und Favorit gibt es nur am vorhandenen Song (Bearbeitungsmodus).

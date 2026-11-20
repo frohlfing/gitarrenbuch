@@ -5,8 +5,9 @@ Knöpfe sind umgesetzt; was noch fehlt, steht beim jeweiligen Punkt.
 
 Aufteilung: In der **Werkzeugleiste** steht, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu Speichern,
 Rückgängig, Verlauf, Uploads, Transponieren, Hinweise, Hilfe, ✕. **Links** steht alles, was den Schlag bzw. die Note am Cursor betrifft, auch Notenwerte und
-Einfügen/Löschen (wie die Palette in Guitar Pro), zuletzt vom Takt am Cursor Abschnitt, Taktart und Tempo. **Unten**
-stehen Spuren, Liedtext, Leadsheet und Audio (Sync-Editor). Der Akkord eines Schlags wird links gewählt (Auswahlliste, "+" für einen neuen mit Griff), die Griffbilder für das Blatt im Reiter "Leadsheet". Auf schmalen Bildschirmen ist das linke Panel anfangs zu; die
+Einfügen/Löschen (wie die Palette in Guitar Pro), zuletzt vom Takt am Cursor Abschnitt, Taktart und Tempo. **Rechts**
+steht der Liedtext (oben das Textfeld, darunter die Vorschau, die Linie dazwischen lässt sich ziehen), **unten** Audio
+(Sync-Editor, Höhe ziehbar). Spuren und Leadsheet öffnen als Dialoge über die Knöpfe der Werkzeugleiste. Der Akkord eines Schlags wird links gewählt (Auswahlliste, "+" für einen neuen mit Griff), die Griffbilder für das Blatt im Dialog "Leadsheet". Auf schmalen Bildschirmen ist das linke Panel anfangs zu; die
 Notenwerkzeuge erreicht man dann über F2 bzw. die Tastenkürzel.
 
 Einschalten: "Bearbeiten" im Menü ⋮ der Abspielleiste, immer direkt.
@@ -19,7 +20,7 @@ Rückgängig mit Strg+Z):
 - Tonart: notiert X, erkannt Y (aus Akkorden und Tönen) – "Tonart korrigieren"; passt die notierte, steht nirgends etwas
 - Triolen-Feeling, das nicht Shuffle (Achtel-Triolen) ist, etwa Sechzehntel-Triolen – "Feeling entfernen" (die Noten bleiben, wie sie sind)
 - Akkorde bzw. Liedtext auch außerhalb ihrer Spur (der mit den meisten) – "Akkorde/Liedtext nach „…“ übertragen";
-  fragt wie die Radiobuttons im Reiter "Spuren" nach, wenn sich dabei etwas verschiebt oder wegfällt
+  fragt wie die Radiobuttons im Dialog "Spuren" nach, wenn sich dabei etwas verschiebt oder wegfällt
 - Unbekannte Akkordnamen – Namen, die die Regeln der Akkordtheorie nicht lesen (`parseChord()`); ohne Knopf, im Dialog "Akkord" ändern
 - Der Griff passt nicht zum Namen – die Töne eines Griffs sind andere als die des Namens (mit dem Namen, der zum Griff passt:
   "Am (xx0232, klingt wie D)"); ohne Knopf, im Dialog "Akkord" ändern. Beides gilt auch nach einem Import.
@@ -37,7 +38,7 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 ("Noten" und "Chords" fehlen); Tabs sind immer zu sehen.
 
 ### Bearbeitung
-- Speichern (Strg+S) – blau, solange etwas ungespeichert ist (Noten und die Angaben aus dem Reiter "Leadsheet")
+- Speichern (Strg+S) – blau, solange etwas ungespeichert ist (Noten und die Angaben aus dem Dialog "Leadsheet")
 - Rückgängig (Strg+Z)
 - Wiederholen (Strg+Y)
 
@@ -87,7 +88,7 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 
 ### Schlag
 - Akkord (A) – Auswahlliste mit den Akkorden des Songs (in der Reihenfolge ihres ersten Auftretens, je Eintrag Name und
-  Griff, z. B. "D  xx0232"; "–" nimmt den Akkord weg); steht in der Akkordspur (Reiter "Spuren") am Schlag, der an
+  Griff, z. B. "D  xx0232"; "–" nimmt den Akkord weg); steht in der Akkordspur (Dialog "Spuren") am Schlag, der an
   derselben Stelle beginnt, auch wenn der Cursor in einer anderen Spur steht; beginnt dort keiner, am Schlag am Cursor
   (dann meldet der Editor Akkorde außerhalb der Akkordspur). Ein Griff wird hier nicht eingegeben.
 - "+" neben der Liste (ist am Schlag ein Akkord gewählt, steht dort "✎") – Dialog "Akkord": Name, darunter die Griffe zu diesem
@@ -124,9 +125,9 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
   zwei gebalkte Achtel = Triole aus Viertel und Achtel: Shuffle); ein Klick (oder Strg+/) schaltet um, für den ganzen Song. Mehr
   braucht das Gitarrenbuch nicht (die Songs nutzen nur Shuffle, `\tf triplet8th`); ein anderes Feeling aus einem Import meldet ein
   Hinweis, der Knopf gilt dann als aus
-- Capo (alle Spuren) – die Griffe bleiben (Tabs und Griffbilder ändern sich nicht, die Noten klingen um den Capo höher). Bei
+- Capo und Tuning – rechts neben dem Knopf "Transponieren" nur als Anzeige wie im Kopf des Players ("**Capo 3** · **D**ADGBE": der Capo nur bei Capo > 0, das Tuning nur bei Abweichung vom Standard, abweichende Saiten fett); ein Klick öffnet den Dialog Transponieren, nur dort lassen sie sich ändern. Capo (alle Spuren): die Griffe bleiben (Tabs und Griffbilder ändern sich nicht, die Noten klingen um den Capo höher). Bei
   ungleichem Capo bleibt das Feld leer; "Capo angleichen" steht bei den Hinweisen
-- Tuning (alle Spuren) – Textfeld, z. B. "D A D G B E"; beim Verlassen wird die Eingabe korrigiert: Großbuchstaben, Leerzeichen
+- Tuning (alle Spuren; Textfeld im Dialog), z. B. "D A D G B E"; beim Verlassen wird die Eingabe korrigiert: Großbuchstaben, Leerzeichen
   zwischen den Tönen (auch "dadgbe" geht), zu viele Töne fallen weg, fehlende und ungültige werden durch die Saiten des Standards
   ersetzt (`normalizeTuningText()` in `notation.js`). Das Standard-Tuning zeigt das Feld als "Standard"; beim Bearbeiten stehen
   die Töne da (E A D G B E). Es gilt für alle Spuren mit so vielen Saiten wie die Akkordspur; die Bünde
@@ -138,8 +139,10 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
   neueste zuerst, je mit Zeitpunkt, Größe, "Laden" und Papierkorb (löscht den Stand). Geladen wird in den Editor als ein
   Schritt für "Rückgängig" und noch nicht gespeichert; das Häkchen "Angaben für das Leadsheet mit laden" ist an (ohne
   bleiben die jetzigen Angaben). Importierte Noten sind kein Stand: Der Verlauf beginnt mit dem ersten Überschreiben.
-- Transponieren (Icon ganz links in der Leiste) – Dialog mit −6 bis +6 Halbtönen und "Anwenden": schreibt Noten, Tabs (neu gegriffen, mit Blick auf Lage der
-  Greifhand und Saiten), Akkordnamen samt Griffen und Vorzeichen um; der Capo bleibt. Ein Schritt "Rückgängig"
+- Transponieren (Icon ganz links in der Leiste) – Dialog mit Halbtönen (−12 bis +12), Capo und Tuning, Vorschau vorher/nachher
+  und "Anwenden". Halbtöne schreiben Noten, Tabs (neu gegriffen, mit Blick auf Lage der Greifhand und Saiten), Akkordnamen samt
+  Griffen und Vorzeichen um; Capo und Tuning ändern nur die Noten. Die Tonart wandert mit dem Klang, ein Vorschlag nennt das
+  Capo mit den leichtesten Griffen, bei Klangänderung steht der Befehl `bin/audio.php --transponieren` zum Kopieren da. Ein Schritt "Rückgängig"
   nimmt es zurück. Es wird keine Verschiebung gespeichert. Die Audiospur wird dabei nicht verändert; sie lässt sich lokal mit `php bin/audio.php --only=SLUG --transponieren=N` verschieben (siehe README).
 - Wiederholungen ausschreiben (nur als Hinweis, wenn der Song nicht von oben nach unten durchläuft, also meist nach einem Guitar-Pro-Import) – Wiederholungen, Volta-Klammern, Sprungzeichen (D.C., D.S., D.S.S., al Coda,
   al Fine) und Takt-Wiederholungszeichen (Simile); mehrere Strophen an wiederholten Takten verteilen sich auf die
@@ -157,26 +160,28 @@ Der Dialog "Stammdaten" im Menü ⋮ (auch außerhalb des Bearbeitungsmodus), mi
   steht auf der Kachel der Übersicht und dient dort als Filter
 - Notizen
 
-Die Quelle für die Audio-Datei (YouTube-Link, "Auf YouTube suchen", Längen von Noten, Clip und MP3) steht im Reiter
-"Audio" des unteren Panels. Dateien mit ihrer Quelle (GP-, ChordPro-, Textdateien, PDFs) stehen im Dialog "Uploads"
-(Menü ⋮); "Chord-Datei importieren" im Reiter "Liedtext" und "Spur aus GuitarPro-Datei importieren" im Reiter "Spuren" wählen daraus.
+Die Quelle für die Audio-Datei (YouTube-Link, "Auf YouTube suchen", Längen von Noten, Clip und MP3) steht im unteren
+Panel "Audio". Dateien mit ihrer Quelle (GP-, ChordPro-, Textdateien, PDFs) stehen im Dialog "Uploads"
+(Menü ⋮); "Chord-Datei importieren" im Panel "Liedtext" und "Spur aus GuitarPro-Datei importieren" im Dialog "Spuren" wählen daraus.
 
 Ändern sich Titel oder Interpret, ändert sich der Slug; der Editor arbeitet mit dem neuen weiter.
 
-## Unteres Panel (F8)
+## Rechtes Panel "Liedtext" (F4), unteres Panel "Audio" (F8), Dialoge
 
-Die Höhe lässt sich am oberen Rand ziehen (gilt danach für alle Songs). Reiter in dieser Reihenfolge: Spuren,
-Liedtext, Leadsheet, Audio.
+Rechts steht oben das Textfeld, darunter die Vorschau "Text & Akkorde"; die Linie dazwischen lässt sich ziehen (gilt
+danach für alle Songs). Die Breite des rechten Panels lässt sich am linken Rand ziehen (gilt ebenfalls für alle Songs). Beim Abspielen wandert die Silbe im Textfeld und in der Vorschau mit. Unten steht Audio; die Höhe lässt sich am oberen Rand ziehen (Voreinstellung 200 px, gilt für alle Songs), die Wellenform passt sich an. Alle Eingabefelder und Auswahllisten in Dialogen sind 40 px hoch. "Spuren" und "Leadsheet" öffnen als Dialoge (Knöpfe in der
+Werkzeugleiste); aus dem Leadsheet gelegte Dialoge (Vergleichen, Pattern-Katalog …) liegen darüber, Schließen zeigt das
+Leadsheet wieder.
 
 ### Leadsheet
-Aufgebaut wie der Reiter "Liedtext" (`sheet.js`): links die Eingaben für das Blatt, rechts die Vorschau
+Dialog der Werkzeugleiste (`sheet.js`): links die Eingaben für das Blatt, rechts die Vorschau
 (`sheet.js`). Das Blatt hat Seite 1 "Spielanleitung" (Kopf mit Capo, Tuning, Tonart, Taktart, Tempo und
 QR-Codes, Patterns, Griffbilder, Tabs, Spielweise, Hinweise) und Seite 2 "Text & Akkorde"; passt beides auf eine Seite,
 bleibt es eine. Das Tuning steht nur da, wenn es abweicht (abweichende Saiten fett), beim
 Capo die Tonart der Griffe (der Capo der Akkordspur; ist er in den Spuren ungleich, steht das rot unter der Vorschau),
 bei Tempowechseln der Bereich. Gedacht sind zwei Blätter nebeneinander auf dem Notenständer.
 
-Seite – wie das Blatt gesetzt wird, mit Kontrollkästchen ganz oben im Reiter (gespeichert mit den Angaben): "Auf 2
+Seite – wie das Blatt gesetzt wird, mit Kontrollkästchen ganz oben im Dialog (gespeichert mit den Angaben): "Auf 2
 Seiten drucken" (Seite 1 Spielanleitung, Seite 2 Text & Akkorde; sonst alles auf einer), "Text zweispaltig", "Tabs
 zusammenfassen" (Wiederholungszeichen, "Takt 81–88 zweimal"), "Griffbilder klein", "Gleiche Abschnitte nur einmal"
 ("Chorus – wie oben", Vorgabe an) und die Schrift (12, 11, 10 oder 9 pt). Der Generator entscheidet davon nichts
@@ -243,7 +248,7 @@ Raster (4/4 in Achteln "1 + 2 + 3 + 4 +", in Sechzehnteln "1 e + a …", 6/8 "1 
 in 6/8 je drei Achtel). Im Formular zeigt eine Vorschau das Raster beim Tippen.
 
 ### Liedtext
-- Textfeld mit dem Liedtext der Spur mit dem Text (Radiobutton "Text" im Reiter "Spuren"; Silben mit Bindestrich,
+- Textfeld mit dem Liedtext der Spur mit dem Text (Radiobutton "Text" im Dialog "Spuren"; Silben mit Bindestrich,
   z. B. "Frank-furt"); die Spur nennt der
   Hinweis beim Darüberfahren. Rechts daneben die Ansicht "Text & Akkorde" der bearbeiteten Noten als Vorschau, mit
   jeder Übernahme neu (etwa 6 ms bei Stairway to Heaven).
@@ -330,7 +335,7 @@ hat und der Browser die Taste nicht selbst belegt. Liste: `public/js/editor.js`,
 
 Abweichungen:
 - Taktart: ohne Tastenkürzel statt Strg+T (Strg+T öffnet im Browser einen Tab)
-- Unteres Panel: F8 (in Guitar Pro die Gesamtansicht)
+- Rechtes Panel: F4; unteres Panel: F8 (in Guitar Pro die Gesamtansicht)
 - Strg+Tab, Strg+W, Strg+N entfallen (belegt der Browser)
 - Strg+D und Strg+U (Anschlagpfeile) belegt der Browser auch (Lesezeichen, Quelltext); im Bearbeitungsmodus fängt der
   Editor sie ab

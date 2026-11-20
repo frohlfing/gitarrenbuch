@@ -151,7 +151,7 @@ export function playOrder(score, Direction = null){
  * ist die Spur, in der sie stehen (chordsTrack(), lyricsTrack()). Eine zweite Angabe dafür (Rolle, Name, Feld in
  * song.json) könnte den Noten widersprechen; so gibt es nur eine Quelle. Geändert wird die Zuordnung im Editor, indem
  * Akkorde bzw. Text in eine andere Spur umziehen (moveContent() in notation.js). Die Reihenfolge der Spuren ist die
- * der Datei, man legt sie im Editor fest (Reiter "Spuren", ↑/↓).
+ * der Datei, man legt sie im Editor fest (Dialog "Spuren", ↑/↓).
  *
  * Spurnamen sind frei und werden nicht übersetzt. TRACK_NAMES schlägt die üblichen vor. "voice" wäre missverständlich:
  * So heißen in alphaTab die Stimmen eines Takts (bar.voices). Der Capo gilt für den ganzen Song; Akkorde sind
@@ -680,14 +680,7 @@ export function describeScoreInfo(info, audioSeconds = null){
     parts: [
       key && escapeHtml(`Tonart ${key}`),
       info.tempo ? (min === max ? `${min} BPM` : `${min}–${max} BPM`) : null,
-      // Den Capo übersieht man leicht, deshalb fett.
-      capo ? `<strong>Capo ${capo}</strong>` : null,
-      // Tuning ohne Leerzeichen ("DADGBE"), abweichende Saiten fett; im Standard-Tuning (EADGBE) steht es nicht da.
-      info.tuningStrings.some(s => s.changed) ? info.tuningStrings.map(s => {
-        // Ohne Oktave ("E2" → "E"): In der Zeile zählt, wie die Saiten heißen.
-        const name = escapeHtml(s.name.replace(/\d+$/, ''));
-        return s.changed ? `<strong>${name}</strong>` : name;
-      }).join('') : null,
+      ...capoTuningParts(info),
     ].filter(Boolean),
     warnings: [
       isTempoMismatch(info)
@@ -697,6 +690,23 @@ export function describeScoreInfo(info, audioSeconds = null){
         ? 'Sync-Punkte passen nicht zur Audiospur: Mindestens einer liegt außerhalb.' : null,
     ].filter(Boolean),
   };
+}
+
+/**
+ * Capo und Tuning für die Zeile mit den Eckdaten (Player-Kopf und Leiste des Bearbeitungsmodus).
+ * @param {ScoreInfo} info Eckdaten (readScoreInfo())
+ * @returns {string[]} HTML; leer ohne Capo und im Standard-Tuning: Den Capo übersieht man leicht, deshalb fett; das Tuning
+ *   steht ohne Leerzeichen ("DADGBE", abweichende Saiten fett) nur, wenn es nicht das Standard-Tuning (EADGBE) ist
+ */
+export function capoTuningParts(info){
+  return [
+    info.capo ? `<strong>Capo ${info.capo}</strong>` : null,
+    info.tuningStrings.some(s => s.changed) ? info.tuningStrings.map(s => {
+      // Ohne Oktave ("E2" → "E"): In der Zeile zählt, wie die Saiten heißen.
+      const name = escapeHtml(s.name.replace(/\d+$/, ''));
+      return s.changed ? `<strong>${name}</strong>` : name;
+    }).join('') : null,
+  ].filter(Boolean);
 }
 
 /**
@@ -2731,7 +2741,7 @@ export function moveNoteToString(staff, beat, from, to){
  */
 
 /** Größte Verschiebung in Halbtönen (nach oben und unten). */
-export const SHIFT_MAX = 6;
+export const SHIFT_MAX = 12;
 
 /** Größte Spanne der Greifhand in Bünden, ohne Strafe. */
 const HAND_SPAN = 4;

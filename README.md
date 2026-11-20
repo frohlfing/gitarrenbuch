@@ -279,7 +279,8 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── chordgrips.js          # Töne → Griffe: sucht passende Griffe und ordnet sie (erst weniger Bünde, dann weniger Finger)
  │    │    ├── notation.js            # Noten: Spuren, Spielfolge, GP/alphaTex lesen und schreiben, Bearbeiten, Transponieren
  │    │    ├── textview.js            # Ansicht "Text & Akkorde" und ChordPro-Export
- │    │    ├── sheet.js               # Leadsheet: Pattern-Katalog, Generator, Tab-Stellen, Reiter im Bearbeitungsmodus
+│    │    ├── transposedialog.js     # Dialog Transponieren: Halbtöne, Capo, Tuning, Vorschau
+ │    │    ├── sheet.js               # Leadsheet: Pattern-Katalog, Generator, Tab-Stellen, Dialog im Bearbeitungsmodus
  │    │    ├── library.js             # Kachelübersicht, Formulare (Song, Import, Cover, Text), Overlay
  │    │    ├── playback.js            # Player (alphaTab), Mixer mit Audiospur, Sync-Editor
  │    │    └── editor.js              # Bearbeitungsmodus: Leiste, Panels, Liedtext, Maus und Cursor, Tastenkürzel
@@ -389,11 +390,11 @@ das bleibt daneben stehen).
 eingestuft wurde (siehe "Übersicht"); fehlen sie in einem Request, bleiben die gespeicherten. 
 
 `trackDefaults` ist eine Liste mit einem Eintrag je Spur (in der Reihenfolge der Spuren): `show` (in den Noten
-angezeigt) und `mute` (stumm). Gesetzt wird sie mit Auge und Lautsprecher im Reiter "Spuren" des Bearbeitungsmodus und
+angezeigt) und `mute` (stumm). Gesetzt wird sie mit Auge und Lautsprecher im Dialog "Spuren" des Bearbeitungsmodus und
 mit "Speichern". Sie gilt als Vorgabe: Was ein Gerät im Mixer einstellt, wird dort gemerkt (`localStorage`) und hat
 Vorrang. Fehlt sie in einem Request, bleibt die gespeicherte; eine leere Liste löscht sie. `instruments` (MIDI-Programme
 der Spuren) berechnet die API bei jedem Lesen aus den Noten (`api/lib/instruments.php`); der Editor schlägt daraus im 
-Reiter "Spuren" die schon verwendeten Instrumente vor. Die Spalte "Notenlage" dort stellt je Spur ein, wie hoch die Noten 
+Dialog "Spuren" die schon verwendeten Instrumente vor. Die Spalte "Notenlage" dort stellt je Spur ein, wie hoch die Noten 
 im Notensystem gegenüber dem Klang stehen (`displayTranspositionPitch` von alphaTab, in alphaTex `\displaytranspose`, bei
 Guitar Pro "Oktave"): 2 Oktaven höher, 1 Oktave höher (so schreibt man Gitarre, die Vorgabe), wie klingend, 1 Oktave
 tiefer. Klang, Tabs und Akkorde bleiben (`setNotationPitch()` in `js/notation.js`); im Gegensatz dazu verschiebt das
@@ -407,7 +408,7 @@ Text, Musik, Copyright, Tab-Autor, Anweisungen); das Gitarrenbuch nutzt sie vore
 sie unverändert. `notes` sind freie, mehrzeilige Notizen. Interpret und Titel zusammen dürfen nur einmal vorkommen.
 
 `sources` hält fest, woher die Audiospur stammt: `youtube` ist das Video, aus dem `bin/audio.php` die Audiospur holt 
-(Feld "Quelle für Audio-Datei" im Reiter "Audio" des Bearbeitungsmodus, mit eigenem Knopf "Quelle speichern"). Neben 
+(Feld "Quelle für Audio-Datei" im unteren Panel "Audio" des Bearbeitungsmodus, mit eigenem Knopf "Quelle speichern"). Neben 
 dem Feld führt "Auf YouTube suchen" zur Suche nach Interpret und Titel. Ein eingefügter YouTube-Link wird sofort 
 auf `https://www.youtube.com/watch?v=<ID>` gekürzt (Playlist, Startzeit usw. fallen weg); der Server kürzt beim 
 Speichern noch einmal. Neben dem Feld stehen die Längen, damit man sieht, ob ein Clip passt: "Noten" (Spieldauer im 
@@ -458,7 +459,7 @@ Der normale Weg zu einem neuen Song:
    ausgewählt (GP3 bis GP8, z. B. von [Ultimate Guitar](https://www.ultimate-guitar.com/explore?type[]=Pro), Tabs
    vom Typ "Guitar Pro" über "Download"). Die Seite des Tabs lässt sich gleich als "Quelle für Guitar-Pro-Datei"
    eintragen und wird mit gespeichert.
-2. **Audio hinzufügen**: YouTube-URL im Bearbeitungsmodus im Reiter "Audio" eintragen, dann lokal `bin/audio.php` 
+2. **Audio hinzufügen**: YouTube-URL im Bearbeitungsmodus im unteren Panel "Audio" eintragen, dann lokal `bin/audio.php` 
    starten (siehe "Audio von YouTube").
 3. **Bearbeiten und spielen.**
 
@@ -617,11 +618,11 @@ Zwischenspiel) hätten keinen Schlag mehr.
 
 **Zeilenumbrüche** des Liedtexts stehen ebenfalls in den Noten: als `\n` am Ende der letzten Silbe jeder Zeile, z. B.
 `lyrics "Ber-lin,\n"` (`LYRICS_BREAK` in `js/notation.js`). alphaTab zeichnet das Zeichen nicht (Änderung 4 unter
-"Setup", Punkt 8). Gesetzt werden sie im Reiter "Liedtext" des Bearbeitungsmodus, dort bekommt jede Zeile ihren
+"Setup", Punkt 8). Gesetzt werden sie im Panel "Liedtext" des Bearbeitungsmodus, dort bekommt jede Zeile ihren
 Umbruch; hat eine Strophe keine, bricht die Ansicht selbst um (nach Satzzeichen, Pausen und Abschnitten). Guitar Pro
 speichert den Text samt Umbrüchen als Fließtext, alphaTab verwirft sie beim Import.
 
-**Liedtext auf die Schläge verteilen** (Reiter "Liedtext", `setLyricsText()` und `placeSyllables()` in
+**Liedtext auf die Schläge verteilen** (Panel "Liedtext", `setLyricsText()` und `placeSyllables()` in
 `js/notation.js`):
 
 - **Guitar Pro** verteilt den Fließtext bei jeder Änderung neu von vorn: jede Silbe auf die nächste Note, ein
@@ -644,7 +645,7 @@ speichert den Text samt Umbrüchen als Fließtext, alphaTab verwirft sie beim Im
   gesetzt, zählen in diesem Abschnitt beim Verteilen auch die Pausen als Schläge (z. B. für gesprochenen Text oder
   einen Einsatz, der in den Noten auf einer Pause steht). Offen ist, wo die Einstellung gespeichert wird.
 
-Im Bearbeitungsmodus übernimmt der Knopf "Chord-Datei importieren" im Reiter "Liedtext" den Text einer hochgeladenen
+Im Bearbeitungsmodus übernimmt der Knopf "Chord-Datei importieren" im Panel "Liedtext" den Text einer hochgeladenen
 ChordPro- (`.cho`, `.chopro`, `.crd`, `.pro`) oder Textdatei (`.txt`, z. B. Akkorde über den Zeilen): Er öffnet den
 Dialog "Uploads" mit den passenden Dateien (siehe "Rohmaterial"). Den Knopf gibt es nur, solange der Text leer ist (Zeilen
 mit Abschnittsnamen zählen nicht). Gelesen werden Text und Akkorde (`readChordFile()` in `js/chordfile.js`): bei ChordPro
@@ -655,7 +656,7 @@ danach mit Bindestrichen). Die Akkorde kommen an den Schlag ihrer Silbe in der A
 steht**; Akkorde, deren Silbe keinen Schlag bekam, werden gezählt und gemeldet. Kennt der Akkordkatalog einen Akkord
 nicht (und `findGrips()` findet keinen Griff), steht ein einfacherer (`simplifyChord()`: ohne Basston, ohne
 Erweiterungen: Am7b5 → Am7 → Am); die Griffe kommen aus dem Katalog (`normalizeChords()`).
-Dasselbe gilt für "Spur aus GuitarPro-Datei importieren" im Reiter "Spuren": Sie nimmt eine hochgeladene GP-Datei.
+Dasselbe gilt für "Spur aus GuitarPro-Datei importieren" im Dialog "Spuren": Sie nimmt eine hochgeladene GP-Datei.
 
 ### Spuren, Capo, Text und Akkorde
 
@@ -675,8 +676,8 @@ markiert und im Editor korrigiert:
   | `vocal`       | Melodie zum Singen                                                         |
 
   `voice` wäre missverständlich, so heißen in alphaTab die Stimmen eines Takts. Die **Reihenfolge** ist die der
-  Datei; man legt sie im Editor fest (Reiter "Spuren", ↑/↓), der Player sortiert nicht um.
-- **Akkorde und Text stehen je in genau einer Spur**, festgelegt im Editor über Radiobuttons (Reiter "Spuren",
+  Datei; man legt sie im Editor fest (Dialog "Spuren", ↑/↓), der Player sortiert nicht um.
+- **Akkorde und Text stehen je in genau einer Spur**, festgelegt im Editor über Radiobuttons (Dialog "Spuren",
   Spalten "Akkorde" und "Text"). Gespeichert wird die Wahl nicht eigens: Es ist die Spur, in der sie stehen
   (`chordsTrack()`, `lyricsTrack()`, je die mit den meisten). Eine zweite Angabe (Rolle, Feld in `song.json`) könnte
   den Noten widersprechen. Stellt man um, ziehen Akkorde bzw. Text ganz in die neue Spur (`moveContent()` in
@@ -745,7 +746,7 @@ oder eine Partitur bzw. der Liederordner oder `chords.php` neuer ist; von Hand e
 verloren. `api/chords.php?usage=1` liefert die Zahl der Schläge je Griff (der Akkorddialog nutzt sie).
 "Patterns" zeigt ebenso den Katalog der Strumming und Picking Patterns (nur Ansicht und Druck, in Gruppen je Technik, 
 je Pattern Name, Taktart, Raster (nur Sechzehntel, Achtel ist der Normalfall) und Zahl der Songs); bearbeitet wird er im 
-Leadsheet-Reiter des Bearbeitungsmodus ("Pattern-Katalog …"). Zwei Auswahlfelder filtern nach **Taktart** und **Genre**; 
+Leadsheet-Dialog des Bearbeitungsmodus ("Pattern-Katalog …"). Zwei Auswahlfelder filtern nach **Taktart** und **Genre**; 
 die Strumming Patterns halten immer Platz für die Betonungszeichen frei, damit alle gleich hoch sind. Das Genre eines 
 Patterns ist das Genre der Songs, die es verwenden (Tags der Songs; `api/patterns.php` liefert sie als `genres`
 je Pattern-id); ein Pattern, das kein Song nutzt, hat keines und erscheint nur unter "Alle Genres".
@@ -782,7 +783,7 @@ einer), ebenso den zwischen den Spuren einer Zeile (`TRACK_GAP`, 20 px statt 5; 
 Abschnitt, Text, Akkordname).
 
 **Reihenfolge der Spuren und Liedtext** (`orderTracks()`, `applyLyrics()` in `js/playback.js`): Die Spuren stehen in
-der Reihenfolge der Datei; sie wird im Editor festgelegt (Reiter "Spuren", ↑/↓). Früher sortierte der Player nach
+der Reihenfolge der Datei; sie wird im Editor festgelegt (Dialog "Spuren", ↑/↓). Früher sortierte der Player nach
 Rollen (Begleitung oben, Gesang unten); das ist mit den Rollen weggefallen, damit jede Spur dort steht, wo man sie
 hingestellt hat. Der Mixer zeigt die Spuren in derselben Reihenfolge. Den Text
 zeigt nur eine Spur: die Spur mit dem Text, wenn sie angezeigt wird, sonst die angezeigte Spur mit dem meisten Text.
@@ -881,7 +882,7 @@ nur bei Bedarf), darauf der Finger (auf beiden Bass-Zeilen p); eine Pause steht 
 angeschlagen wurden.
 
 **Im Song** führt `song.json` (Feld `leadsheet`) die Patterns des Songs als Verweise auf die `id`, jedes mit Freitext, 
-wann es gespielt wird ("ganzer Song", "Strophe"); gewählt wird im Reiter "Leadsheet". Eine Zuordnung je Takt gibt es 
+wann es gespielt wird ("ganzer Song", "Strophe"); gewählt wird im Dialog "Leadsheet". Eine Zuordnung je Takt gibt es 
 nicht: Der Ablauf steht in den Noten, Zusammenhänge erkennt der Generator der Seite. Eine Änderung am Katalog-Pattern 
 gilt für alle Songs, die es verwenden; die API zählt sie (`usage`), der Editor warnt davor. Pattern und Spur speichern 
 nicht dasselbe: Die **Spur** ist die genaue Ausführung mit allen Ausnahmen, das **Pattern** die verallgemeinerte 
@@ -958,9 +959,26 @@ Taktangaben im Text; Abschnitte ohne Text als Raster (`{start_of_grid}`).
 die Griffe verschieben sich) und wird nicht getrennt gespeichert. Der Player zeigt und spielt immer die Datei; eine 
 Tonhöhe je Song gibt es nicht.
 
-Der Knopf **Transponieren** (Icon mit zwei Pfeilen) steht ganz links in der Leiste oben, weil Transponieren keine 
-Eigenschaft des Songs ist. Er öffnet einen kleinen Dialog: −6 bis +6 Halbtöne wählen und **Anwenden** (keine Vorschau). 
-Das schreibt die Noten um (`transposeScore()`), als ein Schritt für "Rückgängig":
+Der Knopf **Transponieren** (Icon mit zwei Pfeilen) steht ganz links in der Leiste oben, weil Transponieren keine
+Eigenschaft des Songs ist. Er öffnet den Dialog (`js/transposedialog.js`) mit drei Eingaben: **Halbtöne** (−12 bis +12),
+**Capo** (absoluter Wert, vorbelegt mit dem jetzigen) und **Tuning** (Text wie "D A D G B E"). Halbtöne ändern Noten, Tabs,
+Akkorde und Tonart; Capo und Tuning ändern nur die Noten (Bünde, Tabs, Akkordnamen und Griffe bleiben). Der Klang
+verschiebt sich um Halbtöne + Capo + Tuning (bei gleichmäßig verschobenen Saiten); die Tonart aus dem Feld "Tonart" wandert
+um diese Verschiebung. Mit −2 Halbtönen und Capo +2 bleibt der Klang, nur die Griffe sind andere. Der Dialog zeigt:
+
+- **Tonart** über den Eingaben: "Aktuelle Tonart: Db"; erkennt `detectKeySignature()` aus den Akkorden eine andere,
+  steht daneben "Erkannte Tonart: E" mit dem Knopf "Übernehmen" (sie ist dann der Ausgangspunkt, von dem die Tonart wandert).
+- **Vorschau** untereinander, "Jetzt: Db" und "Danach: Eb": je die Griffbilder aller Akkorde des Songs und darunter alle
+  gegriffenen Töne (jede Saite-Bund-Kombination einmal, von der tiefsten bis zur höchsten) mit Notenschlüssel, Vorzeichen
+  und Tab (`renderMiniScore()` in `js/sheet.js`).
+- **Leichteste Griffe:** Ein Vorschlag nennt das Capo (0 bis 9), bei dem die Akkorde am leichtesten zu greifen sind, wenn der
+  Klang bleibt; "Vorschlag übernehmen" füllt Capo und Halbtöne. Bewertet wird der beste Griff je Akkord (`findGrips()`: Lage,
+  Spanne, Finger, Barré), gewichtet mit der Zahl der Schläge.
+- **Audio:** Ändert sich der Klang, bleibt die Audiospur unverändert. Der Dialog zeigt dann unten den Befehl
+  `php bin/audio.php --password=… --only=<slug> --transponieren=+N --override` mit einem Knopf zum Kopieren.
+
+Capo und Tuning stehen in der Leiste nur noch als Anzeige; ein Klick darauf öffnet den Dialog. "Anwenden" schreibt die Noten um
+(`applyRetune()`, darin `transposeScore()`), als ein Schritt für "Rückgängig":
 
 - **Töne und Tabs:** Jeder Ton wird um die Halbtöne verschoben und neu gegriffen. Gewählt wird Schlag für Schlag unter
   den möglichen Saiten und Bünden die Verteilung mit den geringsten Kosten: Hand höchstens vier Bünde breit, leere Saiten
@@ -977,8 +995,7 @@ Das schreibt die Noten um (`transposeScore()`), als ein Schritt für "Rückgäng
   Transponieren). Beispiel: "−2" anwenden und danach Capo 2: gleiche Tonhöhe wie vorher, aber andere, leichtere Griffe. 
   Die Option "Klang behalten" gibt es weder beim Capo noch beim Tuning; ein geändertes Tuning lässt die Bünde stehen. 
   `moveToCapo()` und `setTuning(…, true)` dienen nur noch "Capo angleichen" und "Tuning angleichen".
-- **Audio:** Die Audiospur lässt sich nicht verschieben (das ginge nur mit einer zusätzlichen Pitch-Shift-Bibliothek)
-  und klingt nach dem Transponieren in der alten Tonart; der Editor weist darauf hin.
+- **Audio:** Die Audiospur verschiebt `bin/audio.php --transponieren` (siehe oben); im Editor lässt sie sich nicht verschieben.
 
 Gespeichert wird keine Verschiebung: Nach "Anwenden" steht das Feld wieder auf 0, die neuen Noten gelten ab dem
 Speichern. Die Kosten (`HAND_SPAN`, `POSITION_JUMP`, `STRING_MOVE` … in `js/notation.js`) sind Schätzwerte und lassen 
@@ -1098,7 +1115,7 @@ deshalb nach `midiLoad` und `playerReady` gesetzt.
 Die Sync-Punkte (`\sync` in `score.atex`) ordnen Takte der Noten Stellen in der Audiospur zu. Bei importierten
 GP-Dateien übernimmt alphaTab sie beim Umwandeln. Bei YouTube-Audio und nach dem Wechsel auf einen anderen Clip
 werden sie im Sync-Editor gesetzt bzw. nachgezogen (`js/playback.js`, Vorbild ist der "Media Sync Editor" im
-alphaTab-Playground). Er steht im Bearbeitungsmodus unten im Reiter "Audio", wenn der Song eine `audio.mp3` hat:
+alphaTab-Playground). Er steht im Bearbeitungsmodus unten im Panel "Audio", wenn der Song eine `audio.mp3` hat:
 ohne eigenes Speichern, Schließen und Rückgängig, jede Änderung ist ein Schritt des Bearbeitungsmodus.
 
 - **Wellenform** der Audiospur mit einem Marker je Sync-Punkt, beschriftet mit der Taktnummer (dazu "+ 50 %" für eine
@@ -1142,11 +1159,14 @@ noch fehlt, beschreibt `docs/Editor.md`; dort steht auch, was aus Guitar Pro nic
 - **Verlassen:** ✕ oben rechts; fragt bei ungespeicherten Änderungen nach und zeigt den Song neu, wenn Noten oder
   Stammdaten gespeichert wurden.
 - **Aufteilung:** oben die Werkzeugleiste mit allem, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu 
-  Speichern, Rückgängig, Wiederholen, Verlauf, Uploads, Transponieren, Hinweise, Hilfe, ✕; links "Am Cursor" mit allem zum Schlag (Notenwerte, 
-  Einfügen/Löschen, Effekte, Akkord, Griff, Text; vom Takt Abschnitt, Taktart und Tempo), unten Spuren (samt 
-  Anzeigen/Ausblenden), Liedtext, Leadsheet und Audio (Sync-Editor, dazu das Tempo der Audiospur) mit der Statuszeile. 
-  Panels klappen mit F2, F8 bzw. dem Pfeil ein.
-- **Reiter "Leadsheet"** (`js/sheet.js`): links
+  Speichern, Rückgängig, Wiederholen, Verlauf, Uploads, Spuren, Leadsheet, Transponieren, Hinweise, Hilfe, ✕; links "Am Cursor" mit allem zum Schlag (Notenwerte, 
+  Einfügen/Löschen, Effekte, Akkord, Griff, Text; vom Takt Abschnitt, Taktart und Tempo), rechts "Liedtext"
+  (oben das Textfeld, darunter die Vorschau "Text & Akkorde", die Linie dazwischen lässt sich ziehen), unten Audio
+  (Sync-Editor, dazu das Tempo der Audiospur; Höhe ziehbar, Voreinstellung 200 px). Das rechte Panel ist in der Breite ziehbar, beim Abspielen
+  läuft die Silbe in Textfeld und Vorschau mit; Eingabefelder und Auswahllisten in Dialogen sind einheitlich 40 px hoch mit der Statuszeile. "Spuren" (samt Anzeigen/Ausblenden) und
+  "Leadsheet" sind Dialoge, die die Knöpfe der Werkzeugleiste öffnen. Panels klappen mit F2 (links), F4 (rechts), F8
+  (unten) bzw. dem Pfeil ein.
+- **Dialog "Leadsheet"** (`js/sheet.js`): links
   die Patterns des Songs mit Freitext "wann", die Tab-Stellen (Takte, Spur, Beschriftung), die Griffbilder (je ein
   Häkchen), Links (als QR-Code oder Text) und Hinweise zur Spielweise in Markdown; rechts die Vorschau
   (`js/sheet.js`): Seite 1 "Spielanleitung", Seite 2 "Text & Akkorde", eine Seite, wenn alles passt. Den Akkord eines 
