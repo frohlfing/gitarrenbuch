@@ -4,17 +4,16 @@
  */
 
 import {
-  chordDiagramSvg, coverUrl, escapeHtml, fretboardSvg, loadAudio, loadChordLibrary, loadPatterns,
+  chordDiagramSvg, coverUrl, escapeHtml, fretboardSvg, loadAudio, loadChordLibrary, loadLeadsheet, loadPatterns,
   loadScoreText, NOTE_LABELS, structureOf, STRUCTURES,
 } from './js/base.js';
 import {NoteEditor} from './js/editor.js';
 import {
   closeOverlay, findSong, initLibrary, openImportForm, openOverlay, openSongForm, storeSong,
 } from './js/library.js';
-import {describeScoreInfo, exportGpFile} from './js/notation.js';
+import {describeScoreInfo, exportGpFile, loadAlphaTab} from './js/notation.js';
 import {Player, SCALES} from './js/playback.js';
-import {patternGridHtml, TECHNIQUES} from './js/sheet.js';
-import {exportChordProFile} from './js/textview.js';
+import {patternGridHtml, printSongLeadsheet, TECHNIQUES} from './js/sheet.js';
 
 /** @typedef {import('./js/base.js').Song} Song */
 /** @typedef {import('./js/notation.js').ScoreInfo} ScoreInfo */
@@ -241,12 +240,21 @@ async function downloadGpFile(song){
 }
 
 /**
- * Lädt Text und Akkorde des Lieds als ChordPro-Datei (.cho) herunter.
+ * Druckt das Leadsheet des Lieds. Im Bearbeitungsmodus der Stand im Editor (auch ungespeichert), sonst der gespeicherte.
  * @param {Song} song Lied
  * @returns {Promise<void>}
  */
-async function downloadChordProFile(song){
-  downloadFile(await exportChordProFile(song, await loadScoreText(song.slug)));
+async function printLeadsheetOf(song){
+  const head = {title: song.title, artist: song.artist};
+  const alphaTab = await loadAlphaTab();
+  if(noteEditor?.score){
+    await printSongLeadsheet(alphaTab, noteEditor.tex, noteEditor.sheet, head);
+    return;
+  }
+  // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
+  const tex = await loadScoreText(song.slug);
+  const sheet = await loadLeadsheet(song.slug);
+  await printSongLeadsheet(alphaTab, tex, sheet, head);
 }
 
 /**
@@ -311,7 +319,7 @@ function showSong(song){
       <button type="button" id="songDataBtn">Stammdaten</button>
       <button type="button" id="displayBtn">Darstellung</button>
       <button type="button" id="exportBtn" title="Notation mit Audiospur als Guitar-Pro-Datei (.gp)">GP-Export</button>
-      <button type="button" id="chordProBtn" title="Text und Akkorde als ChordPro-Datei (.cho)">CHO-Export</button>
+      <button type="button" id="leadsheetPrintBtn" title="Das Leadsheet drucken (auch als PDF)">Leadsheet drucken</button>
     </div>`;
   songView.querySelector('.songhead').append(menuWrap);
   // Hinweise: Fehler in den Noten (vom Server) sofort, die aus dem Player (Tempo, Sync-Punkte) nach dem Laden.
@@ -360,9 +368,9 @@ function showSong(song){
     setMenu(false);
     downloadGpFile(current()).catch(err => alert('Export fehlgeschlagen: ' + err.message));
   });
-  document.getElementById('chordProBtn').addEventListener('click', () => {
+  document.getElementById('leadsheetPrintBtn').addEventListener('click', () => {
     setMenu(false);
-    downloadChordProFile(current()).catch(err => alert('Export fehlgeschlagen: ' + err.message));
+    printLeadsheetOf(current()).catch(err => alert('Drucken fehlgeschlagen: ' + err.message));
   });
 
   const root = document.getElementById('playerRoot');

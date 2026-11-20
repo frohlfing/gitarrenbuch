@@ -278,7 +278,7 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── chordtheory.js         # Akkordname → Töne (Regeln aus docs/Musiktheorie.md)
  │    │    ├── chordgrips.js          # Töne → Griffe: sucht passende Griffe und ordnet sie (erst weniger Bünde, dann weniger Finger)
  │    │    ├── notation.js            # Noten: Spuren, Spielfolge, GP/alphaTex lesen und schreiben, Bearbeiten, Transponieren
- │    │    ├── textview.js            # Ansicht "Text & Akkorde" und ChordPro-Export
+ │    │    ├── textview.js            # Ansicht "Text & Akkorde"
 │    │    ├── transposedialog.js     # Dialog Transponieren: Halbtöne, Capo, Tuning, Vorschau
  │    │    ├── sheet.js               # Leadsheet: Pattern-Katalog, Generator, Tab-Stellen, Dialog im Bearbeitungsmodus
  │    │    ├── library.js             # Kachelübersicht, Formulare (Song, Import, Cover, Text), Overlay
@@ -510,20 +510,12 @@ Im Menü der Songansicht erzeugt "Guitar-Pro-Export" eine vollständige `.gp`-Da
 Audiospur mit den Sync-Punkten. Guitar Pro 7 und 8 öffnen sie; ein erneuter Import ergibt wieder dieselben Noten.
 Verloren gehen dabei nur Layout-Feinheiten wie feste Taktbreiten.
 
-### ChordPro-Export
+### Leadsheet drucken
 
-"ChordPro-Export" im selben Menü erzeugt eine `.cho`-Datei mit Text und Akkorden (`js/textview.js`), im üblichen
-Standard-ChordPro, wie es Apps wie OnSong oder SongbookPro lesen (Format siehe "Format ChordPro"):
-
-- Kopf: `{title}`, `{artist}`, `{key}` (Tonart der Griffe, die Akkorde sind Griffnamen relativ zum Capo), `{capo}`,
-  `{tempo}`, `{time}` (die häufigste Taktart; der erste Takt ist oft ein Auftakt).
-- `{define}` nur für Griffe, die von `data/chords.json` abweichen oder dort fehlen ("D7*" in "Kokain").
-- Abschnitte mit Text als `{start_of_verse}`, `{start_of_chorus}` (Name enthält "Chorus" oder "Refrain") bzw.
-  `{start_of_bridge}`, jeweils mit `label`; die Akkorde in Klammern vor ihrer Silbe: `[G] warum hast du nichts
-  ge[Am]lernt? [Asus2] [Am]`. Takte kennt ChordPro im Text nicht, Taktstriche fallen weg.
-- Abschnitte ohne Text als Raster `{start_of_grid}` mit einer Zelle je Schlag: `| C . G/B . | Am F . . |`. Dort
-  bleiben Takte und die Lage der Wechsel erhalten.
-- Inhalt wie in der Ansicht "Text & Akkorde", Wiederholungen ausgeschrieben.
+"Leadsheet drucken" im selben Menü druckt das Blatt (auch als PDF), ohne den Dialog "Leadsheet" zu öffnen
+(`printSongLeadsheet()` in `js/sheet.js`): Es wird unsichtbar gesetzt wie in der Vorschau und dann gedruckt. Im
+Bearbeitungsmodus gilt der Stand im Editor (auch ungespeichert), sonst der gespeicherte. Titel und Interpret im Kopf des
+Blatts kommen aus `song.json`.
 
 ### Rohmaterial
 
@@ -810,7 +802,7 @@ Spuren in ihrer Reihenfolge. Genau so schreibt der Editor die Akkorde in die Akk
 hängt einen Akkordnamen an einen Schlag; hat die oberste Spur an der Stelle keinen (eine lange Note klingt), kommt er 
 an die nächste angezeigte Spur, die dort einen hat. Dafür hängt der Player die Akkorde im geladenen Modell um 
 (gespeichert wird es nie). In "Junge" steht so auch das Asus2 aus "Rhythm Guitar" (Takt 6) über "Gitarre". Die Ansicht 
-"Chords" und der ChordPro-Export nehmen die Akkorde nach derselben Regel. Verschiedene Akkorde an derselben Stelle sind 
+"Chords" nimmt die Akkorde nach derselben Regel. Verschiedene Akkorde an derselben Stelle sind 
 meist Varianten (D/A gegen D, Am7 gegen Am, F5 gegen F); echt verschieden ist z. B. "Ring of Fire", Takt 7 (C in 
 "Guitar", D in "Vocal"). Das klärt der Editor.
 
@@ -952,8 +944,6 @@ längeren Pausen und Abschnitten, nie mitten im Wort; ein Auftakt gehört zum fo
   "Jun-" (Takt 17) nur F, wie in Guitar Pro.
 
 Für alle 42 Songs geprüft: Jeder gespielte Takt kommt genau einmal vor, in Abspielreihenfolge, und kein Akkord fehlt.
-Der ChordPro-Export hält sich an das Übliche (siehe "ChordPro-Export"): Akkorde inline (`[G]warum`), ohne
-Taktangaben im Text; Abschnitte ohne Text als Raster (`{start_of_grid}`).
 
 **Transponieren** (`js/notation.js`, nur im Bearbeitungsmodus): Es ändert die Noten und Tabs (aus C wird bei +2 ein D, 
 die Griffe verschieben sich) und wird nicht getrennt gespeichert. Der Player zeigt und spielt immer die Datei; eine 
@@ -1076,7 +1066,7 @@ Capo setzt (z. B. weil die Audiospur höher klingt als notiert), muss auch `\ks`
   (zu hören), der Name und darunter Regler und Wert; darunter Audiospur, Metronom und Vorzähler mit Lautsprecher.
   In "Chords" sind die Augen ohne Funktion. 
 - **⋮** Menü: Bearbeiten (im Bearbeitungsmodus mit Häkchen; ein Klick beendet ihn), Stammdaten, Darstellung,
-  GP-Export, CHO-Export. **Stammdaten** öffnet den Dialog mit Cover, Titel, Interpret, Genre, Einstufung, Favorit und 
+  GP-Export, Leadsheet drucken. **Stammdaten** öffnet den Dialog mit Cover, Titel, Interpret, Genre, Einstufung, Favorit und 
   Notizen, dazu "Song löschen …". Sync-Editor und Quelle der Audiodatei stehen im Bearbeitungsmodus.
   **Darstellung** öffnet einen kleinen Dialog mit der Skalierung (50 bis 150 %, gilt für Noten und Chords),
   übernommen mit OK, für alle Songs gemerkt (`openDisplayDialog()` in `app.js`, `Player.setDisplay()`).
@@ -1151,15 +1141,15 @@ Schritte am Modell in `js/notation.js`, die Icons in `js/base.js`). Was wo steht
 noch fehlt, beschreibt `docs/Editor.md`; dort steht auch, was aus Guitar Pro nicht übernommen wird und warum.
 
 - **Einschalten:** "Bearbeiten" im Menü ⋮ der Abspielleiste . Abweichungen (Sprungzeichen, Capo ungleich,
-  Tonart, Akkorde bzw. Text außerhalb ihrer Spur) zählt ein Knopf "⚠ 2 Hinweise" rechts in der Werkzeugleiste;
-  er klappt sie auf, jede mit einem Knopf, der sie behebt.
+  Tonart, Akkorde bzw. Text außerhalb ihrer Spur) zählt ein Knopf "⚠ 2 Konflikte" rechts in der Werkzeugleiste;
+  er klappt sie auf, jede mit einem Knopf, der sie löst. Alle Fälle und ihre Lösung: `docs/Konflikte.md`.
   Die Abspielleiste unten bleibt wie im Player; der Knopf "Ansicht" ist im Modus gesperrt (Noten ein/aus steht in
   der Werkzeugleiste).
   Der Kopf mit Cover und Eckdaten verschwindet; bearbeitet wird mit Tabs ("Noten + Tabs" oder "Tabs").
 - **Verlassen:** ✕ oben rechts; fragt bei ungespeicherten Änderungen nach und zeigt den Song neu, wenn Noten oder
   Stammdaten gespeichert wurden.
 - **Aufteilung:** oben die Werkzeugleiste mit allem, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu 
-  Speichern, Rückgängig, Wiederholen, Verlauf, Uploads, Spuren, Leadsheet, Transponieren, Hinweise, Hilfe, ✕; links "Am Cursor" mit allem zum Schlag (Notenwerte, 
+  Speichern, Rückgängig, Wiederholen, Verlauf, Uploads, Spuren, Leadsheet, Transponieren, Konflikte, Hilfe, ✕; links "Am Cursor" mit allem zum Schlag (Notenwerte, 
   Einfügen/Löschen, Effekte, Akkord, Griff, Text; vom Takt Abschnitt, Taktart und Tempo), rechts "Liedtext"
   (oben das Textfeld, darunter die Vorschau "Text & Akkorde", die Linie dazwischen lässt sich ziehen), unten Audio
   (Sync-Editor, dazu das Tempo der Audiospur; Höhe ziehbar, Voreinstellung 200 px). Das rechte Panel ist in der Breite ziehbar, beim Abspielen

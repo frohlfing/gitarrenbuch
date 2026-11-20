@@ -688,25 +688,25 @@ header p.sub{
 #songView:not(.editing) > .songbar{display:none;}
 /* Im Modus zeigt die feste Leiste nur die Werkzeugleiste (Ansicht und Spuren stecken darin, siehe editor.js) */
 #songView.editing .songbar{display:block; padding:0;}
-#songView.editing .songbar > :not(.edit-toolbar):not(.edit-notices){display:none;}
-/* Hinweise: aufgeklappt unter ihrem Knopf rechts in der Werkzeugleiste, je Abweichung eine Zeile mit Knopf zum
-   Beheben (renderNotices(), toggleNotices()). */
-.edit-notices{position:absolute; right:.8rem; top:calc(100% - .2rem); z-index:45; max-width:min(36rem, calc(100vw - 1.6rem));
+#songView.editing .songbar > :not(.edit-toolbar):not(.edit-conflicts){display:none;}
+/* Konflikte: aufgeklappt unter ihrem Knopf rechts in der Werkzeugleiste, je Abweichung eine Zeile mit Knopf zum
+   Lösen (renderConflicts(), toggleConflicts(); alle Fälle in docs/Konflikte.md). */
+.edit-conflicts{position:absolute; right:.8rem; top:calc(100% - .2rem); z-index:45; max-width:min(36rem, calc(100vw - 1.6rem));
   padding:.5rem .8rem; background:#fff6ec; border:1px solid #f3c7a6; border-radius:8px;
   box-shadow:0 10px 24px rgba(39,43,52,.2); font-size:.85rem;}
-.edit-hint{color:var(--danger); background:#fff6ec; border-color:#f3c7a6;}
-.edit-hint[hidden]{display:none;}
-.edit-hint[aria-expanded="true"]{background:#fde4cc;}
+.ebtn.edit-conflicts-btn{color:var(--danger); background:#fff6ec; border-color:#f3c7a6;}
+.edit-conflicts-btn[hidden]{display:none;}
+.edit-conflicts-btn[aria-expanded="true"]{background:#fde4cc;}
 /* Schließen wie im Player: rundes ✕ */
 .edit-close{width:38px; height:38px; border-radius:50%; border:1px solid var(--rule); background:var(--card);
   color:var(--ink); font-size:1.05rem; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;}
 .edit-close:hover{border-color:var(--accent); color:var(--accent-dark);}
 /* Knöpfe der Abspielleiste ohne Funktion im Modus */
 .transport .tbtn:disabled{opacity:.3;}
-.edit-notices[hidden]{display:none;}
-.edit-notice{display:flex; flex-wrap:wrap; align-items:center; gap:.3rem .6rem; padding:.15rem 0;}
-.edit-notice span{color:var(--danger);}
-.edit-notice .ebtn{height:auto; padding:.15rem .5rem;}
+.edit-conflicts[hidden]{display:none;}
+.edit-conflict{display:flex; flex-wrap:wrap; align-items:center; gap:.3rem .6rem; padding:.15rem 0;}
+.edit-conflict span{color:var(--danger);}
+.edit-conflict .ebtn{height:auto; padding:.15rem .5rem;}
 /* Capo je Spur (rechtes Panel, nur bei ungleichem Capo) */
 #songView.editing .track-checks{padding:0;}
 #songView.editing .score-wrap{max-width:none;}

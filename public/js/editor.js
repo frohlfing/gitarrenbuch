@@ -294,7 +294,7 @@ export function openShortcutHelp(){
  * (boundsLookup von alphaTab): Sie reicht genau von der obersten bis zur untersten Saite. Ohne Tabs (Ansicht
  * "Noten") gibt es nur die Spalte des Schlags.
  *
- * Aufbau (docs/Editor.md): Die Werkzeugleiste (Speichern, Rückgängig, Tonart, Capo …, Hinweise, Hilfe, ✕) ist im Modus die
+ * Aufbau (docs/Editor.md): Die Werkzeugleiste (Speichern, Rückgängig, Tonart, Capo …, Konflikte, Hilfe, ✕) ist im Modus die
  * einzige feste Leiste und enthält, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning). Links steht, was am Cursor hängt
  * (Notenwerte, Effekte, Schlag; vom Takt Abschnitt, Taktart und Tempo), unten, was sich über den Song erstreckt (Spuren, Leadsheet, Liedtext, Audio mit dem Sync-Editor)
  * samt Statuszeile. Die Panels lassen sich einklappen; auf schmalen
@@ -710,7 +710,7 @@ export class NoteEditor {
     const toolbar = this.addPart(songbar, 'div', 'edit-toolbar', this.toolbarHtml());
     toolbar.setAttribute('role', 'toolbar');
     toolbar.setAttribute('aria-label', 'Bearbeiten');
-    this.addPart(songbar, 'div', 'edit-notices', '').hidden = true;
+    this.addPart(songbar, 'div', 'edit-conflicts', '').hidden = true;
     this.addPart(this.songView, 'aside', 'edit-panel edit-left', this.cursorPanelHtml(), narrow || collapsed.left);
     const right = this.addPart(this.songView, 'aside', 'edit-panel edit-right', this.lyricsPanelHtml(), narrow || collapsed.right);
     const bottom = this.addPart(this.songView, 'section', 'edit-bottom', this.bottomHtml(), collapsed.bottom);
@@ -815,7 +815,7 @@ export class NoteEditor {
 
   /**
    * Werkzeugleiste: Speichern, Rückgängig, Wiederholen | Dauer | Punktierung, Triole, Pause,
-   * Haltebogen | Schlag und Takt einfügen und löschen | Hinweise, Hilfe, Schließen.
+   * Haltebogen | Schlag und Takt einfügen und löschen | Konflikte, Hilfe, Schließen.
    * @returns {string} HTML
    */
   toolbarHtml(){
@@ -841,8 +841,8 @@ export class NoteEditor {
         <span class="etool-info" data-song-info></span>
       </div>
       <div class="egroup edit-end">
-        <button type="button" class="ebtn ebtn-text edit-hint" data-action="notices" aria-expanded="false" hidden
-          title="Abweichungen von der Form des Gitarrenbuchs, jede mit einem Knopf zum Beheben"></button>
+        <button type="button" class="ebtn ebtn-text edit-conflicts-btn" data-action="conflicts" aria-expanded="false" hidden
+          title="Konflikte: Abweichungen von der Form des Gitarrenbuchs, jede mit einem Knopf zum Lösen (docs/Konflikte.md)"></button>
         <button type="button" class="ebtn ebtn-help" data-action="help" title="Tastenkürzel (?)"
           aria-label="Tastenkürzel">?</button>
         <button type="button" class="edit-close" data-action="done" title="Bearbeiten beenden"
@@ -855,7 +855,7 @@ export class NoteEditor {
    * Linkes Panel "Am Cursor" (wie die Palette in Guitar Pro links), alles, was den Schlag bzw. die Note betrifft:
    * Notenwert, Punktierung, Triole, Pause, Haltebogen, Schläge und Takte einfügen/löschen, Effekte, Akkord, Griff,
    * Text, zuletzt vom Takt der Abschnitt, Taktart und Tempo (sie gelten ab dem Takt am Cursor). Die Leiste enthält, was am ganzen Song
-   * hängt (Tonart, Shuffle, Capo, Tuning), dazu Speichern, Rückgängig, Hinweise, Hilfe, ✕.
+   * hängt (Tonart, Shuffle, Capo, Tuning), dazu Speichern, Rückgängig, Konflikte, Hilfe, ✕.
    * @returns {string} HTML
    */
   cursorPanelHtml(){
@@ -1135,8 +1135,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       this.run(el.dataset.cmd, el);
     } else if(el.dataset.action === 'done'){
       this.finish();
-    } else if(el.dataset.action === 'notices'){
-      this.toggleNotices();
+    } else if(el.dataset.action === 'conflicts'){
+      this.toggleConflicts();
     } else if(el.dataset.action === 'help'){
       openShortcutHelp();
     } else if(el.dataset.collapse){
@@ -1675,7 +1675,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * Schlag, an dem der Akkord für den Schlag am Cursor steht: der Schlag der Akkordspur (contentTrack()), der an
    * derselben Stelle beginnt. So landen neue Akkorde in der Spur, die die Radiobuttons zeigen, auch wenn der Cursor in
    * einer anderen steht. Beginnt dort kein Schlag (z. B. mitten in einer langen Note), der Schlag am Cursor selbst;
-   * dann meldet renderNotices() Akkorde außerhalb der Akkordspur.
+   * dann meldet renderConflicts() Akkorde außerhalb der Akkordspur.
    * @param {Beat} beat Schlag am Cursor
    * @returns {Beat}
    */
@@ -1981,35 +1981,36 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.updateState();
     this.renderSongPanels();
     this.fillSongFields();
-    this.renderNotices();
+    this.renderConflicts();
   }
 
   /**
-   * Meldungen unter der Werkzeugleiste: Abweichungen von der Form des Gitarrenbuchs (wie die Prüfung der API, siehe
-   * read_score_issues() in api/lib/crud.php, dazu Tonart und Akkorde wie im Struktur-Editor), jede mit einem Knopf,
-   * der sie behebt (außer den Hinweisen zu Akkordnamen und Griffen, die man im Dialog "Akkord" ändert). Nach jeder Änderung neu.
+   * Konflikte unter der Werkzeugleiste: Abweichungen von der Form des Gitarrenbuchs (wie die Prüfung der API, siehe
+   * read_score_issues() in api/lib/crud.php, dazu Tonart und Akkorde), jeder mit einem Knopf, der ihn löst (außer den
+   * Konflikten bei Akkordnamen und Griffen, die man im Dialog "Akkord" löst). Alle Fälle: docs/Konflikte.md. Nach jeder
+   * Änderung neu.
    * @returns {void}
    */
-  renderNotices(){
-    const el = this.part('edit-notices');
+  renderConflicts(){
+    const el = this.part('edit-conflicts');
     const score = this.score;
     if(!el || !score) return;
     /** @type {[string, string, string, string][]} Text, Knopf, Befehl für run(), Tooltip (ohne Knopf: Befehl leer) */
-    const notices = [];
+    const conflicts = [];
     // Der Song soll von oben nach unten durchlaufen, damit jeder Takt eindeutig ist.
     if(edit.hasRepeats(this.alphaTab, score)){
-      notices.push(['Der Song läuft nicht von oben nach unten durch (Wiederholungen, Volta-Klammern, Sprungzeichen oder '
+      conflicts.push(['Der Song läuft nicht von oben nach unten durch (Wiederholungen, Volta-Klammern, Sprungzeichen oder '
         + 'Wiederholungstakte).', 'Wiederholungen und Sprünge ausschreiben', 'unroll',
       'Jeder Takt steht danach so oft da, wie er gespielt wird']);
     }
     const staves = stringedStaves(score);
     if(new Set(staves.map(st => st.capo)).size > 1){
-      notices.push([`Capo ungleich: ${staves.map(st => `${trackName(st.track)} ${st.capo}`).join(', ')}.`,
+      conflicts.push([`Capo ungleich: ${staves.map(st => `${trackName(st.track)} ${st.capo}`).join(', ')}.`,
         'Capo angleichen', 'unifyCapo',
         'Alle Spuren auf den Capo der Akkordspur; die anderen werden umgerechnet und klingen gleich']);
     }
     if(!sameTuning(score)){
-      notices.push([`Tuning ungleich: ${tuningStaves(score).map(st => `${trackName(st.track)} ${
+      conflicts.push([`Tuning ungleich: ${tuningStaves(score).map(st => `${trackName(st.track)} ${
         this.tuningText(st)}`).join(', ')}.`, 'Tuning angleichen', 'unifyTuning',
       'Alle Spuren auf das Tuning der Akkordspur; die anderen werden umgerechnet und klingen gleich']);
     }
@@ -2017,7 +2018,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     if(key){
       const bar = (staves[0] ?? score.tracks[0].staves[0]).bars[0];
       const minor = bar.keySignatureType === this.alphaTab.model.KeySignatureType.Minor;
-      notices.push([`Tonart: notiert ${keyName(bar.keySignature, minor)}, erkannt aus Akkorden und Tönen `
+      conflicts.push([`Tonart: notiert ${keyName(bar.keySignature, minor)}, erkannt aus Akkorden und Tönen `
         + `${keyName(key.keySignature, key.minor)}.`, 'Tonart korrigieren', 'detectKey',
       'Vorzeichen im ganzen Song auf die erkannte Tonart setzen']);
     }
@@ -2025,7 +2026,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const feels = new Set(score.masterBars.map(mb => Number(mb.tripletFeel))
       .filter(f => f !== this.alphaTab.model.TripletFeel.NoTripletFeel && f !== this.alphaTab.model.TripletFeel.Triplet8th));
     if(feels.size){
-      notices.push([`Triolen-Feeling ${[...feels].map(f => TRIPLET_FEELS[f]).join(', ')}: Vorgesehen ist nur Shuffle (Achtel-Triolen).`,
+      conflicts.push([`Triolen-Feeling ${[...feels].map(f => TRIPLET_FEELS[f]).join(', ')}: Vorgesehen ist nur Shuffle (Achtel-Triolen).`,
         'Feeling entfernen', 'removeFeel', 'Das Triolen-Feeling im ganzen Song ausschalten (die Noten bleiben, wie sie sind)']);
     }
     // Akkorde bzw. Text in mehr als einer Spur: Die Radiobuttons im Dialog "Spuren" zeigen dann die Spur mit den
@@ -2037,7 +2038,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       if(!track || !score.tracks.some(t => t !== track && t.staves.some(st => st.bars.some(b => b.voices.some(v =>
         v.beats.some(has)))))) continue;
       const name = trackName(track);
-      notices.push([`${label} stehen auch außerhalb von „${name}“.`, `${label} nach „${name}“ übertragen`,
+      conflicts.push([`${label} stehen auch außerhalb von „${name}“.`, `${label} nach „${name}“ übertragen`,
         kind === 'chords' ? 'mergeChords' : 'mergeLyrics',
         `${label} ganz in diese Spur schreiben (fragt nach, wenn sich dabei etwas verschiebt)`]);
     }
@@ -2060,34 +2061,34 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     }
     const list = items => items.length > 8 ? `${items.slice(0, 8).join(', ')} … (${items.length})` : items.join(', ');
     if(unknown.size){
-      notices.push([`Unbekannte Akkordnamen: ${list([...unknown])}.`, '', '',
+      conflicts.push([`Unbekannte Akkordnamen: ${list([...unknown])}.`, '', '',
         'Der Name entspricht nicht den Regeln der Akkordtheorie (docs/Musiktheorie.md); im Dialog "Akkord" ändern']);
     }
     if(mismatches.size){
-      notices.push([`Der Griff passt nicht zum Namen: ${list([...mismatches.values()])}.`, '', '',
+      conflicts.push([`Der Griff passt nicht zum Namen: ${list([...mismatches.values()])}.`, '', '',
         'Die Töne des Griffs sind andere als die des Akkordnamens; im Dialog "Akkord" Name oder Griff ändern']);
     }
-    const button = /** @type {?HTMLElement} */ (this.part('edit-toolbar')?.querySelector('[data-action="notices"]'));
+    const button = /** @type {?HTMLElement} */ (this.part('edit-toolbar')?.querySelector('[data-action="conflicts"]'));
     if(button){
-      button.hidden = !notices.length;
-      button.innerHTML = `&#9888; ${notices.length} Hinweis${notices.length === 1 ? '' : 'e'}`;
+      button.hidden = !conflicts.length;
+      button.innerHTML = `&#9888; ${conflicts.length} Konflikt${conflicts.length === 1 ? '' : 'e'}`;
     }
-    if(!notices.length) this.toggleNotices(false);
-    el.innerHTML = notices.map(([text, label, cmd, hint]) => `
-      <div class="edit-notice"><span${cmd ? '' : ` title="${escapeHtml(hint)}"`}>&#9888; ${escapeHtml(text)}</span>
+    if(!conflicts.length) this.toggleConflicts(false);
+    el.innerHTML = conflicts.map(([text, label, cmd, hint]) => `
+      <div class="edit-conflict"><span${cmd ? '' : ` title="${escapeHtml(hint)}"`}>&#9888; ${escapeHtml(text)}</span>
         ${cmd ? `<button type="button" class="ebtn ebtn-text" data-cmd="${cmd}"
           title="${escapeHtml(hint)}">${escapeHtml(label)}</button>` : ''}</div>`).join('');
   }
 
   /**
-   * Klappt die Hinweise unter ihrem Knopf auf bzw. zu. Sie bleiben offen, bis man den Knopf wieder drückt oder alle
-   * behoben sind (nach "Beheben" zeigt die Liste gleich, was noch übrig ist).
+   * Klappt die Konflikte unter ihrem Knopf auf bzw. zu. Sie bleiben offen, bis man den Knopf wieder drückt oder alle
+   * gelöst sind (nach dem Lösen zeigt die Liste gleich, was noch übrig ist).
    * @param {boolean} [open] öffnen; ohne Angabe umschalten
    * @returns {void}
    */
-  toggleNotices(open){
-    const el = this.part('edit-notices');
-    const button = this.part('edit-toolbar')?.querySelector('[data-action="notices"]');
+  toggleConflicts(open){
+    const el = this.part('edit-conflicts');
+    const button = this.part('edit-toolbar')?.querySelector('[data-action="conflicts"]');
     if(!el) return;
     const show = open ?? el.hidden;
     el.hidden = !show || !el.children.length;
@@ -2848,7 +2849,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const minor = bar.keySignatureType === this.alphaTab.model.KeySignatureType.Minor;
     this.fillField(toolbar, '[data-song="key"]', keyName(bar.keySignature, minor));
     // Shuffle: Achtel-Triolen-Feeling im ganzen Song. Der Knopf zeigt den Zustand und schaltet um; bei einer anderen Art
-    // (meldet renderNotices()) gilt er als aus.
+    // (meldet renderConflicts()) gilt er als aus.
     const shuffle = score.masterBars[0].tripletFeel === this.alphaTab.model.TripletFeel.Triplet8th;
     const shuffleButton = toolbar.querySelector('[data-cmd="tripletFeel"]');
     shuffleButton.innerHTML = svgIcon(shuffle ? 'feelShuffle' : 'feelStraight', 48);

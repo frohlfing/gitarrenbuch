@@ -17,6 +17,7 @@ import {
 import {buildTextModel, playTimeline, renderTextView, verseFor} from './textview.js';
 
 /** @typedef {import('../../types/alphatab').model.Score} Score */
+/** @typedef {{title: string, artist?: ?string}} SongHead Titel und Interpret für den Kopf des Blatts */
 /** @typedef {import('../../types/alphatab').model.Track} Track */
 /** @typedef {import('../../types/alphatab').model.Bar} Bar */
 /** @typedef {import('../../types/alphatab').model.Beat} Beat */
@@ -1054,11 +1055,12 @@ export function qrSvg(url){
  * @param {Sheet} sheet Angaben für das Leadsheet
  * @param {Pattern[]} catalog Pattern-Katalog
  * @param {?import('./base.js').ChordLibrary} library Akkordkatalog, null ohne
- * @param {{compact?: boolean}} [options] compact: Wiederholungen in den Tabs zusammenfassen (tabUnits(), hier nur
- *   für die Spielfolge in Worten)
+ * @param {{compact?: boolean, head?: SongHead}} [options] compact: Wiederholungen in den Tabs zusammenfassen (tabUnits(),
+ *   hier nur für die Spielfolge in Worten); head: Titel und Interpret (ohne Angabe die der Noten)
  * @returns {string} HTML
  */
 export function renderInstructions(alphaTab, score, sheet, catalog, library, options = {}){
+  const head = options.head ?? {title: score.title, artist: score.artist};
   const staff = guitarStaff(score);
   const mb = score.masterBars[0];
   const bar = staff.bars[0];
@@ -1126,8 +1128,8 @@ export function renderInstructions(alphaTab, score, sheet, catalog, library, opt
   return `
     <div class="ls-head">
       <div class="ls-head-text">
-        <h1>${escapeHtml(score.title || 'Ohne Titel')}</h1>
-        ${score.artist ? `<div class="ls-artist">${escapeHtml(score.artist)}</div>` : ''}
+        <h1>${escapeHtml(head.title || 'Ohne Titel')}</h1>
+        ${head.artist ? `<div class="ls-artist">${escapeHtml(head.artist)}</div>` : ''}
         <div class="ls-facts">${facts.join(' · ')}</div>
       </div>
       ${qrs ? `<div class="ls-qrs">${qrs}</div>` : ''}
@@ -1157,7 +1159,7 @@ function guitarStaff(score){
 }
 
 /**
- * Spuren mit Saiten, deren Capo von dem auf dem Blatt abweicht (der Editor meldet das auch, siehe renderNotices()).
+ * Spuren mit Saiten, deren Capo von dem auf dem Blatt abweicht (der Editor meldet das als Konflikt, siehe renderConflicts()).
  * @param {Score} score Noten
  * @returns {{track: string, capo: number}[]} leer, wenn alle gleich sind; sonst alle Spuren mit Saiten (track: Name
  *   wie in der Oberfläche)
@@ -1169,7 +1171,7 @@ export function capoMismatch(score){
 }
 
 /**
- * Gruppe eines Abschnitts: der Name ohne Nummer, klein; "Refrain" zählt als "Chorus" (wie im ChordPro-Export).
+ * Gruppe eines Abschnitts: der Name ohne Nummer, klein; "Refrain" zählt als "Chorus".
  * "Chorus 2" und "Chorus" gehören zusammen, "Verse 2" und "Verse" auch.
  * @param {string} name Name des Abschnitts
  * @returns {string} leer ohne Namen
@@ -1491,15 +1493,16 @@ export function applyCuts(list, score, cuts){
  * @param {boolean} [own] eigene Seite: mit Titel oben
  * @param {boolean} [merge] gleiche Abschnitte nur einmal ausschreiben
  * @param {SheetCut[]} [cuts] Takte, die durch einen Hinweis ersetzt sind
+ * @param {SongHead} [head] Titel und Interpret (aus song.json; ohne Angabe die der Noten)
  * @returns {{html: string, merged: {name: string, count: number}[], differ: DifferEntry[]}}
  */
-export function renderLyricsPage(score, own = false, merge = true, cuts = []){
+export function renderLyricsPage(score, own = false, merge = true, cuts = [], head = {title: score.title, artist: score.artist}){
   const model = buildTextModel(score);
   const sections = applyCuts(model.sections, score, cuts);
   const {sections: list, merged, differ} = merge ? collapseSections(sections)
     : {sections, merged: [], differ: []};
-  const html = `${own ? `<div class="ls-page2-head"><strong>${escapeHtml(score.title || 'Ohne Titel')}</strong>${
-    score.artist ? ` <span class="ls-soft">${escapeHtml(score.artist)}</span>` : ''}</div>` : ''}
+  const html = `${own ? `<div class="ls-page2-head"><strong>${escapeHtml(head.title || 'Ohne Titel')}</strong>${
+    head.artist ? ` <span class="ls-soft">${escapeHtml(head.artist)}</span>` : ''}</div>` : ''}
     <div class="ls-text">${renderTextView({...model, sections: list})}</div>`;
   return {html, merged, differ};
 }
@@ -1525,16 +1528,17 @@ const FIT_SLACK = 1.003;
  * @param {Sheet} sheet Angaben für das Leadsheet
  * @param {Pattern[]} catalog Pattern-Katalog
  * @param {?import('./base.js').ChordLibrary} library Akkordkatalog, null ohne
+ * @param {SongHead} [head] Titel und Interpret (aus song.json; ohne Angabe die der Noten, die meist keine haben)
  * @returns {LeadsheetParts}
  */
-export function generateLeadsheet(alphaTab, score, sheet, catalog, library){
+export function generateLeadsheet(alphaTab, score, sheet, catalog, library, head = {title: score.title, artist: score.artist}){
   const {layout} = sheet;
   // Die Fußzeile gehört auf die Seite mit den Tabs, wenn alphaTab dort etwas zeichnet.
   const credit = sheet.tabs.some(tab => tabTrack(score, tab.track) && tabPieces(tab, sheet.cuts).some(p => 'from' in p))
     ? CREDIT_HTML : '';
-  const instructions = renderInstructions(alphaTab, score, sheet, catalog, library, {compact: layout.compactTabs})
+  const instructions = renderInstructions(alphaTab, score, sheet, catalog, library, {compact: layout.compactTabs, head})
     + credit;
-  const text = renderLyricsPage(score, layout.twoPages, layout.mergeSections, sheet.cuts);
+  const text = renderLyricsPage(score, layout.twoPages, layout.mergeSections, sheet.cuts, head);
   const wrap = `<div class="ls-text-wrap">${text.html}</div>`;
   return {
     pages: layout.twoPages ? [{label: 'Seite 1 – Spielanleitung', html: instructions, text: false},
@@ -1607,6 +1611,34 @@ export function describeLayout(over, parts, layout){
       + `${many ? 'stehen' : 'steht'} deshalb ganz da.`;
   }
   return {text: text.trim(), problem};
+}
+
+/**
+ * Druckt das Leadsheet eines Songs ohne den Dialog "Leadsheet" (Menü der Liedansicht): Das Blatt wird unsichtbar gesetzt
+ * wie in der Vorschau (generateLeadsheet(), layoutLeadsheet(), Tabs mit fillSheetTabs()) und dann gedruckt.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {string} tex Noten als alphaTex
+ * @param {*} data Angaben für das Leadsheet (Feld leadsheet in song.json, wird normalisiert)
+ * @param {SongHead} head Titel und Interpret (Kopf des Blatts; daraus auch der Titel des Dokuments)
+ * @returns {Promise<void>} fertig, wenn der Druckdialog geöffnet ist
+ */
+export async function printSongLeadsheet(alphaTab, tex, data, head){
+  const score = parseScore(alphaTab, tex);
+  const sheet = normalizeSheet(data);
+  const catalog = await loadPatterns().then(p => p.patterns).catch(() => []);
+  const library = await loadChordLibrary().catch(() => null);
+  // Unsichtbar, aber mit Breite: Die Seite rechnet in cqw, gemessen wird beim Setzen.
+  const view = document.createElement('div');
+  view.className = 'els-preview';
+  view.style.cssText = 'position:absolute; left:-20000px; top:0; width:800px; visibility:hidden;';
+  document.body.append(view);
+  try {
+    layoutLeadsheet(view, generateLeadsheet(alphaTab, score, sheet, catalog, library, head), sheet.layout);
+    await fillSheetTabs(view, new SheetTabs(alphaTab), tex, sheet);
+    printLeadsheet(view, [head.artist, head.title].filter(Boolean).join(' - ') || 'Leadsheet');
+  } finally {
+    view.remove();
+  }
 }
 
 /**
@@ -2539,7 +2571,9 @@ export class LeadsheetTab {
     if(!view || !ed.score) return;
     const sheet = {...ed.sheet, ...draft};
     const top = view.scrollTop;
-    const parts = generateLeadsheet(ed.alphaTab, ed.score, sheet, this.catalog, this.library);
+    const song = findSong(ed.player.slug);
+    const parts = generateLeadsheet(ed.alphaTab, ed.score, sheet, this.catalog, this.library,
+      {title: song?.title ?? '', artist: song?.artist ?? ''});
     const run = this.previewRun = (this.previewRun ?? 0) + 1;
     layoutLeadsheet(view, parts, sheet.layout);
     this.sheetTabs ??= new SheetTabs(ed.alphaTab);
@@ -2733,7 +2767,8 @@ export class LeadsheetTab {
         this.renderPreview().then(() => {
           const view = /** @type {?HTMLElement} */ (this.tab?.querySelector('.els-preview'));
           const score = ed.score;
-          if(view && score) printLeadsheet(view, [score.artist, score.title].filter(Boolean).join(' - ') || 'Leadsheet');
+          const song = findSong(ed.player.slug);
+          if(view && score) printLeadsheet(view, [song?.artist, song?.title].filter(Boolean).join(' - ') || 'Leadsheet');
         });
         return;
       }

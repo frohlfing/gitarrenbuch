@@ -4,7 +4,7 @@ Funktionen, wo und in welcher Reihenfolge sie angezeigt werden, mit Tastenkürze
 Knöpfe sind umgesetzt; was noch fehlt, steht beim jeweiligen Punkt.
 
 Aufteilung: In der **Werkzeugleiste** steht, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu Speichern,
-Rückgängig, Verlauf, Uploads, Transponieren, Hinweise, Hilfe, ✕. **Links** steht alles, was den Schlag bzw. die Note am Cursor betrifft, auch Notenwerte und
+Rückgängig, Verlauf, Uploads, Transponieren, Konflikte, Hilfe, ✕. **Links** steht alles, was den Schlag bzw. die Note am Cursor betrifft, auch Notenwerte und
 Einfügen/Löschen (wie die Palette in Guitar Pro), zuletzt vom Takt am Cursor Abschnitt, Taktart und Tempo. **Rechts**
 steht der Liedtext (oben das Textfeld, darunter die Vorschau, die Linie dazwischen lässt sich ziehen), **unten** Audio
 (Sync-Editor, Höhe ziehbar). Spuren und Leadsheet öffnen als Dialoge über die Knöpfe der Werkzeugleiste. Der Akkord eines Schlags wird links gewählt (Auswahlliste, "+" für einen neuen mit Griff), die Griffbilder für das Blatt im Dialog "Leadsheet". Auf schmalen Bildschirmen ist das linke Panel anfangs zu; die
@@ -12,8 +12,8 @@ Notenwerkzeuge erreicht man dann über F2 bzw. die Tastenkürzel.
 
 Einschalten: "Bearbeiten" im Menü ⋮ der Abspielleiste, immer direkt.
 
-**Meldungen** unter der Werkzeugleiste, je Abweichung eine Zeile mit Knopf, der sie behebt (nach jeder Änderung neu,
-Rückgängig mit Strg+Z):
+**Konflikte** unter der Werkzeugleiste, je Abweichung eine Zeile mit Knopf, der sie löst (nach jeder Änderung neu,
+Rückgängig mit Strg+Z). Alle Fälle mit Ursache und Lösung: `docs/Konflikte.md`.
 - Der Song läuft nicht von oben nach unten durch (Wiederholungszeichen, Volta-Klammern, Sprungzeichen, Wiederholungstakte) –
   "Wiederholungen und Sprünge ausschreiben"
 - Capo ungleich (je Spur genannt) – "Capo angleichen": alle auf den Capo der Akkordspur, Klang bleibt
@@ -45,7 +45,7 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 ### Sonstiges
 - Hilfe (?) – zeigt die Tastenkürzel
 - ✕ – beendet den Bearbeitungsmodus (fragt bei Ungespeichertem nach)
-- ⚠ Hinweise – klappt die Abweichungen von der Form des Gitarrenbuchs auf, jede mit einem Knopf zum Beheben
+- ⚠ Konflikte – klappt die Abweichungen von der Form des Gitarrenbuchs auf, jede mit einem Knopf zum Lösen
 
 ## Linkes Panel "Am Cursor" (F2)
 
@@ -119,14 +119,14 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 ## Werkzeugleiste: der ganze Song
 
 - Tonart – alle 15 Dur- und 15 Moll-Tonarten (Cb bis C#, Abm bis A#m); gilt immer für den ganzen Song (die Songs im
-  Gitarrenbuch wechseln die Tonart nicht). Strg+K setzt den Cursor ins Feld. Die erkannte Tonart steht nur bei den Hinweisen, und nur
+  Gitarrenbuch wechseln die Tonart nicht). Strg+K setzt den Cursor ins Feld. Die erkannte Tonart steht nur bei den Konflikten, und nur
   wenn sie von der notierten abweicht
 - Shuffle – ein Knopf links neben "Transponieren", der den Zustand als Symbol zeigt (zwei Achtel = zwei gebalkte Achtel: gerade;
   zwei gebalkte Achtel = Triole aus Viertel und Achtel: Shuffle); ein Klick (oder Strg+/) schaltet um, für den ganzen Song. Mehr
   braucht das Gitarrenbuch nicht (die Songs nutzen nur Shuffle, `\tf triplet8th`); ein anderes Feeling aus einem Import meldet ein
-  Hinweis, der Knopf gilt dann als aus
-- Capo und Tuning – rechts neben dem Knopf "Transponieren" nur als Anzeige wie im Kopf des Players ("**Capo 3** · **D**ADGBE": der Capo nur bei Capo > 0, das Tuning nur bei Abweichung vom Standard, abweichende Saiten fett); ein Klick öffnet den Dialog Transponieren, nur dort lassen sie sich ändern. Capo (alle Spuren): die Griffe bleiben (Tabs und Griffbilder ändern sich nicht, die Noten klingen um den Capo höher). Bei
-  ungleichem Capo bleibt das Feld leer; "Capo angleichen" steht bei den Hinweisen
+  Konflikt, der Knopf gilt dann als aus
+- Capo und Tuning – rechts neben dem Knopf "Transponieren" nur als Anzeige wie im Kopf des Players ("**Capo 3** · **D**ADGBE": der Capo nur bei Capo > 0, das Tuning nur bei Abweichung vom Standard, abweichende Saiten fett); ändern lassen sie sich nur im Dialog Transponieren. Capo (alle Spuren): die Griffe bleiben (Tabs und Griffbilder ändern sich nicht, die Noten klingen um den Capo höher). Bei
+  ungleichem Capo zeigt die Anzeige den Capo der ersten Spur; "Capo angleichen" steht bei den Konflikten
 - Tuning (alle Spuren; Textfeld im Dialog), z. B. "D A D G B E"; beim Verlassen wird die Eingabe korrigiert: Großbuchstaben, Leerzeichen
   zwischen den Tönen (auch "dadgbe" geht), zu viele Töne fallen weg, fehlende und ungültige werden durch die Saiten des Standards
   ersetzt (`normalizeTuningText()` in `notation.js`). Das Standard-Tuning zeigt das Feld als "Standard"; beim Bearbeiten stehen
@@ -144,7 +144,7 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
   Griffen und Vorzeichen um; Capo und Tuning ändern nur die Noten. Die Tonart wandert mit dem Klang, ein Vorschlag nennt das
   Capo mit den leichtesten Griffen, bei Klangänderung steht der Befehl `bin/audio.php --transponieren` zum Kopieren da. Ein Schritt "Rückgängig"
   nimmt es zurück. Es wird keine Verschiebung gespeichert. Die Audiospur wird dabei nicht verändert; sie lässt sich lokal mit `php bin/audio.php --only=SLUG --transponieren=N` verschieben (siehe README).
-- Wiederholungen ausschreiben (nur als Hinweis, wenn der Song nicht von oben nach unten durchläuft, also meist nach einem Guitar-Pro-Import) – Wiederholungen, Volta-Klammern, Sprungzeichen (D.C., D.S., D.S.S., al Coda,
+- Wiederholungen ausschreiben (nur als Konflikt, wenn der Song nicht von oben nach unten durchläuft, also meist nach einem Guitar-Pro-Import) – Wiederholungen, Volta-Klammern, Sprungzeichen (D.C., D.S., D.S.S., al Coda,
   al Fine) und Takt-Wiederholungszeichen (Simile); mehrere Strophen an wiederholten Takten verteilen sich auf die
   Durchgänge, Sync-Punkte kommen an ihren Durchgang. Nach einem Sprung wird nicht mehr wiederholt, von
   Volta-Klammern gilt die letzte (wie üblich). Beispiel: "Für Elise" 25 → 45 Takte
