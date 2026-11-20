@@ -12,17 +12,17 @@ Reihenfolge in der Liste.
 
 ## Übersicht
 
-| Nr. | Konflikt                                   | Knopf (Befehl)                                      | Lösung ändert            |
-|-----|--------------------------------------------|-----------------------------------------------------|--------------------------|
-| 1   | Song läuft nicht von oben nach unten durch | Wiederholungen und Sprünge ausschreiben (`unroll`)  | Takte, Leadsheet-Stellen |
-| 2   | Capo ungleich                              | Capo angleichen (`unifyCapo`)                       | Capo, Bünde              |
-| 3   | Tuning ungleich                            | Tuning angleichen (`unifyTuning`)                   | Tuning, Bünde            |
-| 4   | Tonart: notiert X, erkannt Y               | Tonart korrigieren (`detectKey`)                    | Vorzeichen               |
-| 5   | Triolen-Feeling, das nicht Shuffle ist     | Feeling entfernen (`removeFeel`)                    | Triolen-Feeling          |
-| 6   | Akkorde stehen auch außerhalb der Akkordspur | Akkorde nach „…“ übertragen (`mergeChords`)       | Akkorde, ggf. Schläge    |
-| 7   | Liedtext steht auch außerhalb der Textspur | Liedtext nach „…“ übertragen (`mergeLyrics`)        | Silben, ggf. Schläge     |
-| 8   | Unbekannte Akkordnamen                     | – (Dialog "Akkord")                                 | –                        |
-| 9   | Der Griff passt nicht zum Namen            | – (Dialog "Akkord")                                 | –                        |
+| Nr. | Konflikt                                     | Knopf (Befehl)                                       | Lösung ändert             |
+|-----|----------------------------------------------|------------------------------------------------------|---------------------------|
+| 1   | Song läuft nicht von oben nach unten durch   | Wiederholungen und Sprünge ausschreiben (`unroll`)   | Takte, Leadsheet-Stellen  |
+| 2   | Capo ungleich                                | Capo angleichen (`unifyCapo`)                        | Capo, Bünde               |
+| 3   | Tuning ungleich                              | Tuning angleichen (`unifyTuning`)                    | Tuning, Bünde             |
+| 4   | Tonart: notiert X, erkannt Y                 | Tonart korrigieren (`detectKey`)                     | Vorzeichen                |
+| 5   | Triolen-Feeling, das nicht Shuffle ist       | Feeling entfernen (`removeFeel`)                     | Triolen-Feeling           |
+| 6   | Akkorde stehen auch außerhalb der Akkordspur | Akkorde nach „…“ übertragen (`mergeChords`)          | Akkorde, ggf. Schläge     |
+| 7   | Liedtext steht auch außerhalb der Textspur   | Liedtext nach „…“ übertragen (`mergeLyrics`)         | Silben, ggf. Schläge      |
+| 8   | Unbekannte Akkordnamen                       | – (Dialog "Akkord")                                  | –                         |
+| 9   | Der Griff passt nicht zum Namen              | – (Dialog "Akkord")                                  | –                         |
 
 ## 1. Song läuft nicht von oben nach unten durch
 
@@ -122,6 +122,65 @@ Reihenfolge in der Liste.
 - **Lösung:** kein Knopf. Im Dialog "Akkord" Name oder Griff ändern (der Dialog zeigt die passenden Griffe und warnt
   ebenfalls).
 - **Offen:** Ein Knopf "Name übernehmen" (den Namen, wie er klingt) bzw. "Standardgriff nehmen".
+
+## Konflikte durch den Import
+
+Die meisten Konflikte kommen aus Guitar-Pro-Dateien. Der Import löst nur Formales selbst; was den Inhalt ändern würde
+(Takte, Capo, Tonart, Spuren), bleibt wie in der Datei und erscheint im Editor als Konflikt. So geht beim Import nichts
+verloren, was man nicht gesehen hat.
+
+### Guitar-Pro-Import (neuer Song)
+
+Ablauf: Der Browser liest die Datei mit alphaTab (`readGpFile()` in `notation.js`), bereinigt sie
+(`cleanImportedScore()`), schreibt sie als alphaTex und prüft das Ergebnis (`exportScore()`); der Server legt den Song
+an (`api/import.php`).
+
+**Direkt gelöst** (automatisch, ohne Rückfrage):
+
+| Konflikt in der Datei                                                           | Lösung beim Import                                                                                                                                             |
+|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Mehrere Akkorde gleichen Namens je Spur, Bruchstücke, ausgeblendete Griffbilder | `normalizeChords()`: je Spur und Name genau ein Akkord mit Griffbild (Griff aus dem Katalog, sonst der meistgenutzte eigene), mit Barré; ungenutzte fallen weg |
+| Rhythmus-Schrägstriche (Slash-Notation an Schlägen)                             | entfernt (alphaTab 1.8.4 stürzt bei Tabs mit Schrägstrichen ab)                                                                                                |
+| Anzeige je Spur (nur Tabs, nur Noten, Schrägstriche, Ziffern)                   | vereinheitlicht: Noten und Tabs (Tabs nur bei Saiten); was gezeigt wird, wählt der Player                                                                      |
+| Name des Tunings mit Notizen ("Key: C (orig. D)")                               | nur der Name des bekannten Tunings, sonst keiner                                                                                                               |
+| Systemtrenner zwischen den Notenzeilen                                          | aus                                                                                                                                                            |
+| Doppelte Taktstriche an beliebigen Stellen                                      | nur noch am Ende des Takts vor einem Abschnitt (`applySectionBars()`)                                                                                          |
+| Titel, Interpret, Album, Notizen usw. in den Noten                              | nach `song.json`, in den Noten geleert (eine Stelle je Information)                                                                                            |
+| Eingebettete Audiospur                                                          | wird `audio.mp3` (Server); die Sync-Punkte bleiben im alphaTex                                                                                                 |
+
+**Mit Rückfrage:** Kann alphaTex etwas nicht abbilden, findet die Prüfung danach Abweichungen (Takt für Takt verglichen,
+`fingerprint()`). Der Import-Dialog nennt die Takte ("Abweichungen in 2 Takten (Takt 12, 30)") und fragt, ob trotzdem
+übernommen wird; die Originaldatei bleibt unter `upload/` erhalten.
+
+**Bleiben als Konflikt** (im Editor zu lösen):
+
+| Nr. | Konflikt                                   | Typisch nach dem Import, weil …                                                 |
+|-----|--------------------------------------------|---------------------------------------------------------------------------------|
+| 1   | Song läuft nicht von oben nach unten durch | GP-Dateien sparen Platz mit Wiederholungen, Volta-Klammern und D.S./Coda        |
+| 2   | Capo ungleich                              | Guitar Pro hat den Capo je Spur; Gesang oder Bass oft ohne                      |
+| 3   | Tuning ungleich                            | Spuren aus verschiedenen Quellen, z. B. eine Gitarre einen Halbton tiefer       |
+| 4   | Tonart weicht von der erkannten ab         | viele GP-Dateien haben gar keine Vorzeichen (C-Dur), obwohl der Song in A steht |
+| 5   | Triolen-Feeling, das nicht Shuffle ist     | Guitar Pro kennt mehrere Feelings (Sechzehntel, punktiert, Scottish)            |
+| 6   | Akkorde auch außerhalb der Akkordspur      | Akkorde stehen in GP oft an mehreren Spuren (Gitarre, Gesang)                   |
+| 7   | Liedtext auch außerhalb der Textspur       | Text an einer Gitarrenspur und an der Gesangsspur                               |
+| 8   | Unbekannte Akkordnamen                     | freie Namen aus Guitar Pro ("Gsus", "A2", Tippfehler)                           |
+| 9   | Der Griff passt nicht zum Namen            | Griffbilder in GP sind frei gezeichnet und oft falsch benannt                   |
+
+Dazu kommen oft Takte, deren Länge nicht zur Taktart passt (markiert in den Noten, siehe unten). Die API meldet nach
+dem Import nur Fall 1 (nur Sprungzeichen `\jump`) und Fall 2 in der Übersicht (`read_score_issues()`).
+
+### Andere Wege, auf denen Noten hereinkommen
+
+- **Neuer Song ohne Datei** ("+ Neues Lied", `createScore()`): eine leere Gitarrenspur mit Tempo, Tuning, Capo und Tonart
+  aus dem Formular; kein Konflikt.
+- **Spur aus Guitar-Pro-Datei importieren** (Dialog "Spuren", `importTrackFile()` und `importTrack()`): Die Datei wird
+  wie beim Import gelesen und bereinigt (direkt gelöst wie oben). Akkorde und Text der Spur kommen nicht mit, also
+  keine Konflikte 6 und 7. Capo und Tuning der Spur bleiben, wie sie in der Datei sind: Weichen sie ab, entstehen die
+  Konflikte 2 bzw. 3. Takte, deren Länge nicht passt, nennt der Hinweis danach.
+- **Chord-Datei importieren** (ChordPro oder Akkorde über dem Text, Panel "Liedtext", `insertChordFileText()`):
+  Akkordnamen, die der Katalog nicht kennt, werden direkt vereinfacht (`simplifyChord()`: "D/F#" → "D", "Am7b5" →
+  "Am7" → "Am"); die Griffe kommen aus dem Katalog. Ein Name, für den es auch vereinfacht nichts gibt, bleibt und wird
+  Konflikt 8. Zu viel Text für die Schläge markiert das Panel rot (siehe unten).
 
 ## Kein Konflikt, aber verwandt
 
