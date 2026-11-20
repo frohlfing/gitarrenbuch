@@ -7,6 +7,7 @@ import {
   transposeKeySignature,
 } from './base.js';
 import {findGrips} from './chordgrips.js';
+import {resolveConflicts} from './conflicts.js';
 
 /** @typedef {import('../../types/alphatab').model.Score} Score */
 /** @typedef {import('../../types/alphatab').model.Staff} Staff */
@@ -395,28 +396,6 @@ export function moveToCapo(staff, capo){
   return octaves;
 }
 
-/**
- * Gibt allen Spuren mit Saiten denselben Capo: den der Akkordspur (siehe chordsTrack()), ohne Akkorde den der Spur
- * mit den meisten Noten. Die anderen Spuren werden mit moveToCapo() umgerechnet, sie klingen danach gleich. Für den
- * Editor; der Import lässt den Capo je Spur wie in der Datei.
- * @param {Score} score Noten, werden geändert
- * @returns {{capo: number, moved: string[], octaves: number}} Capo, umgerechnete Spuren, eine Oktave höher gelegte
- *   Noten
- */
-export function unifyCapo(score){
-  const stringed = stringedStaves(score);
-  const source = chordsTrack(score) ?? trackWithMost(score, beat => beat.notes.length > 0);
-  const capo = source?.staves.find(st => st.isStringed)?.capo ?? 0;
-  const moved = [];
-  let octaves = 0;
-  for(const staff of stringed){
-    if(staff.capo === capo) continue;
-    moved.push(staff.track.name);
-    octaves += moveToCapo(staff, capo);
-  }
-  return {capo, moved, octaves};
-}
-
 // --------------------------------------------------------------------------------------------------------------------
 // Noten lesen, wandeln und schreiben
 // --------------------------------------------------------------------------------------------------------------------
@@ -501,9 +480,6 @@ const INFO_FIELDS = {
  * @property {number} tempoMax höchstes Tempo im Song, in BPM
  * @property {?number} recordedTempo Anfangstempo, wie es in der Audiospur klingt (siehe recordingTempoRegion()),
  *   auf eine ganze Zahl gerundet; null ohne Sync-Punkte
- * @property {{start: number, end: number, tempo: number, factor: number, recorded: number}[]} tempoMismatches Abschnitte ohne
- *   Tempowechsel, deren notiertes Tempo nicht zur Audiospur passt (siehe recordingTempoRegion()), in Taktfolge; leer, wenn alle passen
- * @property {?number} lastSyncMs Position des letzten Sync-Punkts in der Audiospur (ms); null ohne Sync-Punkte
  */
 
 /**
@@ -546,34 +522,6 @@ export function recordingTempoRegion(alphaTab, score, bar = 0){
 }
 
 /**
- * Alle Abschnitte ohne Tempowechsel mit ihrem Tempo in der Audiospur (siehe recordingTempoRegion()).
- * @param {AlphaTabModule} alphaTab alphaTab-Modul
- * @param {Score} score Noten
- * @returns {TempoRegion[]} in Taktfolge; Abschnitte mit weniger als zwei Sync-Punkten fehlen
- */
-export function recordingTempoRegions(alphaTab, score){
-  const regions = [];
-  for(let bar = 0; bar < score.masterBars.length;){
-    const region = recordingTempoRegion(alphaTab, score, bar);
-    if(region) regions.push(region);
-    bar = (region ? region.end : bar + 1);
-    if(!region) while(bar < score.masterBars.length && !score.masterBars[bar].tempoAutomations.length) bar++;
-  }
-  return regions;
-}
-
-/**
- * Ob das notierte Tempo nicht zur Audiospur passt: schon dann, wenn ein anderes ganzzahliges Tempo besser passt
- * (Tempi sind ganze Zahlen; 105,6 in der Audiospur ergibt 106). Korrigiert wird später im Editor mit "Tempo an der
- * Audiospur anpassen".
- * @param {ScoreInfo} info Eckdaten aus readScoreInfo()
- * @returns {boolean}
- */
-export function isTempoMismatch(info){
-  return info.tempoMismatches.length > 0;
-}
-
-/**
  * Liest Tonart, Capo, Tuning und Tempo aus den Noten.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten
@@ -608,8 +556,6 @@ export function readScoreInfo(alphaTab, score){
     tempoMin: Math.min(...tempos),
     tempoMax: Math.max(...tempos),
     recordedTempo: region?.recorded ?? null,
-    tempoMismatches: recordingTempoRegions(alphaTab, score).filter(r => r.recorded !== r.tempo),
-    lastSyncMs: lastSyncMs(score),
   };
 }
 
@@ -642,54 +588,19 @@ export function shapeKey(key, capo){
 }
 
 /**
- * Position des letzten Sync-Punkts in der Audiospur, wie er in den Noten steht (\sync).
- * @param {Score} score Noten
- * @returns {?number} Millisekunden; null ohne Sync-Punkte
- */
-function lastSyncMs(score){
-  const offsets = score.masterBars.flatMap(mb => (mb.syncPoints ?? []).map(p => p.syncPointValue.millisecondOffset));
-  return offsets.length ? Math.max(...offsets) : null;
-}
-
-/**
- * Ob ein Sync-Punkt hinter dem Ende der Audiospur liegt, z. B. nach dem Wechsel auf einen anders geschnittenen
- * YouTube-Clip. Ein negativer erster Sync-Punkt gilt nicht: Dann beginnt Takt 1 vor der Audiospur (in Guitar Pro das
- * FramePadding), das ist gewollt.
- * @param {ScoreInfo} info Eckdaten aus readScoreInfo()
- * @param {?number} audioSeconds Länge der Audiospur; null ohne Audiospur
- * @returns {boolean}
- */
-export function isSyncOutsideAudio(info, audioSeconds){
-  return info.lastSyncMs !== null && audioSeconds !== null && info.lastSyncMs > audioSeconds * 1000;
-}
-
-/**
- * Eckdaten eines Songs für den Kopf der Liedansicht: eine Zeile ("Tonart G · 140 BPM · Capo 3 · DADGBE"; das Tuning nur, wenn es nicht EADGBE ist) und getrennt
- * davon die Hinweise, die der Kopf hinter einem Warnzeichen zeigt (Tempo passt nicht zur Audiospur, Sync-Punkte
- * außerhalb der Audiospur).
+ * Eckdaten eines Songs für den Kopf der Liedansicht als eine Zeile ("Tonart G · 140 BPM · Capo 3 · DADGBE"; das Tuning
+ * nur, wenn es nicht EADGBE ist).
  * @param {ScoreInfo} info Eckdaten aus den Noten
- * @param {?number} [audioSeconds] Länge der Audiospur in Sekunden, wenn bekannt
- * @returns {{parts: string[], warnings: string[]}} parts: Teile der Zeile als HTML; warnings: Hinweise als Text
+ * @returns {string[]} Teile der Zeile als HTML
  */
-export function describeScoreInfo(info, audioSeconds = null){
+export function describeScoreInfo(info){
   const min = Math.round(info.tempoMin);
   const max = Math.round(info.tempoMax);
-  const key = info.key;
-  const capo = info.capo;
-  return {
-    parts: [
-      key && escapeHtml(`Tonart ${key}`),
-      info.tempo ? (min === max ? `${min} BPM` : `${min}–${max} BPM`) : null,
-      ...capoTuningParts(info),
-    ].filter(Boolean),
-    warnings: [
-      isTempoMismatch(info)
-        ? `Das notierte Tempo passt nicht zur Audiospur (${info.tempoMismatches.map(r => `${r.start ? `ab Takt ${r.start + 1}: ` : ''}notiert ${
-          r.tempo}, Audio ${r.recorded} BPM`).join('; ')}).` : null,
-      isSyncOutsideAudio(info, audioSeconds)
-        ? 'Sync-Punkte passen nicht zur Audiospur: Mindestens einer liegt außerhalb.' : null,
-    ].filter(Boolean),
-  };
+  return [
+    info.key && escapeHtml(`Tonart ${info.key}`),
+    info.tempo ? (min === max ? `${min} BPM` : `${min}–${max} BPM`) : null,
+    ...capoTuningParts(info),
+  ].filter(Boolean);
 }
 
 /**
@@ -984,8 +895,8 @@ export function applyRecordingTempo(alphaTab, midi, points){
  * der Player); als Name des Tunings nur das Tuning selbst (GP-Dateien haben dort oft Notizen wie "Key: C (orig.
  * D)"); kein Systemtrenner (die schrägen Doppelstriche zwischen den Notenzeilen); doppelte Taktstriche nur vor
  * Abschnitten (applySectionBars()). Alles andere bleibt wie in der
- * Datei: Tonart und Vorzeichen, Spurnamen, Capo je Spur. Weicht das von der Konvention ab (Spurrollen, ein Capo),
- * markiert die Oberfläche den Song (read_score_issues() in api/lib/crud.php); korrigiert wird im Editor.
+ * Datei: Tonart und Vorzeichen, Spurnamen, Capo je Spur. Was von der Konvention abweicht (ein Capo, Akkorde und Text
+ * in einer Spur …), löst danach resolveConflicts() in conflicts.js.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @param {ChordLibrary} library Akkordkatalog
@@ -1008,13 +919,15 @@ function cleanImportedScore(alphaTab, score, library){
 
 /**
  * Liest eine GP-Datei für den Import: Die Angaben (Titel, Interpret, Beschreibung usw.) kommen nach song.json,
- * die Noten werden ohne diese Angaben zu alphaTex, bereinigt mit cleanImportedScore(). Geht dabei etwas verloren,
- * meldet das Ergebnis die betroffenen Takte (siehe exportScore()); ob trotzdem übernommen wird, entscheidet der
- * Benutzer. Die Audiospur löst der Server aus der Originaldatei, ihre Sync-Punkte stehen im alphaTex.
+ * die Noten werden ohne diese Angaben zu alphaTex, bereinigt mit cleanImportedScore() und ohne Konflikte
+ * (resolveConflicts() in conflicts.js, ohne Rückfrage). Geht beim Umwandeln etwas verloren, meldet das Ergebnis die
+ * betroffenen Takte (siehe exportScore()); ob trotzdem übernommen wird, entscheidet der Benutzer. Die Audiospur löst der
+ * Server aus der Originaldatei, ihre Sync-Punkte stehen im alphaTex.
  * @param {File} file Guitar-Pro-Datei (GP3 bis GP8)
- * @returns {Promise<{meta: Object<string, string>, tex: string, loss: ?ScoreLoss}>} Angaben (title, artist, die
- *   Felder aus INFO_FIELDS, notes; leere Texte, wenn die Datei sie nicht enthält), Noten als alphaTex und was beim
- *   Umwandeln verloren ging (null: nichts)
+ * @returns {Promise<{meta: Object<string, string>, tex: string, loss: ?ScoreLoss, changes: import('./conflicts.js').Change[],
+ *   lyrics: import('./conflicts.js').LeftoverLyrics[]}>} Angaben (title, artist, die Felder aus INFO_FIELDS, notes;
+ *   leere Texte, wenn die Datei sie nicht enthält), Noten als alphaTex, was beim Umwandeln verloren ging (null: nichts),
+ *   was der Konfliktlöser geändert hat und nicht übernommener Liedtext (für Chord-Dateien im Upload-Ordner)
  * @throws {Error} wenn die Datei nicht lesbar ist oder alphaTab das Ergebnis nicht lesen kann
  */
 export async function readGpFile(file){
@@ -1034,8 +947,11 @@ export async function readGpFile(file){
   };
   for(const prop of ['title', 'artist', 'notices', ...Object.values(INFO_FIELDS)]) score[prop] = '';
   // Ohne Katalog (Netzfehler) behalten die Akkorde ihren eigenen meistgenutzten Griff.
-  cleanImportedScore(alphaTab, score, await loadChordLibraryOrEmpty());
-  return {meta, ...exportScore(alphaTab, score)};
+  const library = await loadChordLibraryOrEmpty();
+  cleanImportedScore(alphaTab, score, library);
+  const resolved = resolveConflicts(alphaTab, writeScore(alphaTab, score), library);
+  return {meta, changes: resolved.changes, lyrics: resolved.lyrics,
+    ...exportScore(alphaTab, parseScore(alphaTab, resolved.tex))};
 }
 
 /**
@@ -1098,7 +1014,8 @@ function tuningToAlphaTex(tuning){
 }
 
 /**
- * Erzeugt die Noten für einen manuell angelegten Song (jeder Song hat Noten): eine Gitarrenspur mit NEW_SCORE_BARS
+ * Erzeugt die Noten für einen manuell angelegten Song (jeder Song hat Noten): eine Gitarrenspur (Instrument
+ * Akustikgitarre, docs/Instrumente.md) mit NEW_SCORE_BARS
  * leeren Takten, dazu Tempo, Tuning, Kapodaster und Tonart aus dem Formular.
  * @param {{tempo?: (number|string), tuning?: string, capo?: (number|string), key?: string}} music Angaben aus dem
  *   Formular; leer oder ungültig ergibt Tempo 120, Standard-Tuning, ohne Capo und C-Dur
@@ -1111,6 +1028,7 @@ export async function createScore(music){
     + `\\tuning (${tuningToAlphaTex(music.tuning)})\n` + (capo ? `\\capo ${capo}\n` : '')
     + Array(NEW_SCORE_BARS).fill('r.1').join(' | ');
   const score = parseScore(alphaTab, tex);
+  setInstrument(alphaTab, score.tracks[0], instrumentByKey('guitar'));
   // Tonart direkt im Modell setzen: Der Exporter schreibt sie dann in der Form, die alphaTex selbst erwartet.
   const key = (music.key ?? '').trim();
   const isMinor = MINOR_KEYS.includes(key);
@@ -1783,19 +1701,6 @@ export function setTuning(alphaTab, staff, tuning, keepSound){
 }
 
 /**
- * Ob unrollRepeats() etwas auszuschreiben hätte: Wiederholungen, Volta-Klammern, Sprungzeichen oder Takt-Wiederholungs-
- * zeichen (Simile). Dieselbe Prüfung wie dort, ohne die Noten zu kopieren.
- * @param {AlphaTabModule} alphaTab alphaTab-Modul
- * @param {Score} score Noten
- * @returns {boolean} true, wenn der Song nicht einfach von oben nach unten gespielt wird
- */
-export function hasRepeats(alphaTab, score){
-  return score.tracks.some(t => t.staves.some(st => st.bars.some(b => b.simileMark)))
-    || score.masterBars.some(mb => mb.directions?.size)
-    || playOrder(score, alphaTab.model.Direction).length !== score.masterBars.length;
-}
-
-/**
  * Schreibt Wiederholungen, Volta-Klammern, Sprungzeichen (D.C., D.S., Coda, Fine; siehe playOrder()) und
  * Takt-Wiederholungszeichen (Simile) aus: Jeder Takt steht danach so oft da, wie er gespielt wird, die Zeichen fallen
  * weg. Der Liedtext mehrerer Strophen an einem mehrfach gespielten Takt verteilt sich auf die Durchgänge (erster
@@ -1804,8 +1709,7 @@ export function hasRepeats(alphaTab, score){
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {function(string): Score} parse liest alphaTex ein
  * @param {string} tex Noten als alphaTex
- * @returns {?{score: Score, before: number, after: number, order: number[]}} ausgeschriebene Noten, Taktzahl
- *   vorher/nachher und je neuer Takt der alte Index; null,
+ * @returns {?{score: Score, before: number, after: number}} ausgeschriebene Noten und Taktzahl vorher/nachher; null,
  *   wenn es nichts auszuschreiben gibt
  */
 export function unrollRepeats(alphaTab, parse, tex){
@@ -1862,7 +1766,7 @@ export function unrollRepeats(alphaTab, parse, tex){
   base.masterBars = masterBars;
   relinkBars(base);
   // order: je neuer Takt der alte Index, damit Angaben außerhalb der Noten (Leadsheet in song.json) mitwandern können.
-  return {score: base, before, after: masterBars.length, order: order.map(o => o.bar)};
+  return {score: base, before, after: masterBars.length};
 }
 
 /**
@@ -2201,7 +2105,8 @@ export function deleteTrack(score, index){
 }
 
 /**
- * Fügt eine Gitarrenspur hinzu (Standard-Tuning, Akustikgitarre), mit einer Ganztaktpause je Takt.
+ * Fügt eine Gitarrenspur hinzu (Instrument Akustikgitarre, mit Tuning und Capo der Akkordspur, ohne Spur mit Saiten Standard-Tuning
+ * ohne Capo), mit einer Ganztaktpause je Takt.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten
  * @param {string} name Name der Spur
@@ -2214,7 +2119,11 @@ export function addTrack(alphaTab, score, name){
   track.playbackInfo.program = 25;
   const staff = new model.Staff();
   staff.isPercussion = false;
-  staff.stringTuning = new model.Tuning('', [64, 59, 55, 50, 45, 40], true);
+  // Tuning und Capo wie der Song (die Spur der Akkorde, siehe tuningStaves()), sonst Standard-Tuning ohne Capo.
+  const ref = tuningStaves(score)[0];
+  const tuning = ref ? [...ref.tuning] : [64, 59, 55, 50, 45, 40];
+  staff.stringTuning = new model.Tuning(model.Tuning.findTuning(tuning)?.name ?? '', tuning, false);
+  staff.capo = ref?.capo ?? 0;
   track.addStaff(staff);
   const settings = new alphaTab.Settings();
   for(const mb of score.masterBars){
@@ -2231,6 +2140,7 @@ export function addTrack(alphaTab, score, name){
     staff.addBar(bar);
   }
   score.addTrack(track);
+  setInstrument(alphaTab, track, instrumentByKey('guitar'));
   for(const bar of staff.bars) bar.finish(settings);
 }
 
@@ -2368,7 +2278,7 @@ export function splitTicks(ticks){
  * @returns {?Beat} der Schlag, der an der Stelle beginnt; null, wenn sich der Schlag dort nicht teilen lässt
  *   (Triole, Vorschlag oder eine Länge, die keine Notenwerte ergibt)
  */
-function splitBeat(alphaTab, beat, at){
+export function splitBeat(alphaTab, beat, at){
   if(beat.hasTuplet || beat.graceType) return null;
   const head = splitTicks(at);
   const tail = splitTicks(beatTicks(beat) - at);
@@ -2437,6 +2347,8 @@ function joinSyllables(a, b){
  * @property {number} split davon auf einem Schlag, der dafür geteilt wurde
  * @property {number} shifted davon nach vorne auf den klingenden Schlag gesetzt
  * @property {number} lost Akkorde, die auf einem Schlag mit anderem Akkord landen würden und wegfallen
+ * @property {{bar: number, name: string, kept: string, track: string}[]} lostChords diese Akkorde: Takt (Index),
+ *   Name, der Akkord, der an der Stelle bleibt, und die Spur, aus der der weggefallene kam
  * @property {number} dropped Silben, die die Zielspur oder eine dritte Spur vorher hatte und die wegfallen
  */
 
@@ -2464,7 +2376,7 @@ export function moveContent(alphaTab, score, kind, target, mode){
   const dest = score.tracks[target];
   const staff = dest.staves[0];
   /** @type {MoveResult} */
-  const result = {moved: 0, exact: 0, split: 0, shifted: 0, lost: 0, dropped: 0};
+  const result = {moved: 0, exact: 0, split: 0, shifted: 0, lost: 0, dropped: 0, lostChords: []};
   const isChords = kind === 'chords';
   const source = isChords ? null : lyricsTrack(score);
   const sources = isChords ? score.tracks.filter(t => t !== dest) : source && source !== dest ? [source] : [];
@@ -2514,8 +2426,10 @@ export function moveContent(alphaTab, score, kind, target, mode){
       const name = transposeChordName(chord.name, item.staff.capo - staff.capo);
       if(beat.chordId){
         // Gleicher Akkord: nichts zu tun. Anderer: Der zuerst gesetzte gewinnt (die Zielspur, dann nach Reihenfolge).
-        if(staff.chords?.get(beat.chordId)?.name !== name){
+        const kept = staff.chords?.get(beat.chordId)?.name;
+        if(kept !== name){
           result.lost++;
+          result.lostChords.push({bar: item.bar, name, kept, track: trackName(item.staff.track)});
           continue;
         }
       } else {
@@ -2621,20 +2535,33 @@ export function duplicateTrack(parse, tex, score, index){
 /**
  * Übernimmt eine Spur aus einem anderen Song (z. B. die Melodie aus einer zweiten Guitar-Pro-Datei) als neue,
  * letzte Spur. Takt "from" der Quelle kommt auf Takt "at" des Songs, die Takte davor sind Pausen, was über das Ende
- * des Songs hinausgeht, fällt weg. Taktart, Tempo, Abschnitte usw. bleiben die des Songs; Takte, deren Länge nicht
+ * des Songs hinausgeht, fällt weg. Taktart, Tempo, Vorzeichen, Abschnitte usw. bleiben die des Songs, Capo und
+ * Tuning der Spur werden auf die des Songs umgerechnet (klingt gleich); Takte, deren Länge nicht
  * zur Taktart passt, meldet das Ergebnis. Akkorde und Text der Quelle kommen nicht mit (siehe duplicateTrack()).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @param {Track} track Spur aus anderen, frisch gelesenen Noten (wird umgehängt)
  * @param {number} from erster Takt der Quelle (Index)
  * @param {number} at Zieltakt dafür (Index)
- * @returns {{bars: number, cut: number, misfit: number[]}} übernommene Takte, weggefallene Takte, Indizes der Takte
- *   mit falscher Länge
+ * @returns {{bars: number, cut: number, misfit: number[], octaves: number, misses: number}} übernommene Takte,
+ *   weggefallene Takte, Indizes der Takte mit falscher Länge, Noten, die für den Capo des Songs eine Oktave höher
+ *   kamen, und Noten, die sich nicht auf das Tuning des Songs umrechnen ließen
  */
 export function importTrack(alphaTab, score, track, from, at){
   const {model} = alphaTab;
   const settings = new alphaTab.Settings();
   stripContent(track);
+  // Capo und Tuning wie der Song (umgerechnet, klingt gleich), damit kein Konflikt entsteht.
+  const ref = tuningStaves(score)[0];
+  let octaves = 0;
+  let misses = 0;
+  for(const staff of track.staves){
+    if(!ref || !hasStrings(staff)) continue;
+    if(staff.tuning.length === ref.tuning.length && staff.tuning.join(',') !== ref.tuning.join(',')){
+      misses += setTuning(alphaTab, staff, [...ref.tuning].reverse(), true);
+    }
+    octaves += moveToCapo(staff, ref.capo);
+  }
   track.name = track.shortName = freeTrackName(score, track.name);
   let bars = 0;
   let cut = 0;
@@ -2649,12 +2576,15 @@ export function importTrack(alphaTab, score, track, from, at){
     const result = [];
     for(const mb of score.masterBars){
       const source = sourceBars[from + mb.index - at];
+      const neighbour = score.tracks[0].staves[0].bars[mb.index];
       if(mb.index >= at && source){
+        // Vorzeichen wie im Song (die Noten klingen gleich, nur die Schreibweise folgt der Tonart des Songs).
+        source.keySignature = neighbour.keySignature;
+        source.keySignatureType = neighbour.keySignatureType;
         result.push(source);
         continue;
       }
       const bar = new model.Bar();
-      const neighbour = score.tracks[0].staves[0].bars[mb.index];
       bar.clef = clef;
       bar.keySignature = neighbour.keySignature;
       bar.keySignatureType = neighbour.keySignatureType;
@@ -2688,7 +2618,7 @@ export function importTrack(alphaTab, score, track, from, at){
     const filled = bar.voices[0] ? timeline(bar.voices[0]).at(-1)?.end ?? 0 : 0;
     if(taken.has(bar) && filled !== length) misfit.push(bar.index);
   }
-  return {bars, cut, misfit};
+  return {bars, cut, misfit, octaves, misses};
 }
 
 /**
@@ -2790,26 +2720,126 @@ export function setTrackProgram(alphaTab, track, program){
 }
 
 /**
- * Lage der Noten im Notensystem einer Spur gegenüber dem Klang (displayTranspositionPitch von alphaTab, in alphaTex
- * `\displaytranspose`; Guitar Pro nennt es "Oktave"): Die Noten stehen um diese Halbtöne (mit umgekehrtem Vorzeichen)
- * höher oder tiefer als sie klingen. Gitarren schreibt man üblicherweise eine Oktave höher (-12). Klang, Tabs und
- * Akkorde ändern sich nicht.
- * @param {Track} track Spur
- * @returns {number} Wert des ersten Notensystems (0 bei Schlagzeug)
+ * Ein Instrument einer Spur: Klang (General-MIDI-Programm) und Notenlage zusammen (Liste und Regeln in
+ * docs/Instrumente.md).
+ * @typedef {Object} Instrument
+ * @property {string} key Schlüssel, z. B. "guitar"
+ * @property {string} name Name in der Auswahlliste, z. B. "Akustikgitarre"
+ * @property {?number} program MIDI-Programm des Klangs; null beim Schlagzeug (Schlagzeugkanal)
+ * @property {number[]} programs MIDI-Programme, die zu diesem Instrument werden
+ * @property {?number} notation Lage der Noten (displayTranspositionPitch von alphaTab, in alphaTex `\displaytranspose`):
+ *   -12 eine Oktave höher notiert als klingend (Gitarre, Bass), 0 wie klingend; null beim Schlagzeug
+ * @property {string} examples Instrumente dieser Gruppe für den Tooltip, z. B. "Querflöte, Blockflöte, Panflöte"
  */
-export function notationPitch(track){
-  return track.staves.find(st => !st.isPercussion)?.displayTranspositionPitch ?? 0;
+
+/**
+ * Ganze Zahlen von a bis b.
+ * @param {number} a erste
+ * @param {number} b letzte
+ * @returns {number[]}
+ */
+const programRange = (a, b) => Array.from({length: b - a + 1}, (_, i) => a + i);
+
+/**
+ * Die Instrumente, die eine Spur haben kann (docs/Instrumente.md), in der Reihenfolge der Auswahlliste.
+ * @type {Instrument[]}
+ */
+export const INSTRUMENTS = [
+  {key: 'piano', name: 'Klavier', program: 0, programs: programRange(0, 7), notation: 0,
+    examples: 'Flügel, E-Piano, Honky-Tonk, Cembalo, Clavinet'},
+  {key: 'mallets', name: 'Xylophon', program: 13, programs: [...programRange(8, 15), 108], notation: 0,
+    examples: 'Glockenspiel, Vibraphon, Marimba, Celesta, Spieluhr, Röhrenglocken, Hackbrett, Kalimba'},
+  {key: 'organ', name: 'Orgel', program: 16, programs: programRange(16, 23), notation: 0,
+    examples: 'Hammond-Orgel, Kirchenorgel, Akkordeon, Bandoneon, Mundharmonika'},
+  {key: 'guitar', name: 'Akustikgitarre', program: 25, programs: [24, 25, 46, ...programRange(104, 107)], notation: -12,
+    examples: 'Westerngitarre, Konzertgitarre (Nylon), Harfe, Banjo, Sitar, Koto'},
+  {key: 'electric', name: 'E-Gitarre', program: 27, programs: programRange(26, 28), notation: -12,
+    examples: 'Jazzgitarre, cleane E-Gitarre, gedämpfte E-Gitarre'},
+  {key: 'distortion', name: 'E-Gitarre verzerrt', program: 30, programs: programRange(29, 31), notation: -12,
+    examples: 'Overdrive, Distortion, Flageolett-Gitarre'},
+  {key: 'bass', name: 'Bass', program: 32, programs: programRange(32, 39), notation: -12,
+    examples: 'E-Bass, akustischer Bass, Fretless, Slap-Bass, Synth-Bass'},
+  {key: 'strings', name: 'Streicher', program: 48, programs: [...programRange(40, 45), ...programRange(47, 51), 110],
+    notation: 0, examples: 'Geige, Bratsche, Cello, Kontrabass, Pizzicato, Streichorchester, Fiddle, Pauke'},
+  {key: 'voice', name: 'Gesang', program: 53, programs: programRange(52, 54), notation: 0,
+    examples: 'Chor, Stimme ("Ooh"), Synth-Stimme'},
+  {key: 'brass', name: 'Trompete', program: 56, programs: programRange(56, 63), notation: 0,
+    examples: 'Posaune, Tuba, Waldhorn, Blechbläsersatz'},
+  {key: 'reed', name: 'Klarinette', program: 71, programs: [...programRange(64, 71), 109, 111], notation: 0,
+    examples: 'Saxophon (Sopran, Alt, Tenor, Bariton), Oboe, Englischhorn, Fagott, Dudelsack'},
+  {key: 'flute', name: 'Flöte', program: 73, programs: programRange(72, 79), notation: 0,
+    examples: 'Querflöte, Blockflöte, Piccolo, Panflöte, Okarina, Pfeifen'},
+  {key: 'synth', name: 'Synth', program: 80, programs: [55, ...programRange(80, 103), ...programRange(112, 127)],
+    notation: 0, examples: 'Synthesizer (Melodie, Flächen), Klangeffekte, Orchesterschlag, Steel Drums, Geräusche'},
+  {key: 'drums', name: 'Schlagzeug', program: null, programs: [], notation: null, examples: 'Schlagzeug, Percussion'},
+];
+
+/** Tiefste leere Saite in der üblichen Lage (MIDI): Gitarre E2, Bass E1. */
+const LOW_STRING = {guitar: 40, bass: 28};
+
+/** So weit (Halbtöne) darf die tiefe Saite von der üblichen Lage abweichen, ohne als falsche Oktave zu gelten (Quinte). */
+const OCTAVE_TOLERANCE = 7;
+
+/**
+ * Instrument nach Schlüssel.
+ * @param {string} key Schlüssel (Instrument.key)
+ * @returns {Instrument}
+ */
+export function instrumentByKey(key){
+  return INSTRUMENTS.find(i => i.key === key);
 }
 
 /**
- * Setzt die Lage der Noten aller Notensysteme einer Spur (siehe notationPitch()).
+ * Instrument einer Spur nach den Regeln in docs/Instrumente.md: Schlagzeug am Notensystem, Bass an Saitenzahl und Lage
+ * (4 oder 5 Saiten, tiefe Saite unter E2, gleich welches Programm), sonst nach dem MIDI-Programm.
+ * @param {Track} track Spur
+ * @returns {Instrument}
+ */
+export function instrumentOf(track){
+  const staff = track.staves[0];
+  if(staff?.isPercussion) return instrumentByKey('drums');
+  if(staff && hasStrings(staff) && [4, 5].includes(staff.tuning.length) && Math.min(...staff.tuning) < LOW_STRING.guitar){
+    return instrumentByKey('bass');
+  }
+  return INSTRUMENTS.find(i => i.programs.includes(track.playbackInfo.program)) ?? instrumentByKey('synth');
+}
+
+/**
+ * Setzt das Instrument einer Spur: Klang (setTrackProgram()) und Notenlage aller Notensysteme. Beim Schlagzeug
+ * ändert sich nichts.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Track} track Spur, wird geändert
- * @param {number} pitch -24 (zwei Oktaven höher notiert), -12 (eine Oktave höher), 0 (wie klingend) oder 12 (eine
- *   Oktave tiefer)
+ * @param {Instrument} instrument Instrument
  * @returns {void}
  */
-export function setNotationPitch(track, pitch){
-  for(const staff of track.staves) if(!staff.isPercussion) staff.displayTranspositionPitch = pitch;
+export function setInstrument(alphaTab, track, instrument){
+  if(instrument.program === null) return;
+  setTrackProgram(alphaTab, track, instrument.program);
+  for(const staff of track.staves) if(!staff.isPercussion) staff.displayTranspositionPitch = instrument.notation;
+}
+
+/**
+ * Bringt das Tuning eines Notensystems in die übliche Lage (Gitarre um E2, Bass um E1), wenn die tiefe Saite mehr als
+ * eine Quinte daneben liegt: um ganze Oktaven; die Bünde bleiben, der Klang wandert um die Oktaven. Das ist der
+ * Oktav-Trick aus Guitar Pro (Tuning E3 … mit "gleicher Oktave" statt E2 … eine Oktave höher notiert). Nur für
+ * Gitarren (6 Saiten) und den Bass.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Staff} staff Notensystem, wird geändert
+ * @param {Instrument} instrument Instrument der Spur (instrumentOf())
+ * @returns {number} Verschiebung in Halbtönen (Vielfaches von 12), 0 ohne Änderung
+ */
+export function normalizeTuningOctave(alphaTab, staff, instrument){
+  if(!hasStrings(staff)) return 0;
+  const low = instrument.key === 'bass' ? LOW_STRING.bass : staff.tuning.length === 6 ? LOW_STRING.guitar : null;
+  if(low === null) return 0;
+  const lowest = Math.min(...staff.tuning);
+  let shift = 0;
+  while(lowest + shift - low > OCTAVE_TOLERANCE) shift -= 12;
+  while(low - (lowest + shift) > OCTAVE_TOLERANCE) shift += 12;
+  if(!shift) return 0;
+  const tuning = staff.tuning.map(p => p + shift);
+  staff.stringTuning = new alphaTab.model.Tuning(alphaTab.model.Tuning.findTuning(tuning)?.name ?? '', tuning, false);
+  return shift;
 }
 
 /**

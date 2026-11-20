@@ -12,7 +12,7 @@
  */
 
 import {
-  chordDiagramSvg, detectKeySignature, escapeHtml, loadChordLibraryOrEmpty, NOTE_NAMES, svgIcon, transposeChordName,
+  chordDiagramSvg, escapeHtml, loadChordLibraryOrEmpty, NOTE_NAMES, svgIcon, transposeChordName,
   transposeKeySignature,
 } from './base.js';
 import {findGrips} from './chordgrips.js';
@@ -51,8 +51,6 @@ const NOTES_PER_BAR = 8;
  * @property {?number} capo neuer Capo aller Spuren mit Saiten; null lässt ihn
  * @property {?number[]} tuning neues Tuning (MIDI, tiefste Saite zuerst) der Spuren mit so vielen Saiten wie die
  *   Akkordspur; null lässt es
- * @property {?{keySignature: number, minor: boolean}} [key] Tonart, von der aus die Tonart wandert (die erkannte statt
- *   der notierten); null: die notierte
  */
 
 /**
@@ -82,7 +80,6 @@ function soundShift(staff, capo, tuning){
  * @returns {import('./notation.js').TransposeResult}
  */
 export function applyRetune(alphaTab, score, change, library){
-  if(change.key) setKeySignature(alphaTab, score, 0, change.key.keySignature, change.key.minor, true);
   const first = tuningStaves(score)[0] ?? null;
   const extra = first ? soundShift(first, change.capo, change.tuning) : 0;
   const result = transposeScore(alphaTab, score, change.semitones, library);
@@ -197,10 +194,6 @@ export class TransposeDialog {
     this.run = 0;
     /** Kosten der Griffe (Akkordname und Tuning → Kosten). @type {Map<string, number>} */
     this.costs = new Map();
-    /** Tonart, die die Erkennung vorschlägt, null ohne. @type {?{keySignature: number, minor: boolean}} */
-    this.detected = null;
-    /** Übernommene erkannte Tonart, von der aus die Tonart wandert; null: die notierte. @type {?{keySignature: number, minor: boolean}} */
-    this.baseKey = null;
   }
 
   /**
@@ -216,7 +209,6 @@ export class TransposeDialog {
     this.standard = this.ref ? ed.standardTuning(this.ref.tuning.length) : null;
     /** Tuning der Spur als Text, wie es im Feld beginnt. */
     this.tuningText = this.ref ? ed.tuningText(this.ref) : '';
-    this.detected = detectKeySignature(score);
     const same = 'Schreibt die Noten um. Tabs und Akkorde bleiben unverändert.';
     const strings = this.ref
       ? `<div class="form-field"><label for="tpCapo">Capo</label>
@@ -264,7 +256,6 @@ export class TransposeDialog {
     root.addEventListener('click', e => {
       const target = /** @type {HTMLElement} */ (e.target);
       if(target.closest('[data-suggest-apply]')) this.takeSuggestion();
-      if(target.closest('[data-take-key]')) this.takeKey();
       const copy = /** @type {?HTMLElement} */ (target.closest('[data-copy]'));
       if(copy){
         void navigator.clipboard.writeText(copy.dataset.copy).then(() => {
@@ -286,34 +277,13 @@ export class TransposeDialog {
   }
 
   /**
-   * Die Tonart des Songs, wie der Dialog sie annimmt: die übernommene erkannte oder die notierte.
-   * @returns {{keySignature: number, minor: boolean}}
-   */
-  currentKey(){
-    return this.baseKey ?? keyOf(this.alphaTab, this.editor.score);
-  }
-
-  /**
-   * Zeile über den Eingaben: die Tonart, von der aus sie wandert, und ggf. die erkannte mit dem Knopf zum Übernehmen.
+   * Zeile über den Eingaben: die Tonart des Songs, von der aus sie wandert.
    * @returns {void}
    */
   renderKeyRow(){
-    const key = this.currentKey();
-    const detected = this.detected && !this.baseKey ? this.detected : null;
-    document.getElementById('tpKeyRow').innerHTML = `<span>Aktuelle Tonart: <strong>${escapeHtml(keyName(key.keySignature, key.minor))}</strong></span>`
-      + (detected ? `<span>Erkannte Tonart: <strong>${escapeHtml(keyName(detected.keySignature, detected.minor))}</strong>
-        <button class="btn btn-sm" type="button" data-take-key>Übernehmen</button></span>` : '');
-  }
-
-  /**
-   * Übernimmt die erkannte Tonart als Ausgangspunkt (statt der notierten).
-   * @returns {void}
-   */
-  takeKey(){
-    this.baseKey = this.detected;
-    this.renderKeyRow();
-    void this.drawBefore();
-    void this.refresh();
+    const key = keyOf(this.alphaTab, this.editor.score);
+    document.getElementById('tpKeyRow').innerHTML =
+      `<span>Aktuelle Tonart: <strong>${escapeHtml(keyName(key.keySignature, key.minor))}</strong></span>`;
   }
 
   /**
@@ -361,17 +331,17 @@ export class TransposeDialog {
    * @returns {boolean}
    */
   changes(input){
-    if(input.semitones || this.baseKey) return true;
+    if(input.semitones) return true;
     if(!this.ref) return false;
     return input.capo !== this.ref.capo || input.tuning?.join(',') !== [...this.ref.tuning].reverse().join(',');
   }
 
   /**
-   * Zeichnet die Vorschau "Jetzt" (mit der übernommenen Tonart, falls gewählt).
+   * Zeichnet die Vorschau "Jetzt".
    * @returns {Promise<void>}
    */
   async drawBefore(){
-    const html = await this.side(this.editor.score, 'Jetzt', this.currentKey());
+    const html = await this.side(this.editor.score, 'Jetzt', keyOf(this.alphaTab, this.editor.score));
     const box = document.getElementById('tpBefore');
     if(box) box.innerHTML = html;
   }
@@ -387,7 +357,7 @@ export class TransposeDialog {
     if(!apply) return;
     apply.disabled = !this.changes(input);
     const after = parseScore(this.alphaTab, this.editor.tex);
-    const result = applyRetune(this.alphaTab, after, {...input, key: this.baseKey}, this.library);
+    const result = applyRetune(this.alphaTab, after, input, this.library);
     const shift = input.semitones + (this.ref ? soundShift(this.ref, input.capo, input.tuning) : 0);
     const warn = [];
     if(result.octaves) warn.push(`${result.octaves} Noten müssen um eine Oktave versetzt werden.`);
@@ -490,6 +460,6 @@ export class TransposeDialog {
     const input = this.read();
     if(!this.changes(input)) return;
     closeOverlay();
-    await this.editor.retuneSong({...input, key: this.baseKey});
+    await this.editor.retuneSong(input);
   }
 }

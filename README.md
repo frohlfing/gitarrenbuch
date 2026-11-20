@@ -275,6 +275,7 @@ gitarrenbuch/                         # Projektroot
  │    │    └── info.php               # phpinfo()
  │    ├── js/                         # ES-Module des Frontends (ohne Bundler, von app.js importiert)
  │    │    ├── base.js                # API-Zugriff, Akkorde und Griffe, Griffbilder (SVG), Griffbrett, Symbole, Marken
+ │    │    ├── conflicts.js           # Konfliktlöser (Import, docs/Konflikte.md)
  │    │    ├── chordtheory.js         # Akkordname → Töne (Regeln aus docs/Musiktheorie.md)
  │    │    ├── chordgrips.js          # Töne → Griffe: sucht passende Griffe und ordnet sie (erst weniger Bünde, dann weniger Finger)
  │    │    ├── notation.js            # Noten: Spuren, Spielfolge, GP/alphaTex lesen und schreiben, Bearbeiten, Transponieren
@@ -392,13 +393,13 @@ eingestuft wurde (siehe "Übersicht"); fehlen sie in einem Request, bleiben die 
 `trackDefaults` ist eine Liste mit einem Eintrag je Spur (in der Reihenfolge der Spuren): `show` (in den Noten
 angezeigt) und `mute` (stumm). Gesetzt wird sie mit Auge und Lautsprecher im Dialog "Spuren" des Bearbeitungsmodus und
 mit "Speichern". Sie gilt als Vorgabe: Was ein Gerät im Mixer einstellt, wird dort gemerkt (`localStorage`) und hat
-Vorrang. Fehlt sie in einem Request, bleibt die gespeicherte; eine leere Liste löscht sie. `instruments` (MIDI-Programme
-der Spuren) berechnet die API bei jedem Lesen aus den Noten (`api/lib/instruments.php`); der Editor schlägt daraus im 
-Dialog "Spuren" die schon verwendeten Instrumente vor. Die Spalte "Notenlage" dort stellt je Spur ein, wie hoch die Noten 
-im Notensystem gegenüber dem Klang stehen (`displayTranspositionPitch` von alphaTab, in alphaTex `\displaytranspose`, bei
-Guitar Pro "Oktave"): 2 Oktaven höher, 1 Oktave höher (so schreibt man Gitarre, die Vorgabe), wie klingend, 1 Oktave
-tiefer. Klang, Tabs und Akkorde bleiben (`setNotationPitch()` in `js/notation.js`); im Gegensatz dazu verschiebt das
-Transponieren auch die Tabs.
+Vorrang. Fehlt sie in einem Request, bleibt die gespeicherte; eine leere Liste löscht sie.
+
+**Instrument einer Spur:** eines von 13 aus einer festen Liste plus Schlagzeug (`INSTRUMENTS` in `js/notation.js`;
+Liste, Regeln und Analyse der GP-Dateien in `docs/Instrumente.md`). Ein Instrument legt Klang (General-MIDI-Programm)
+und Notenlage zusammen fest: Gitarre und Bass eine Oktave höher notiert, als sie klingen, alle anderen wie klingend
+(`displayTranspositionPitch` von alphaTab, in alphaTex `\displaytranspose`, bei Guitar Pro "Oktave"). Gewählt wird es
+im Dialog "Spuren"; beim Import ordnet der Konfliktlöser jeder Spur eines zu.
 
 `tags` sind die Genres (in der Oberfläche "Genre"), mehrere je Song möglich, z. B. "Rock & Pop", "Folk",
 "Weihnachtslied"; das Formular zeigt die vorhandenen zum An- und Abwählen. 
@@ -694,18 +695,16 @@ markiert und im Editor korrigiert:
   Transponieren und ChordPro brauchen den Namen. Zwei Griffe desselben Akkords in einem Song bekommen zwei Namen
   ("G" und "G*", wie in "Kokain").
 
-**Prüfung:** Die API liefert zu jedem Song `issues`, die Abweichungen von dieser Konvention, die wichtigste zuerst
-(`read_score_issues()` in `api/lib/crud.php`, liest `score.atex` ohne alphaTab). Geprüft wird nur, womit die App nicht
-von selbst zurechtkommt: zuerst "Capo ungleich" (Capo nicht in allen Spuren gleich), dann "Sprungzeichen"
-(`\jump` in den Noten: D.S., D.C., Coda, Fine; im Gitarrenbuch werden sie ausgeschrieben, die Ansicht "Chords" kennt
-sie nicht). Wo Text und Akkorde stehen, zählt hier nicht: Die App nimmt die Spur mit den meisten, der Editor meldet
-Akkorde bzw. Text außerhalb dieser Spur. Solche Songs haben in der Übersicht einen roten Rahmen mit der wichtigsten
-Abweichung, z. B. "⚠ Capo ungleich" (Tooltip mit dem Hinweis); im Song steht sie mit Hinweis rot im Kopf unter den
-Eckdaten.
+**Einhaltung:** Abweichungen von dieser Konvention (Konflikte) löst der Import ohne Rückfrage (`resolveConflicts()` in
+`js/conflicts.js`, siehe unten und `docs/Konflikte.md`); im Editor entstehen keine. Eine Prüfung oder Anzeige von
+Konflikten gibt es deshalb weder in der Übersicht noch im Song oder im Editor.
 
-**Der Import** korrigiert nur Formales, ohne den Inhalt zu ändern (`cleanImportedScore()` in `js/notation.js`, siehe
-"Akkorde und Griffbilder"): Rhythmus-Schrägstriche (sonst stürzt alphaTab ab), Anzeige-Angaben je Spur, Notizen im
-Namen des Tunings und die Griffbilder. Spurnamen, Capo je Spur, Tonart und Vorzeichen bleiben wie in der Datei.
+**Der Import** bereinigt Formales (`cleanImportedScore()` in `js/notation.js`, siehe "Akkorde und Griffbilder"):
+Rhythmus-Schrägstriche (sonst stürzt alphaTab ab), Anzeige-Angaben je Spur, Notizen im Namen des Tunings und die
+Griffbilder. Danach löst er alle Konflikte ohne Rückfrage (`resolveConflicts()` in `js/conflicts.js`): Wiederholungen
+ausschreiben, Taktlängen, Triolen-Feeling, ein Capo und ein Tuning, Akkorde und Text in je einer Spur, unbekannte
+Akkordnamen und unpassende Griffe. Liedtext, der nicht in die Textspur passt, kommt als Chord-Datei in den
+Upload-Ordner. Regeln: `docs/Konflikte.md`.
 
 
 
@@ -956,8 +955,7 @@ Akkorde und Tonart; Capo und Tuning ändern nur die Noten (Bünde, Tabs, Akkordn
 verschiebt sich um Halbtöne + Capo + Tuning (bei gleichmäßig verschobenen Saiten); die Tonart aus dem Feld "Tonart" wandert
 um diese Verschiebung. Mit −2 Halbtönen und Capo +2 bleibt der Klang, nur die Griffe sind andere. Der Dialog zeigt:
 
-- **Tonart** über den Eingaben: "Aktuelle Tonart: Db"; erkennt `detectKeySignature()` aus den Akkorden eine andere,
-  steht daneben "Erkannte Tonart: E" mit dem Knopf "Übernehmen" (sie ist dann der Ausgangspunkt, von dem die Tonart wandert).
+- **Tonart** über den Eingaben: "Aktuelle Tonart: Db", die notierte; von ihr aus wandert die Tonart.
 - **Vorschau** untereinander, "Jetzt: Db" und "Danach: Eb": je die Griffbilder aller Akkorde des Songs und darunter alle
   gegriffenen Töne (jede Saite-Bund-Kombination einmal, von der tiefsten bis zur höchsten) mit Notenschlüssel, Vorzeichen
   und Tab (`renderMiniScore()` in `js/sheet.js`).
@@ -1045,9 +1043,7 @@ Capo setzt (z. B. weil die Audiospur höher klingt als notiert), muss auch `\ks`
 **Lage der Bedienelemente:**
 
 - **Kopf:** Cover, daneben Titel, Interpret und eine Zeile Eckdaten ("Tonart G · 140 BPM · Capo 3 · DADGBE",
-  `describeScoreInfo()`; das Tuning steht nur da, wenn es nicht EADGBE ist), jede mit "…" gekürzt, wenn sie nicht passt. Hinweise (Tempo passt nicht zur Audiospur,
-  Sync-Punkte außerhalb, Abweichungen von der Konvention) stecken hinter einem roten ⚠ am Ende der Zeile; ein Klick
-  zeigt sie darunter.
+  `describeScoreInfo()`; das Tuning steht nur da, wenn es nicht EADGBE ist), jede mit "…" gekürzt, wenn sie nicht passt.
 - **Streifen** (`.songstrip`, füllt der Player): der Akkord, der gerade klingt, mit Griffbild (ohne den Griff als
   Ziffern), daneben die Patterns des Leadsheets, gezeichnet wie dort (`patternGridHtml()`). Gezeigt wird je Technik
   das Pattern, das zum gespielten Takt passt (`loadStripPatterns()`: aus jeder Spur mit Saiten abgeleitet und
@@ -1140,16 +1136,14 @@ Vorbild Guitar Pro: Noten, Tabs, Text und Akkorde direkt in der Liedansicht bear
 Schritte am Modell in `js/notation.js`, die Icons in `js/base.js`). Was wo steht, mit Tastenkürzeln und dem, was
 noch fehlt, beschreibt `docs/Editor.md`; dort steht auch, was aus Guitar Pro nicht übernommen wird und warum.
 
-- **Einschalten:** "Bearbeiten" im Menü ⋮ der Abspielleiste . Abweichungen (Sprungzeichen, Capo ungleich,
-  Tonart, Akkorde bzw. Text außerhalb ihrer Spur) zählt ein Knopf "⚠ 2 Konflikte" rechts in der Werkzeugleiste;
-  er klappt sie auf, jede mit einem Knopf, der sie löst. Alle Fälle und ihre Lösung: `docs/Konflikte.md`.
+- **Einschalten:** "Bearbeiten" im Menü ⋮ der Abspielleiste.
   Die Abspielleiste unten bleibt wie im Player; der Knopf "Ansicht" ist im Modus gesperrt (Noten ein/aus steht in
   der Werkzeugleiste).
   Der Kopf mit Cover und Eckdaten verschwindet; bearbeitet wird mit Tabs ("Noten + Tabs" oder "Tabs").
 - **Verlassen:** ✕ oben rechts; fragt bei ungespeicherten Änderungen nach und zeigt den Song neu, wenn Noten oder
   Stammdaten gespeichert wurden.
 - **Aufteilung:** oben die Werkzeugleiste mit allem, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu 
-  Speichern, Rückgängig, Wiederholen, Verlauf, Uploads, Spuren, Leadsheet, Transponieren, Konflikte, Hilfe, ✕; links "Am Cursor" mit allem zum Schlag (Notenwerte, 
+  Speichern, Rückgängig, Wiederholen, Verlauf, Uploads, Spuren, Leadsheet, Transponieren, Hilfe, ✕; links "Am Cursor" mit allem zum Schlag (Notenwerte, 
   Einfügen/Löschen, Effekte, Akkord, Griff, Text; vom Takt Abschnitt, Taktart und Tempo), rechts "Liedtext"
   (oben das Textfeld, darunter die Vorschau "Text & Akkorde", die Linie dazwischen lässt sich ziehen), unten Audio
   (Sync-Editor, dazu das Tempo der Audiospur; Höhe ziehbar, Voreinstellung 200 px). Das rechte Panel ist in der Breite ziehbar, beim Abspielen

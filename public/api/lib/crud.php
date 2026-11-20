@@ -1,6 +1,5 @@
 <?php
 
-require_once __DIR__ . '/instruments.php';
 require_once __DIR__ . '/slug.php';
 require_once __DIR__ . '/youtube.php';
 
@@ -122,8 +121,8 @@ function read_song_json(string $slug): ?array
 }
 
 /**
- * Schreibt $song als song.json (überschreibt eine vorhandene Datei vollständig). Die berechneten Felder files,
- * tracks und instruments werden nicht gespeichert.
+ * Schreibt $song als song.json (überschreibt eine vorhandene Datei vollständig). Die berechneten Felder files und
+ * tracks werden nicht gespeichert.
  *
  * @param string $slug Slug des Lieds, der Ordner muss existieren
  * @param array $song zu speichernde Felder
@@ -131,7 +130,7 @@ function read_song_json(string $slug): ?array
  */
 function write_song_json(string $slug, array $song): void
 {
-    unset($song['files'], $song['tracks'], $song['instruments']);
+    unset($song['files'], $song['tracks']);
     // Leeres sources muss als {} statt [] gespeichert werden (json_decode() liefert dafür ein leeres Array), ebenso
     // leadsheet.chords.
     $song['sources'] = (object) ($song['sources'] ?? []);
@@ -195,82 +194,12 @@ function read_track_names(string $slug): array
 }
 
 /**
- * Liest die Spuren aus alphaTex, so weit die Konventionsprüfung sie braucht.
- *
- * @param string $tex Inhalt von score.atex
- * @return array<int, array{name: string, capo: int}> je Spur Name und Capo (der erste im Abschnitt der Spur, 0 ohne)
- */
-function read_score_tracks(string $tex): array
-{
-    $tracks = [];
-    // Der Exporter von alphaTab beginnt jede Spur mit "\track" am Zeilenanfang.
-    foreach (preg_split('/^(?=\\\\track\b)/m', $tex) as $part) {
-        if (!preg_match('/^\\\\track\s*\(?\s*"((?:[^"\\\\]|\\\\.)*)"/', $part, $name)) {
-            continue;
-        }
-        preg_match('/\\\\capo\s+(\d+)/', $part, $capo);
-        $tracks[] = [
-            'name' => stripslashes($name[1]),
-            'capo' => (int) ($capo[1] ?? 0),
-        ];
-    }
-    return $tracks;
-}
-
-/**
- * Prüft, ob ein Song der Konvention aus "Spuren, Capo, Text und Akkorde" (README) entspricht. Abweichungen
- * korrigiert der Editor; bis dahin markiert die Oberfläche den Song rot und zeigt nur die wichtigste. Geprüft wird
- * nur, womit die App nicht von selbst zurechtkommt: ungleicher Capo und Sprungzeichen (D.S., D.C., Coda, Fine; im
- * Gitarrenbuch ausgeschrieben, die Ansicht "Text & Akkorde" kennt sie nicht). Spuren haben keine Rollen; Namen und
- * Reihenfolge sind frei. Wo Text und Akkorde stehen, zählt hier nicht: Die App nimmt die Spur mit dem meisten Text
- * bzw. den meisten Akkorden (lyricsTrack(), chordsTrack() in js/notation.js), der Editor meldet, wenn sie auch in
- * anderen Spuren stehen.
- *
- * @param string $slug Slug des Lieds
- * @return array<int, array{label: string, hint: string, detail: string}> Abweichungen, die wichtigste zuerst: kurze
- *               Bezeichnung (z. B. "Capo ungleich", auf der Kachel), Erklärung (Tooltip der Kachel) und die
- *               Einzelheiten (im Song hinter der Bezeichnung, z. B. "„picking“ 0, „strumming“ 2"); leer, wenn alles
- *               passt oder es keine Noten gibt
- */
-function read_score_issues(string $slug): array
-{
-    $path = song_dir($slug) . '/' . SONG_FILES['score'];
-    if (!is_file($path)) {
-        return [];
-    }
-    $tex = file_get_contents($path);
-    $tracks = read_score_tracks($tex);
-    $issues = [];
-
-    if (count(array_unique(array_column($tracks, 'capo'))) > 1) {
-        $detail = implode(', ', array_map(fn(array $t) => "„{$t['name']}“ {$t['capo']}", $tracks));
-        $issues[] = [
-            'label' => 'Capo ungleich',
-            'hint' => "Capo nicht in allen Spuren gleich: $detail",
-            'detail' => $detail,
-        ];
-    }
-    if (preg_match_all('/\\\\jump\s+(\w+)/', $tex, $m)) {
-        $detail = implode(', ', array_unique($m[1]));
-        $issues[] = [
-            'label' => 'Sprungzeichen',
-            'hint' => "Sprungzeichen ausschreiben: $detail",
-            'detail' => $detail,
-        ];
-    }
-    return $issues;
-}
-
-/**
- * Ergänzt $song um die berechneten Felder files (welche Dateien im Liedordner vorhanden sind), tracks, instruments
- * und issues.
+ * Ergänzt $song um die berechneten Felder files (welche Dateien im Liedordner vorhanden sind) und tracks.
  *
  * @param string $slug Slug des Lieds
  * @param array $song Inhalt von song.json
  * @return array $song mit files (Liste der Schlüssel aus SONG_FILES, deren Datei vorhanden ist, z. B.
- *               ["score", "audio", "cover"]), tracks (Spurnamen, siehe read_track_names()), instruments (MIDI-Programme der Spuren,
- *               siehe read_track_programs()), issues (Abweichungen
- *               von der Konvention, siehe read_score_issues()) und sources als Objekt
+ *               ["score", "audio", "cover"]), tracks (Spurnamen, siehe read_track_names()) und sources als Objekt
  */
 function with_file_flags(string $slug, array $song): array
 {
@@ -278,8 +207,6 @@ function with_file_flags(string $slug, array $song): array
     $song['sources'] = (object) ($song['sources'] ?? []);
     $song['files'] = array_keys(array_filter(SONG_FILES, fn(string $name) => is_file($dir . '/' . $name)));
     $song['tracks'] = read_track_names($slug);
-    $song['instruments'] = read_track_programs($slug);
-    $song['issues'] = read_score_issues($slug);
     // Die Angaben zu den Uploads liefert api/uploads.php.
     unset($song['uploads']);
     return $song;

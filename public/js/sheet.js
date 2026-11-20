@@ -738,24 +738,6 @@ export function remapTabs(sheet, score, captured){
 }
 
 /**
- * Zieht die Tab-Stellen nach dem Ausschreiben von Wiederholungen nach: Ein Bereich gilt für sein erstes Vorkommen.
- * @param {Sheet} sheet Angaben
- * @param {number[]} order je neuem Takt der Index des alten (unrollRepeats() in notation.js)
- * @returns {Sheet} neue Angaben
- */
-export function remapSheetByOrder(sheet, order){
-  /** @type {<T extends {from: number, to: number}>(list: T[]) => T[]} */
-  const move = list => list.flatMap(item => {
-    const from = order.indexOf(item.from);
-    if(from < 0) return [];
-    let to = from;
-    while(to + 1 < order.length && order[to + 1] === order[to] + 1 && order[to + 1] <= item.to) to++;
-    return [{...item, from, to}];
-  });
-  return {...normalizeSheet(sheet), tabs: move(sheet.tabs), cuts: move(sheet.cuts)};
-}
-
-/**
  * Anzeige der Schlagzeichen im Raster: Plektrumzeichen (abwärts, aufwärts) der Notenschrift (wie in den Noten, alphaTab zeichnet
  * sd/su so), gedämpft ×. Pfeile wären missverständlich: In den Noten bedeutet ein Pfeil Brush/Arpeggio.
  * @type {Object<string, string>} Zeichen (klein) → HTML
@@ -1159,7 +1141,7 @@ function guitarStaff(score){
 }
 
 /**
- * Spuren mit Saiten, deren Capo von dem auf dem Blatt abweicht (der Editor meldet das als Konflikt, siehe renderConflicts()).
+ * Spuren mit Saiten, deren Capo von dem auf dem Blatt abweicht (löst der Konfliktlöser beim Import, siehe conflicts.js).
  * @param {Score} score Noten
  * @returns {{track: string, capo: number}[]} leer, wenn alle gleich sind; sonst alle Spuren mit Saiten (track: Name
  *   wie in der Oberfläche)
@@ -2584,7 +2566,7 @@ export class LeadsheetTab {
     const {text, problem} = describeLayout(measureLeadsheet(view), parts, sheet.layout);
     const capo = capoMismatch(ed.score);
     const warn = [problem, capo.length ? `Capo ungleich (${capo.map(c => `${c.track} ${c.capo}`)
-      .join(', ')}); auf dem Blatt steht der Capo der Akkordspur. Angleichen über die Meldung oben.` : '']
+      .join(', ')}); auf dem Blatt steht der Capo der Akkordspur.` : '']
       .filter(Boolean).join(' ');
     // Je ungleichem Vorkommen ein Knopf, der es mit dem ersten seiner Gruppe vergleicht.
     const compare = parts.differ.map(d => `<button type="button" class="ebtn ebtn-text" data-ls-action="compare"

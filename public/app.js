@@ -284,13 +284,11 @@ function showSong(song){
 
   // Lage der Bedienelemente:
   // - Kopf: Cover, daneben Titel, Interpret und eine Zeile Eckdaten, jede mit "…" gekürzt, wenn sie nicht passt.
-  //   Hinweise (Tempo, Sync-Punkte, Fehler in den Noten) stecken hinter einem Warnzeichen am Ende der Zeile.
   // - Streifen mit aktuellem Akkord, Griffbild und Patterns (füllt der Player): bleibt beim Scrollen stehen. Am PC
   //   steht er rechts neben dem Kopf, und die ganze Zeile bleibt stehen (.songtop, app.css).
   // - Schließen (zur Songliste): schwebt oben rechts, unauffällig halbtransparent, immer erreichbar.
   // - Alles andere liegt unten in der Abspielleiste, auch das Menü (der Player stellt den Platz, el.menuWrap).
   // - .songbar ist der Platz für die Werkzeugleiste des Bearbeitungsmodus (editor.js).
-  const issues = (song.issues ?? []).map(i => `${i.label}: ${i.detail}`);
   songView.innerHTML = `
     <div class="songtop">
       <div class="songhead">
@@ -298,13 +296,11 @@ function showSong(song){
         <div class="songhead-text">
           <h2 title="${escapeHtml(song.title)}">${escapeHtml(song.title)}</h2>
           <div class="songhead-artist">${escapeHtml(song.artist ?? '')}</div>
-          <div class="songhead-info"><span id="songMeta"></span><button type="button" class="songhead-warn"
-            id="songWarn" hidden aria-expanded="false" aria-label="Hinweise" title="Hinweise">&#9888;</button></div>
+          <div class="songhead-info"><span id="songMeta"></span></div>
         </div>
       </div>
       <div class="songstrip" id="songStrip" hidden></div>
     </div>
-    <div class="song-notes" id="songNotes" hidden></div>
     <a class="song-close" href="${LIST_HASH}" aria-label="Zur Songliste" title="Zur Songliste">&#10005;</a>
     <div class="songbar"></div>
     <div id="playerRoot"></div>
@@ -322,20 +318,6 @@ function showSong(song){
       <button type="button" id="leadsheetPrintBtn" title="Das Leadsheet drucken (auch als PDF)">Leadsheet drucken</button>
     </div>`;
   songView.querySelector('.songhead').append(menuWrap);
-  // Hinweise: Fehler in den Noten (vom Server) sofort, die aus dem Player (Tempo, Sync-Punkte) nach dem Laden.
-  const warnBtn = document.getElementById('songWarn');
-  const notesEl = document.getElementById('songNotes');
-  const showWarnings = warnings => {
-    const all = [...issues, ...warnings];
-    warnBtn.hidden = !all.length;
-    notesEl.innerHTML = all.map(w => `<div>&#9888; ${escapeHtml(w)}</div>`).join('');
-    if(!all.length) notesEl.hidden = true;
-  };
-  warnBtn.addEventListener('click', () => {
-    notesEl.hidden = !notesEl.hidden;
-    warnBtn.setAttribute('aria-expanded', String(!notesEl.hidden));
-  });
-  showWarnings([]);
 
   const menu = document.getElementById('menu');
   const menuBtn = document.getElementById('menuBtn');
@@ -380,10 +362,8 @@ function showSong(song){
   // Tonart, Capo usw. stehen nur in den Noten und kommen deshalb erst nach dem Laden in die Kopfzeile. Das Element
   // wird vorab gemerkt: Ist bis dahin ein anderes Lied offen, landet die späte Antwort im alten, entfernten Element.
   const metaEl = document.getElementById('songMeta');
-  const showMeta = (info, audioSeconds = null) => {
-    const {parts, warnings} = describeScoreInfo(info, audioSeconds);
-    metaEl.innerHTML = parts.join(' · ');
-    showWarnings(warnings);
+  const showMeta = info => {
+    metaEl.innerHTML = describeScoreInfo(info).join(' · ');
   };
   const songPlayer = player;
   document.getElementById('songDataBtn').addEventListener('click', () => {
@@ -407,8 +387,6 @@ function showSong(song){
   });
   songPlayer.load(song).then(info => {
     showMeta(info);
-    // Ob die Sync-Punkte in die Audiospur passen, steht erst fest, wenn sie geladen ist.
-    void songPlayer.audioDuration.then(seconds => { if(seconds) showMeta(info, seconds); });
   }).catch(err => {
     root.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
   });

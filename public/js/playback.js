@@ -2379,7 +2379,7 @@ export class SyncEditor {
   /**
    * Übernimmt points und tempoFactors in den Player: Sync-Punkte in die Noten und den Mixer, Tempi neu (gerundet wie
    * beim Speichern) und das Tempo der Audiospur ins MIDI (während der Wiedergabe erst, wenn sie anhält; bei geändertem
-   * Tempo sofort).
+   * Tempo sofort, dann werden auch die Noten neu gezeichnet, damit die Tempoangaben stimmen).
    * @param {boolean} [tempoChanged] ob sich tempoFactors geändert hat
    * @returns {void}
    */
@@ -2395,6 +2395,8 @@ export class SyncEditor {
     this.mixer.setScore(score);
     this.player.applySpeed(this.api.tickPosition, true);
     this.player.refreshMidi(tempoChanged);
+    // Die Tempoangaben stehen in den Noten (♩=…): neu zeichnen, sonst zeigen sie noch das alte Tempo.
+    if(tempoChanged) this.api.render();
     this.updateButtons();
     this.draw();
     this.callbacks.onEdit();
@@ -2616,7 +2618,7 @@ export class SyncEditor {
     // Tempo der Audiospur im Abschnitt ohne Tempowechsel am aktuellen Takt: Mittel vom ersten bis zum letzten Sync-Punkt
     // des Abschnitts (siehe recordingTempoRegion()).
     const region = this.tempoRegion();
-    this.el.tempoInfo.textContent = region ? `Tempo der Audiospur: ${region.recorded} BPM` : '';
+    this.el.tempoInfo.textContent = region ? `Tempo der Audiospur ab Takt ${region.start + 1} bis ${region.end}: ${region.recorded} BPM` : '';
     this.el.tempoInfo.title = region ? `Im Mittel von Takt ${region.start + 1} bis ${region.end} (bis zum nächsten Tempowechsel)` : '';
     const proposal = this.tempoProposal();
     this.el.tempo.hidden = !proposal;

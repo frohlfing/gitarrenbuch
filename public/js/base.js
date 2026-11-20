@@ -354,14 +354,9 @@ export const COMMON_CHORDS = ['C', 'D', 'E', 'G', 'A', 'Am', 'Dm', 'Em', 'C7', '
  * @property {string} updated Änderungszeitpunkt (ISO 8601)
  * @property {SongFile[]} files vorhandene Dateien (berechnet die API bei jedem Lesen), z. B. ["score", "cover"]
  * @property {string[]} tracks Namen der Spuren aus der Partitur (berechnet die API bei jedem Lesen), z. B. ["Guitar"]
- * @property {number[]} instruments MIDI-Programme der Spuren, ohne Duplikate (berechnet die API bei jedem Lesen)
  * @property {{show: boolean, mute: boolean}[]} [trackDefaults] Vorgaben je Spur (in der Reihenfolge der Spuren), ob sie in
  *   den Noten angezeigt und gehört wird; gesetzt im Dialog "Spuren" des Editors. Was ein Gerät im Mixer einstellt,
  *   hat dort Vorrang. Fehlt, wenn nie gesetzt.
- * @property {{label: string, hint: string, detail: string}[]} issues Abweichungen von der Konvention für Spuren und
- *   Capo, die wichtigste zuerst (berechnet die API bei jedem Lesen), z. B. {label: "Capo ungleich", hint: "Capo nicht
- *   in allen Spuren gleich: „picking“ 0, „strumming“ 2", detail: "„picking“ 0, „strumming“ 2"}; leer, wenn der Song
- *   ihr entspricht
  */
 
 /** Schlüssel des API-Tokens im localStorage. */
@@ -500,7 +495,7 @@ export function deleteScoreVersion(slug, id){
  * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor.
  * @param {string} slug Slug des Lieds
  * @param {string} tex Noten als alphaTex
- * @returns {Promise<Song>} das aktualisierte Lied
+ * @returns {Promise<Song>} das aktualisierte Lied (der bisherige Stand kommt in den Verlauf)
  */
 export function saveScore(slug, tex){
   return apiWrite(`${API_URL}score.php?slug=${encodeURIComponent(slug)}`, {
@@ -1058,8 +1053,8 @@ export function chordDiagramSvg(name, grip){
  */
 
 /**
- * Namen der 128 General-MIDI-Instrumente, Index = MIDI-Programm (0 bis 127), wie sie der Editor im Dialog "Spuren"
- * zeigt und die Testseite dev/instruments.html.
+ * Namen der 128 General-MIDI-Instrumente, Index = MIDI-Programm (0 bis 127), für die Testseite dev/instruments.html.
+ * Im Dialog "Spuren" gibt es nur die kurze Liste INSTRUMENTS (notation.js, docs/Instrumente.md).
  * @type {string[]}
  */
 export const INSTRUMENT_NAMES = [

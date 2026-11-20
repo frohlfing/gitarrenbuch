@@ -253,7 +253,8 @@ function delete_score_history(string $slug, string $id): void
 /**
  * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor oder dem Editor. Nur für Lieder, die schon
  * Noten haben; neue Noten kommen über store_new_score(). Die bisherige Fassung kommt vorher nach history/ (siehe
- * keep_score_history()). Geschrieben wird erst daneben und dann umbenannt, damit nie eine halbe Datei entsteht.
+ * keep_score_history()). Geschrieben wird erst daneben und dann umbenannt, damit nie eine halbe Datei
+ * entsteht.
  *
  * @param string $slug Slug des Lieds
  * @param string $tex Noten als alphaTex

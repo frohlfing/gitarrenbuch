@@ -5,22 +5,21 @@
 
 import {
   barreFret, chordDiagramSvg, chordKey, detectKeySignature, diagramFirstFret, escapeHtml, glyph, GLYPHS,
-  gripOf, INSTRUMENT_NAMES, isStandardTuning, loadChordLibraryOrEmpty, loadChordUsage, loadLeadsheet, playedStrings,
+  gripOf, isStandardTuning, loadChordLibraryOrEmpty, loadChordUsage, loadLeadsheet,
   deleteScoreVersion, loadScoreHistory, loadScoreText, loadScoreVersion, normalizeChords, parseGrip, saveLeadsheet, saveScore, svgIcon,
 } from './base.js';
 import {readChordFile, simplifyChord} from './chordfile.js';
 import {findGrips, gripToneProblem, nameGrip} from './chordgrips.js';
 import {chordNoteNames, parseChord, suggestChordNames} from './chordtheory.js';
-import {closeOverlay, findSong, knownTracks, openOverlay, renderAudioSource, saveSongFields, usedPrograms} from './library.js';
+import {closeOverlay, findSong, knownTracks, openOverlay, renderAudioSource, saveSongFields} from './library.js';
 import * as edit from './notation.js';
 import {
   chordsTrack, describeScoreLoss, KEY_NAMES, keyName, lyricsTrack, parseScore, readGpFile,
-  sameTuning, stringedStaves, TRACK_NAMES, trackName,
-  TRIPLET_FEELS, tuningStaves, unifyCapo, writeScore, writeScoreChecked,
+  stringedStaves, TRACK_NAMES, trackName, writeScore, writeScoreChecked,
 } from './notation.js';
 import {eyeIcon, showTrackNames, speakerIcon, SyncEditor} from './playback.js';
 import {
-  captureTabs, LeadsheetTab, normalizeSheet, parseTimeSignature, remapSheetByOrder, remapTabs, SECTION_NAMES,
+  captureTabs, LeadsheetTab, normalizeSheet, parseTimeSignature, remapTabs, SECTION_NAMES,
   sectionName, TIME_SIGNATURES,
 } from './sheet.js';
 import {applyRetune, TransposeDialog} from './transposedialog.js';
@@ -203,6 +202,7 @@ export const SHORTCUTS = [
     ['R', 'Pause'],
     ['A', 'Akkord'],
     ['T', 'Text über dem Schlag'],
+    ['Umschalt+L', 'Liedtext-Silbe'],
     ['Umschalt+Einfg', 'Abschnitt'],
     ['Strg+K', 'Tonart'],
   ]],
@@ -294,7 +294,7 @@ export function openShortcutHelp(){
  * (boundsLookup von alphaTab): Sie reicht genau von der obersten bis zur untersten Saite. Ohne Tabs (Ansicht
  * "Noten") gibt es nur die Spalte des Schlags.
  *
- * Aufbau (docs/Editor.md): Die Werkzeugleiste (Speichern, Rückgängig, Tonart, Capo …, Konflikte, Hilfe, ✕) ist im Modus die
+ * Aufbau (docs/Editor.md): Die Werkzeugleiste (Speichern, Rückgängig, Tonart, Capo …, Hilfe, ✕) ist im Modus die
  * einzige feste Leiste und enthält, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning). Links steht, was am Cursor hängt
  * (Notenwerte, Effekte, Schlag; vom Takt Abschnitt, Taktart und Tempo), unten, was sich über den Song erstreckt (Spuren, Leadsheet, Liedtext, Audio mit dem Sync-Editor)
  * samt Statuszeile. Die Panels lassen sich einklappen; auf schmalen
@@ -381,16 +381,21 @@ const NOTE_GLYPHS = {
 const NOTE_NAMES = {1: 'Ganze', 2: 'Halbe', 4: 'Viertel', 8: 'Achtel', 16: 'Sechzehntel', 32: 'Zweiunddreißigstel'};
 
 /**
- * Effekte am Cursor (linkes Panel), in Gruppen: [Symbol (HTML), Name mit Tastenkürzel (siehe editor.js), Befehl
- * (siehe NoteEditor.run())]. Was aus Guitar Pro nicht übernommen wird, steht in docs/Editor.md.
+ * Effekte der Note (linkes Panel, zweite Reihe unter "Note"): [Symbol (HTML), Name mit Tastenkürzel (siehe
+ * editor.js), Befehl (siehe NoteEditor.run())]. Was aus Guitar Pro nicht übernommen wird, steht in docs/Editor.md.
+ * @type {[string, string, string][]}
+ */
+const NOTE_EFFECTS = [
+  [svgIcon('hammer'), 'Hammer-on / Pull-off (H)', 'hammer'], [svgIcon('slide'), 'Slide (S)', 'slide'],
+  [svgIcon('bend'), 'Bend (B): ½, full, 1½, aus', 'bend'], [svgIcon('vibrato'), 'Vibrato (V)', 'vibrato'],
+  [svgIcon('dead'), 'Saite dämpfen (X)', 'dead'],
+];
+
+/**
+ * Weitere Effekte am Cursor (linkes Panel), in Gruppen: [Überschrift, Knöpfe wie in NOTE_EFFECTS].
  * @type {[string, [string, string, string][]][]}
  */
 const EFFECTS = [
-  ['Note', [
-    [svgIcon('hammer'), 'Hammer-on / Pull-off (H)', 'hammer'], [svgIcon('slide'), 'Slide (S)', 'slide'],
-    [svgIcon('bend'), 'Bend (B): ½, full, 1½, aus', 'bend'], [svgIcon('vibrato'), 'Vibrato (V)', 'vibrato'],
-    [svgIcon('dead'), 'Saite dämpfen (X)', 'dead'],
-  ]],
   ['Tonhöhe', [
     [glyph(GLYPHS.sharp, true), 'Kreuz (Strg+9)', 'sharp'], [glyph(GLYPHS.flat, true), 'Be (Strg+7)', 'flat'],
     [glyph(GLYPHS.natural, true), 'Auflösungszeichen (Strg+8)', 'natural'],
@@ -408,51 +413,20 @@ const EFFECTS = [
 ];
 
 /**
- * Bezeichnung eines Instruments im Feld der Spur: "Programm Name", z. B. "25 Akustikgitarre (Stahl)".
- * @param {number} program MIDI-Programm
- * @returns {string} Bezeichnung
- */
-const instrumentLabel = program => `${program} ${INSTRUMENT_NAMES[program] ?? ''}`.trim();
-
-/** Lagen der Noten gegenüber dem Klang, die der Dialog "Spuren" anbietet (siehe notationPitch() in notation.js). */
-const NOTATION_PITCHES = [
-  [-24, '2 Oktaven höher'],
-  [-12, '1 Oktave höher (Gitarre)'],
-  [0, 'wie klingend'],
-  [12, '1 Oktave tiefer'],
-];
-
-/**
- * Auswahl der Notenlage einer Spur im Dialog "Spuren". Steht in der Datei ein anderer Wert, kommt er als eigener
- * Eintrag dazu. Schlagzeug hat keine Notenlage.
+ * Auswahl des Instruments einer Spur im Dialog "Spuren" (INSTRUMENTS in notation.js, docs/Instrumente.md): Klang und
+ * Notenlage zusammen; der Tooltip jedes Eintrags nennt Instrumente dieser Gruppe. Schlagzeug steht nur bei einer
+ * Schlagzeugspur da und lässt sich nicht ändern.
  * @param {import('../../types/alphatab').model.Track} track Spur
  * @returns {string} HTML
  */
-function notationPitchSelect(track){
-  const pitch = edit.notationPitch(track);
-  const options = NOTATION_PITCHES.some(([value]) => value === pitch) ? NOTATION_PITCHES
-    : [...NOTATION_PITCHES, [pitch, `${Math.abs(pitch)} Halbtöne ${pitch < 0 ? 'höher' : 'tiefer'}`]];
-  const percussion = track.staves.every(st => st.isPercussion);
-  return `<select data-track-field="pitch" data-track="${track.index}" aria-label="Notenlage der Spur ${track.index + 1}"
-    title="Lage der Noten im Notensystem gegenüber dem Klang. Klang, Tabs und Akkorde ändern sich nicht."
-    ${percussion ? 'disabled' : ''}>${options.map(([value, label]) =>
-    `<option value="${value}"${value === pitch ? ' selected' : ''}>${label}</option>`).join('')}</select>`;
-}
-
-/**
- * MIDI-Programm aus einer Eingabe im Feld Instrument: eine Nummer (auch vor dem Namen, "26 E-Gitarre (Jazz)") oder der
- * Name bzw. ein Teil davon, wenn nur ein Instrument passt.
- * @param {string} text Eingabe
- * @returns {?number} Programm 0 bis 127; null, wenn nichts oder nicht eindeutig passt
- */
-function parseProgram(text){
-  const input = text.trim().toLowerCase();
-  const number = input.match(/^\d+/);
-  if(number) return Number(number[0]) <= 127 ? Number(number[0]) : null;
-  const exact = INSTRUMENT_NAMES.findIndex(n => n.toLowerCase() === input);
-  if(exact >= 0) return exact;
-  const part = INSTRUMENT_NAMES.map((n, p) => n.toLowerCase().includes(input) ? p : -1).filter(p => p >= 0);
-  return input && part.length === 1 ? part[0] : null;
+function instrumentSelect(track){
+  const current = edit.instrumentOf(track);
+  const drums = current.key === 'drums';
+  const options = edit.INSTRUMENTS.filter(i => drums ? i.key === 'drums' : i.key !== 'drums');
+  return `<select data-track-field="instrument" data-track="${track.index}" aria-label="Instrument der Spur ${track.index + 1}"
+    title="${escapeHtml(current.examples)}"${drums ? ' disabled' : ''}>${options.map(i =>
+    `<option value="${i.key}" title="${escapeHtml(i.examples)}"${i === current ? ' selected' : ''}>${escapeHtml(i.name)}</option>`)
+    .join('')}</select>`;
 }
 
 /** Tasten, die Panels ein- und ausklappen (wie Guitar Pro: F2 Palette): Taste → Seite. */
@@ -620,6 +594,16 @@ export class NoteEditor {
     /** Zeit des letzten Tastendrucks im Liedtext-Feld (ms, Date.now()), 0 ohne. */
     this.lyricsInputAt = 0;
     /**
+     * Tempo der Audiospur je Takt (recordingTempoRegion()), gemerkt für einen Stand der Noten (fillBarSignature()).
+     * @type {?{tex: string, bars: Map<number, ?import('./notation.js').TempoRegion>}}
+     */
+    this.tempoRegions = null;
+    /**
+     * Abschnitte, deren Tempo nicht zur Audiospur passt (showTempoMismatches()).
+     * @type {import('./notation.js').TempoRegion[]}
+     */
+    this.tempoMismatchList = [];
+    /**
      * Ob der Liedtext Silben ohne Schlag hat: Dann bleibt der Text im Feld stehen (mit den roten Abschnitten), statt
      * aus den Noten neu gefüllt zu werden, bis er passt oder "Rückgängig" ihn zurücksetzt.
      */
@@ -710,7 +694,6 @@ export class NoteEditor {
     const toolbar = this.addPart(songbar, 'div', 'edit-toolbar', this.toolbarHtml());
     toolbar.setAttribute('role', 'toolbar');
     toolbar.setAttribute('aria-label', 'Bearbeiten');
-    this.addPart(songbar, 'div', 'edit-conflicts', '').hidden = true;
     this.addPart(this.songView, 'aside', 'edit-panel edit-left', this.cursorPanelHtml(), narrow || collapsed.left);
     const right = this.addPart(this.songView, 'aside', 'edit-panel edit-right', this.lyricsPanelHtml(), narrow || collapsed.right);
     const bottom = this.addPart(this.songView, 'section', 'edit-bottom', this.bottomHtml(), collapsed.bottom);
@@ -815,7 +798,7 @@ export class NoteEditor {
 
   /**
    * Werkzeugleiste: Speichern, Rückgängig, Wiederholen | Dauer | Punktierung, Triole, Pause,
-   * Haltebogen | Schlag und Takt einfügen und löschen | Konflikte, Hilfe, Schließen.
+   * Haltebogen | Schlag und Takt einfügen und löschen | Hilfe, Schließen.
    * @returns {string} HTML
    */
   toolbarHtml(){
@@ -837,12 +820,11 @@ export class NoteEditor {
       </div>
       <div class="egroup egroup-song">
         <label class="etool-field"><span>Tonart</span>${select(KEY_NAMES, 'data-song="key" title="Tonart des ganzen Songs"')}</label>
+        <span class="etool-keyhint" data-key-hint hidden>!</span>
         ${todoButton(svgIcon('transpose'), 'Transponieren: Halbtöne, Capo und Tuning ändern, mit Vorschau', '', 'transpose')}
         <span class="etool-info" data-song-info></span>
       </div>
       <div class="egroup edit-end">
-        <button type="button" class="ebtn ebtn-text edit-conflicts-btn" data-action="conflicts" aria-expanded="false" hidden
-          title="Konflikte: Abweichungen von der Form des Gitarrenbuchs, jede mit einem Knopf zum Lösen (docs/Konflikte.md)"></button>
         <button type="button" class="ebtn ebtn-help" data-action="help" title="Tastenkürzel (?)"
           aria-label="Tastenkürzel">?</button>
         <button type="button" class="edit-close" data-action="done" title="Bearbeiten beenden"
@@ -853,9 +835,10 @@ export class NoteEditor {
 
   /**
    * Linkes Panel "Am Cursor" (wie die Palette in Guitar Pro links), alles, was den Schlag bzw. die Note betrifft:
-   * Notenwert, Punktierung, Triole, Pause, Haltebogen, Schläge und Takte einfügen/löschen, Effekte, Akkord, Griff,
-   * Text, zuletzt vom Takt der Abschnitt, Taktart und Tempo (sie gelten ab dem Takt am Cursor). Die Leiste enthält, was am ganzen Song
-   * hängt (Tonart, Shuffle, Capo, Tuning), dazu Speichern, Rückgängig, Konflikte, Hilfe, ✕.
+   * oben "Note" (Notenwert, Triole, Pause; darunter Punktierung, Haltebogen und die Effekte der Note), Schläge und
+   * Takte einfügen/löschen, weitere Effekte, Taktart und Tempo (ab dem Takt am Cursor), Abschnitt, Akkord, Text
+   * über dem Schlag, zuletzt die Silbe. Die Leiste enthält, was am ganzen Song
+   * hängt (Tonart, Shuffle, Capo, Tuning), dazu Speichern, Rückgängig, Hilfe, ✕.
    * @returns {string} HTML
    */
   cursorPanelHtml(){
@@ -865,14 +848,16 @@ export class NoteEditor {
     return `
       ${this.panelHead('Am Cursor', 'left')}
       <div class="edit-panel-body">
-        <h4>Notenwert</h4>
-        <div class="etools" role="group" aria-label="Dauer">${durations}</div>
+        <h4>Note</h4>
+        <div class="etools" role="group" aria-label="Dauer">${durations}
+          ${todoButton('3', 'Triole (/)', '', 'triplet')}
+          ${todoButton(glyph(GLYPHS.restQuarter, true), 'Pause (R)', 'ebtn-note', 'rest')}
+        </div>
         <div class="etools">
           ${todoButton(glyph(GLYPHS.quarter + GLYPHS.dot), 'Punktiert (.)', 'ebtn-note', 'dot')}
           ${todoButton(glyph(GLYPHS.quarter + GLYPHS.dot + GLYPHS.dot), 'Doppelt punktiert (Strg+.)', 'ebtn-note', 'dot2')}
-          ${todoButton('3', 'Triole (/)', '', 'triplet')}
-          ${todoButton(glyph(GLYPHS.restQuarter, true), 'Pause (R)', 'ebtn-note', 'rest')}
           ${todoButton(glyph(GLYPHS.quarter + GLYPHS.tie + GLYPHS.quarter), 'Haltebogen (L)', 'ebtn-note ebtn-wide', 'tie')}
+          ${NOTE_EFFECTS.map(([label, title, cmd]) => todoButton(label, title, '', cmd)).join('')}
         </div>
         <h4>Einfügen, löschen</h4>
         <div class="etools">
@@ -885,6 +870,15 @@ export class NoteEditor {
           <h4>${escapeHtml(group)}</h4>
           <div class="effect-grid">${items.map(([label, title, cmd]) => todoButton(label, title, '', cmd)).join('')}</div>
         `).join('')}
+        ${field('Takt', `<span class="etakt"><input type="text" data-song="ts" list="esongSignatures" placeholder="4/4"
+          aria-label="Taktart" title="Taktart ab diesem Takt bis zum nächsten Wechsel"><datalist id="esongSignatures">${
+          TIME_SIGNATURES.map(t => `<option value="${t}">`).join('')}</datalist><span class="efield-row">${
+          num(20, 300, 'data-song="tempo" aria-label="Tempo" title="Tempo ab diesem Takt bis zum nächsten Wechsel"')} BPM
+          <span class="etool-keyhint etool-tempohint" data-tempo-hint hidden>!</span></span></span>`)}
+        ${field('Abschnitt (Umschalt+Einfg)', `<span class="eclearable"><input type="text" data-bar="section"
+          list="ebarSections" placeholder="z. B. Verse"><button type="button" class="eclear" data-clear-section
+          aria-label="Abschnitt entfernen" title="Abschnitt entfernen">×</button></span>
+          <datalist id="ebarSections"></datalist>`)}
         <div class="efield echord">
           <label for="eChordSelect">Akkord (A)</label>
           <div class="echord-row">
@@ -894,14 +888,8 @@ export class NoteEditor {
           </div>
         </div>
         ${field('Text über dem Schlag (T)', '<input type="text" data-field="text" placeholder="z. B. Picking Pattern">')}
-        ${field('Abschnitt (Umschalt+Einfg)', `<span class="eclearable"><input type="text" data-bar="section"
-          list="ebarSections" placeholder="z. B. Verse"><button type="button" class="eclear" data-clear-section
-          aria-label="Abschnitt entfernen" title="Abschnitt entfernen">×</button></span>
-          <datalist id="ebarSections"></datalist>`)}
-        ${field('Takt', `<span class="etakt"><input type="text" data-song="ts" list="esongSignatures" placeholder="4/4"
-          aria-label="Taktart" title="Taktart ab diesem Takt bis zum nächsten Wechsel"><datalist id="esongSignatures">${
-          TIME_SIGNATURES.map(t => `<option value="${t}">`).join('')}</datalist><span class="efield-row">${
-          num(20, 300, 'data-song="tempo" aria-label="Tempo" title="Tempo ab diesem Takt bis zum nächsten Wechsel"')} BPM</span></span>`)}
+        ${field('Liedtext-Silbe (Umschalt+L)', `<input type="text" data-field="syllable" placeholder="z. B. ja"
+          title="Silbe an dieser Stelle, in der Textspur">`)}
       </div>`;
   }
 
@@ -942,6 +930,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       <div class="edit-bottom-resize" title="Höhe ändern (ziehen)" aria-hidden="true"></div>
       <div class="edit-bottom-head">
         <span class="edit-panel-title">Audio</span>
+        <button type="button" class="etool-keyhint etool-audiohint" data-action="tempoHint" hidden>!</button>
         <div class="edit-status">Noten werden geladen …</div>
         <button type="button" class="ebtn ebtn-collapse" data-collapse="bottom" title="Ein-/Ausklappen (F8)"
           aria-label="Unteres Panel ein- oder ausklappen"></button>
@@ -988,9 +977,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const box = /** @type {HTMLElement} */ (document.querySelector(`.sheet .${cls}`));
     box.addEventListener('click', this.onClick);
     box.addEventListener('change', this.onFieldChange);
-    box.addEventListener('focusin', e => this.startInstrumentInput(/** @type {HTMLInputElement} */ (e.target)));
-    box.addEventListener('focusout', e => this.endInstrumentInput(/** @type {HTMLInputElement} */ (e.target)));
-    box.addEventListener('input', e => this.suggestInstruments(/** @type {HTMLInputElement} */ (e.target)));
     return box;
   }
 
@@ -1044,13 +1030,11 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const lyricsAt = this.contentTrack('lyrics');
     const last = this.score.tracks.length - 1;
     list.innerHTML = `
-      <datalist id="etrackPrograms"></datalist>
       <datalist id="etrackNames">${names.map(n => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
       <div class="etrack etrack-head"><span></span><span>Name</span>
         <span title="Spur, in der die Akkorde stehen">Akkorde</span>
         <span title="Spur, in der der Liedtext steht">Text</span>
-        <span>Instrument</span>
-        <span title="Lage der Noten im Notensystem gegenüber dem Klang. Klang, Tabs und Akkorde ändern sich nicht.">Notenlage</span><span></span></div>
+        <span title="Klang und Notenlage der Spur">Instrument</span><span></span></div>
       ${this.score.tracks.map(track => {
         const i = track.index;
         return `
@@ -1071,12 +1055,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             <input type="radio" name="etrackLyrics" data-content="lyrics" data-track="${i}"
               ${i === lyricsAt ? ' checked' : ''} aria-label="Liedtext in Spur ${i + 1}"
               title="Liedtext in dieser Spur speichern">
-            <input type="text" data-track-field="instrument" data-track="${i}" list="etrackPrograms"
-              value="${escapeHtml(instrumentLabel(track.playbackInfo.program))}"
-              data-label="${escapeHtml(instrumentLabel(track.playbackInfo.program))}" autocomplete="off"
-              aria-label="Instrument der Spur ${i + 1}"
-              title="Nummer oder Name eingeben (z. B. 26 oder Gitarre), dann erscheinen die passenden Instrumente">
-            ${notationPitchSelect(track)}
+            ${instrumentSelect(track)}
             <span class="etrack-buttons">
               <button type="button" class="ebtn" data-cmd="trackUp" data-track="${i}"
                 title="Spur nach oben"${i ? '' : ' disabled'}>↑</button>
@@ -1089,7 +1068,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
           </div>`;
       }).join('')}
       <div class="etrack-foot">
-        ${todoButton('+ Spur', 'Gitarrenspur hinzufügen (Standard-Tuning)', 'ebtn-text', 'addTrack')}
+        ${todoButton('+ Spur', 'Gitarrenspur hinzufügen (mit Tuning und Capo des Songs)', 'ebtn-text', 'addTrack')}
         ${todoButton('Spur aus GuitarPro-Datei importieren', 'Spur aus einer hochgeladenen Guitar-Pro-Datei übernehmen, '
           + 'z. B. die Melodie', 'ebtn-text', 'trackImport')}
       </div>`;
@@ -1135,8 +1114,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       this.run(el.dataset.cmd, el);
     } else if(el.dataset.action === 'done'){
       this.finish();
-    } else if(el.dataset.action === 'conflicts'){
-      this.toggleConflicts();
+    } else if(el.dataset.action === 'tempoHint'){
+      this.gotoTempoMismatch();
     } else if(el.dataset.action === 'help'){
       openShortcutHelp();
     } else if(el.dataset.collapse){
@@ -1224,7 +1203,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       case '.': return 'dot';
       case '/': return 'triplet';
       case 'r': return shift ? null : 'rest';
-      case 'l': return shift ? null : 'tie';
+      case 'l': return shift ? () => this.focusField('syllable') : 'tie';
       case 'h': return shift ? null : 'hammer';
       case 's': return shift ? null : 'slide';
       case 'b': return shift ? null : 'bend';
@@ -1333,42 +1312,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         this.toast(on ? 'Triolen-Feeling: Achtel (Shuffle)' : 'Triolen-Feeling: kein');
       },
       keySignature: () => /** @type {HTMLElement} */ (this.part('edit-toolbar').querySelector('[data-song="key"]')).focus(),
-      removeFeel: () => {
-        this.change(() => edit.setTripletFeel(this.score, 0, at.model.TripletFeel.NoTripletFeel, true));
-        this.toast('Triolen-Feeling: kein');
-      },
-      detectKey: () => {
-        const key = detectKeySignature(this.score);
-        if(!key){
-          this.toast('Die notierte Tonart passt.');
-          return;
-        }
-        this.change(() => edit.setKeySignature(at, this.score, 0, key.keySignature, key.minor, true));
-        this.toast(`Tonart: ${keyName(key.keySignature, key.minor)}`);
-      },
-      unroll: () => this.unrollRepeats(),
       transpose: () => this.openTransposeDialog(),
       history: () => void this.openHistoryDialog(),
       uploads: () => openUploads(this.player.slug),
-      unifyCapo: () => {
-        let result = {capo: 0, moved: [], octaves: 0};
-        this.change(() => { result = unifyCapo(this.score); });
-        this.toast(`Capo ${result.capo} für alle Spuren`
-          + (result.octaves ? `; ${result.octaves} Noten passten nur eine Oktave höher.` : ''));
-      },
-      unifyTuning: () => {
-        // Wie beim Capo: Die anderen Spuren werden umgerechnet und klingen gleich.
-        const [first, ...others] = tuningStaves(this.score);
-        let misses = 0;
-        this.change(() => {
-          const tuning = [...first.tuning].reverse();
-          for(const staff of others) misses += edit.setTuning(this.alphaTab, staff, tuning, true);
-        });
-        this.toast(`Tuning ${this.tuningText(first)} für alle Spuren`
-          + (misses ? `; ${misses} Noten ließen sich nicht umrechnen (Bund unter 0 oder über 24).` : ''));
-      },
-      mergeChords: () => this.moveContentTo('chords', chordsTrack(this.score)?.index ?? 0),
-      mergeLyrics: () => this.moveContentTo('lyrics', lyricsTrack(this.score)?.index ?? 0),
       tracks: () => this.openTracksDialog(),
       leadsheet: () => this.openLeadsheetDialog(),
       trackUp: () => this.changeTracks(score => edit.moveTrack(score, Number(el.dataset.track), -1),
@@ -1578,29 +1524,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Schreibt Wiederholungen, Volta-Klammern, Sprungzeichen und Takt-Wiederholungszeichen aus (notation.js), als ein
-   * Schritt für "Rückgängig".
-   * @returns {void}
-   */
-  unrollRepeats(){
-    let result;
-    try {
-      result = edit.unrollRepeats(this.alphaTab, t => parseScore(this.alphaTab, t), this.tex);
-    } catch(err){
-      this.toast(err.message);
-      return;
-    }
-    if(!result){
-      this.toast('Keine Wiederholungen oder Sprünge auszuschreiben.');
-      return;
-    }
-    // Tab-Stellen wandern mit (ihr erstes Vorkommen).
-    const sheet = JSON.stringify(remapSheetByOrder(this.sheet, result.order));
-    this.commitTex(writeScore(this.alphaTab, result.score), sheet);
-    this.toast(`Ausgeschrieben: ${result.before} → ${result.after} Takte`);
-  }
-
-  /**
    * Übernimmt einen neuen Stand als einen Schritt für "Rückgängig" (für Änderungen, die ein neues Modell liefern).
    * @param {string} tex alphaTex
    * @param {?string} [sheet] neue Angaben für das Leadsheet (wie sheetJson()), wenn sich die Takte verschoben haben
@@ -1674,16 +1597,86 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   /**
    * Schlag, an dem der Akkord für den Schlag am Cursor steht: der Schlag der Akkordspur (contentTrack()), der an
    * derselben Stelle beginnt. So landen neue Akkorde in der Spur, die die Radiobuttons zeigen, auch wenn der Cursor in
-   * einer anderen steht. Beginnt dort kein Schlag (z. B. mitten in einer langen Note), der Schlag am Cursor selbst;
-   * dann meldet renderConflicts() Akkorde außerhalb der Akkordspur.
+   * einer anderen steht. Beginnt dort kein Schlag (z. B. mitten in einer langen Note): zum Lesen der Schlag am Cursor
+   * selbst (er hat dann keinen Akkord der Akkordspur); zum Setzen (create) wird der klingende Schlag der Akkordspur dort
+   * geteilt und angebunden (klingt gleich, splitBeat() in notation.js), damit Akkorde nur in der Akkordspur stehen.
    * @param {Beat} beat Schlag am Cursor
-   * @returns {Beat}
+   * @param {boolean} [create] zum Setzen eines Akkords
+   * @returns {?Beat} null nur mit create, wenn sich dort kein Schlag teilen lässt (Triole, Vorschlag)
    */
-  chordBeat(beat){
-    const staff = this.score.tracks[this.contentTrack('chords')]?.staves[0];
+  chordBeat(beat, create = false){
+    return this.contentBeat('chords', beat, create);
+  }
+
+  /**
+   * Schlag, an dem die Silbe für den Schlag am Cursor steht: wie chordBeat(), nur in der Textspur.
+   * @param {Beat} beat Schlag am Cursor
+   * @param {boolean} [create] zum Setzen einer Silbe
+   * @returns {?Beat} null nur mit create, wenn sich dort kein Schlag teilen lässt (Triole, Vorschlag)
+   */
+  syllableBeat(beat, create = false){
+    return this.contentBeat('lyrics', beat, create);
+  }
+
+  /**
+   * Schlag der Akkord- bzw. Textspur (contentTrack()) an der Stelle des Schlags am Cursor; Einzelheiten bei chordBeat().
+   * @param {'chords'|'lyrics'} kind Akkord- oder Textspur
+   * @param {Beat} beat Schlag am Cursor
+   * @param {boolean} create zum Setzen: notfalls den klingenden Schlag dort teilen
+   * @returns {?Beat} null nur mit create, wenn sich dort kein Schlag teilen lässt
+   */
+  contentBeat(kind, beat, create){
+    const staff = this.score.tracks[this.contentTrack(kind)]?.staves[0];
     if(!staff || staff === beat.voice.bar.staff) return beat;
-    const bar = staff.bars[beat.voice.bar.index];
-    return bar?.voices[0]?.beats.find(b => b.playbackStart === beat.playbackStart) ?? beat;
+    const voice = staff.bars[beat.voice.bar.index]?.voices[0];
+    const found = voice?.beats.find(b => b.playbackStart === beat.playbackStart);
+    if(found || !create) return found ?? beat;
+    const sounding = voice ? edit.timeline(voice).find(e => e.start < beat.playbackStart && beat.playbackStart < e.end) : null;
+    return sounding ? edit.splitBeat(this.alphaTab, sounding.beat, beat.playbackStart - sounding.start) : null;
+  }
+
+  /**
+   * Setzt einen Akkord an die Stelle des Schlags am Cursor, in der Akkordspur (chordBeat()); geht das dort nicht,
+   * sagt es ein Hinweis.
+   * @param {Beat} beat Schlag am Cursor
+   * @param {string} name Akkordname, leer entfernt ihn
+   * @returns {void}
+   */
+  setChordAt(beat, name){
+    const target = this.chordBeat(beat, true);
+    if(target) this.setChordName(target, name);
+    else this.toast('Hier kann die Akkordspur keinen Akkord tragen (Triole oder Vorschlag an dieser Stelle).');
+  }
+
+  /**
+   * Setzt die Silbe (erste Strophe) an die Stelle des Schlags am Cursor, in der Textspur (syllableBeat()). Ein
+   * Zeilenumbruch, der dort schon stand, bleibt; weitere Strophen bleiben ebenfalls.
+   * @param {Beat} beat Schlag am Cursor
+   * @param {string} syllable Silbe, leer entfernt sie
+   * @returns {void}
+   */
+  setSyllableAt(beat, syllable){
+    const target = this.syllableBeat(beat, Boolean(syllable));
+    if(!target){
+      if(syllable) this.toast('Hier kann die Textspur keine Silbe tragen (Triole oder Vorschlag an dieser Stelle).');
+      return;
+    }
+    if(target.voice.bar.staff.track !== this.lyricsTarget() && !syllable) return;
+    const lyrics = target.lyrics ? [...target.lyrics] : [''];
+    const old = lyrics[0] ?? '';
+    lyrics[0] = syllable ? syllable + (old.endsWith(edit.LYRICS_BREAK) ? edit.LYRICS_BREAK : '') : '';
+    target.lyrics = lyrics.some(l => l) ? lyrics : null;
+  }
+
+  /**
+   * Silbe der Textspur an der Stelle des Schlags am Cursor, ohne Zeilenumbruch (für das Feld im linken Panel).
+   * @param {Beat} beat Schlag am Cursor
+   * @returns {string}
+   */
+  syllableAt(beat){
+    const target = this.syllableBeat(beat);
+    if(!target || target.voice.bar.staff.track !== this.lyricsTarget()) return '';
+    return (target.lyrics?.[0] ?? '').replace(edit.LYRICS_BREAK, '').trim();
   }
 
   /**
@@ -1767,7 +1760,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * chordfile.js). Der Text kommt ins Feld "Liedtext" und wird auf die Schläge verteilt (applyLyrics()); das Feld ist
    * dabei leer, es gibt also keinen Text, der Vorrang hätte. Jeder Akkord kommt an den Schlag seiner Silbe (in der
    * Akkordspur, siehe chordBeat()), aber nur dort, wo noch kein Akkord steht. Kennt der Akkordkatalog einen Akkord
-   * nicht, steht ein einfacherer (simplifyChord()); die Griffe kommen aus dem Katalog (normalizeChords()).
+   * nicht, steht ein einfacherer (simplifyChord()); die Griffe kommen aus dem Katalog (normalizeChords()). Namen, die
+   * auch dann unbekannt sind (parseChord() liest sie nicht, z. B. "N.C."), werden nicht übernommen; die Meldung nennt sie.
    * @param {File} file ChordPro- oder Textdatei
    * @returns {Promise<void>}
    */
@@ -1787,7 +1781,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const beats = track.staves[0].bars.flatMap(bar => bar.voices[0]?.beats ?? []).filter(b => b.lyrics?.[0]?.trim());
     const ranges = edit.syllableRanges(text);
     const library = await loadChordLibraryOrEmpty();
-    const result = {placed: 0, kept: 0, lost: 0, simplified: /** @type {string[]} */ ([])};
+    const result = {placed: 0, kept: 0, lost: 0, simplified: /** @type {string[]} */ ([]),
+      unknown: /** @type {string[]} */ ([])};
     this.change(() => {
       for(const {at, name} of chords){
         const k = ranges.findIndex(r => r.to > at);
@@ -1795,12 +1790,20 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
           result.lost++;
           continue;
         }
-        const beat = this.chordBeat(beats[k]);
+        const beat = this.chordBeat(beats[k], true);
+        if(!beat){
+          result.lost++;
+          continue;
+        }
         if(beat.chordId){
           result.kept++;
           continue;
         }
         const simple = simplifyChord(name, library);
+        if(!parseChord(simple)){
+          if(!result.unknown.includes(name)) result.unknown.push(name);
+          continue;
+        }
         if(simple !== name && !result.simplified.includes(`${name} → ${simple}`)) result.simplified.push(`${name} → ${simple}`);
         this.setChordName(beat, simple);
         result.placed++;
@@ -1812,7 +1815,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       + (chords.length ? `; ${result.placed} von ${chords.length} Akkorden gesetzt` : '; keine Akkorde gefunden')
       + (result.kept ? `, ${result.kept} übersprungen (am Schlag stand schon einer)` : '')
       + (result.lost ? `, ${result.lost} ohne Schlag` : '')
-      + (result.simplified.length ? `. Ersetzt: ${result.simplified.join(', ')}` : '') + '.');
+      + (result.simplified.length ? `. Ersetzt: ${result.simplified.join(', ')}` : '')
+      + (result.unknown.length ? `. Nicht übernommen (unbekannt): ${result.unknown.join(', ')}` : '') + '.');
   }
 
   /**
@@ -1845,7 +1849,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
           <input type="number" id="trackImportFrom" min="1" max="${source.masterBars.length}" value="1"></div>
         <div class="form-field"><label for="trackImportAt">Auf Takt des Songs</label>
           <input type="number" id="trackImportAt" min="1" max="${bars}" value="1"></div>
-        <p class="hint">Taktart, Tempo und Abschnitte bleiben die des Songs; Takte davor werden Pausen, was über das
+        <p class="hint">Taktart, Tempo, Vorzeichen und Abschnitte bleiben die des Songs; Takte davor werden Pausen, was über das
           Ende (${bars} Takte) hinausgeht, fällt weg. Akkorde und Text der Datei kommen nicht mit.</p>
         ${loss?.length ? `<p class="hint">${escapeHtml(describeScoreLoss(loss))}</p>` : ''}
         <div class="struct-actions">
@@ -1861,14 +1865,16 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       const from = Math.max(1, value('trackImportFrom') || 1) - 1;
       const at = Math.min(bars, Math.max(1, value('trackImportAt') || 1)) - 1;
       closeOverlay();
-      let result = {bars: 0, cut: 0, misfit: []};
+      let result = {bars: 0, cut: 0, misfit: [], octaves: 0, misses: 0};
       // Frisch gelesen: importTrack() hängt die Takte der Quelle um.
       this.changeTracks(score => { result = edit.importTrack(this.alphaTab, score, parse().tracks[index], from, at); },
         this.score.tracks.length, 0);
       const misfit = result.misfit.length ? `; Länge passt nicht zur Taktart in Takt `
         + `${result.misfit.slice(0, 8).map(i => i + 1).join(', ')}${result.misfit.length > 8 ? ' …' : ''}` : '';
       this.toast(`Spur „${trackName(this.score.tracks.at(-1))}“ übernommen: ${result.bars} Takte`
-        + (result.cut ? `, ${result.cut} am Ende weggefallen` : '') + misfit + '.');
+        + (result.cut ? `, ${result.cut} am Ende weggefallen` : '') + misfit
+        + (result.octaves ? `; ${result.octaves} Noten für den Capo eine Oktave höher` : '')
+        + (result.misses ? `; ${result.misses} Noten passten nicht ins Tuning des Songs` : '') + '.');
     });
   }
 
@@ -1981,118 +1987,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.updateState();
     this.renderSongPanels();
     this.fillSongFields();
-    this.renderConflicts();
-  }
-
-  /**
-   * Konflikte unter der Werkzeugleiste: Abweichungen von der Form des Gitarrenbuchs (wie die Prüfung der API, siehe
-   * read_score_issues() in api/lib/crud.php, dazu Tonart und Akkorde), jeder mit einem Knopf, der ihn löst (außer den
-   * Konflikten bei Akkordnamen und Griffen, die man im Dialog "Akkord" löst). Alle Fälle: docs/Konflikte.md. Nach jeder
-   * Änderung neu.
-   * @returns {void}
-   */
-  renderConflicts(){
-    const el = this.part('edit-conflicts');
-    const score = this.score;
-    if(!el || !score) return;
-    /** @type {[string, string, string, string][]} Text, Knopf, Befehl für run(), Tooltip (ohne Knopf: Befehl leer) */
-    const conflicts = [];
-    // Der Song soll von oben nach unten durchlaufen, damit jeder Takt eindeutig ist.
-    if(edit.hasRepeats(this.alphaTab, score)){
-      conflicts.push(['Der Song läuft nicht von oben nach unten durch (Wiederholungen, Volta-Klammern, Sprungzeichen oder '
-        + 'Wiederholungstakte).', 'Wiederholungen und Sprünge ausschreiben', 'unroll',
-      'Jeder Takt steht danach so oft da, wie er gespielt wird']);
-    }
-    const staves = stringedStaves(score);
-    if(new Set(staves.map(st => st.capo)).size > 1){
-      conflicts.push([`Capo ungleich: ${staves.map(st => `${trackName(st.track)} ${st.capo}`).join(', ')}.`,
-        'Capo angleichen', 'unifyCapo',
-        'Alle Spuren auf den Capo der Akkordspur; die anderen werden umgerechnet und klingen gleich']);
-    }
-    if(!sameTuning(score)){
-      conflicts.push([`Tuning ungleich: ${tuningStaves(score).map(st => `${trackName(st.track)} ${
-        this.tuningText(st)}`).join(', ')}.`, 'Tuning angleichen', 'unifyTuning',
-      'Alle Spuren auf das Tuning der Akkordspur; die anderen werden umgerechnet und klingen gleich']);
-    }
-    const key = detectKeySignature(score);
-    if(key){
-      const bar = (staves[0] ?? score.tracks[0].staves[0]).bars[0];
-      const minor = bar.keySignatureType === this.alphaTab.model.KeySignatureType.Minor;
-      conflicts.push([`Tonart: notiert ${keyName(bar.keySignature, minor)}, erkannt aus Akkorden und Tönen `
-        + `${keyName(key.keySignature, key.minor)}.`, 'Tonart korrigieren', 'detectKey',
-      'Vorzeichen im ganzen Song auf die erkannte Tonart setzen']);
-    }
-    // Triolen-Feeling: Das Gitarrenbuch kennt nur Shuffle (Achtel-Triolen).
-    const feels = new Set(score.masterBars.map(mb => Number(mb.tripletFeel))
-      .filter(f => f !== this.alphaTab.model.TripletFeel.NoTripletFeel && f !== this.alphaTab.model.TripletFeel.Triplet8th));
-    if(feels.size){
-      conflicts.push([`Triolen-Feeling ${[...feels].map(f => TRIPLET_FEELS[f]).join(', ')}: Vorgesehen ist nur Shuffle (Achtel-Triolen).`,
-        'Feeling entfernen', 'removeFeel', 'Das Triolen-Feeling im ganzen Song ausschalten (die Noten bleiben, wie sie sind)']);
-    }
-    // Akkorde bzw. Text in mehr als einer Spur: Die Radiobuttons im Dialog "Spuren" zeigen dann die Spur mit den
-    // meisten, die übrigen sollen dorthin (eine Stelle je Information, siehe notation.js).
-    for(const [kind, track, label, has] of [
-      ['chords', chordsTrack(score), 'Akkorde', beat => !!beat.chordId],
-      ['lyrics', lyricsTrack(score), 'Liedtext', beat => !!beat.lyrics?.some(l => l?.trim())],
-    ]){
-      if(!track || !score.tracks.some(t => t !== track && t.staves.some(st => st.bars.some(b => b.voices.some(v =>
-        v.beats.some(has)))))) continue;
-      const name = trackName(track);
-      conflicts.push([`${label} stehen auch außerhalb von „${name}“.`, `${label} nach „${name}“ übertragen`,
-        kind === 'chords' ? 'mergeChords' : 'mergeLyrics',
-        `${label} ganz in diese Spur schreiben (fragt nach, wenn sich dabei etwas verschiebt)`]);
-    }
-    // Akkordnamen, die die Regeln der Akkordtheorie nicht kennen, und Griffe, die nicht zum Namen passen.
-    const unknown = new Set();
-    const mismatches = new Map();
-    for(const staff of staves) for(const chord of staff.chords?.values() ?? []){
-      const parsed = parseChord(chord.name);
-      if(!parsed){
-        unknown.add(chord.name);
-        continue;
-      }
-      const grip = gripOf(chord);
-      if(playedStrings(grip) < 3) continue;
-      const frets = parseGrip(grip);
-      const tuning = [...staff.tuning].reverse();
-      if(!gripToneProblem(parsed, frets, tuning)) continue;
-      const alike = nameGrip(frets, tuning, 1)[0];
-      mismatches.set(`${chord.name}|${grip}`, `${chord.name} (${grip}${alike ? `, klingt wie ${alike}` : ''})`);
-    }
-    const list = items => items.length > 8 ? `${items.slice(0, 8).join(', ')} … (${items.length})` : items.join(', ');
-    if(unknown.size){
-      conflicts.push([`Unbekannte Akkordnamen: ${list([...unknown])}.`, '', '',
-        'Der Name entspricht nicht den Regeln der Akkordtheorie (docs/Musiktheorie.md); im Dialog "Akkord" ändern']);
-    }
-    if(mismatches.size){
-      conflicts.push([`Der Griff passt nicht zum Namen: ${list([...mismatches.values()])}.`, '', '',
-        'Die Töne des Griffs sind andere als die des Akkordnamens; im Dialog "Akkord" Name oder Griff ändern']);
-    }
-    const button = /** @type {?HTMLElement} */ (this.part('edit-toolbar')?.querySelector('[data-action="conflicts"]'));
-    if(button){
-      button.hidden = !conflicts.length;
-      button.innerHTML = `&#9888; ${conflicts.length} Konflikt${conflicts.length === 1 ? '' : 'e'}`;
-    }
-    if(!conflicts.length) this.toggleConflicts(false);
-    el.innerHTML = conflicts.map(([text, label, cmd, hint]) => `
-      <div class="edit-conflict"><span${cmd ? '' : ` title="${escapeHtml(hint)}"`}>&#9888; ${escapeHtml(text)}</span>
-        ${cmd ? `<button type="button" class="ebtn ebtn-text" data-cmd="${cmd}"
-          title="${escapeHtml(hint)}">${escapeHtml(label)}</button>` : ''}</div>`).join('');
-  }
-
-  /**
-   * Klappt die Konflikte unter ihrem Knopf auf bzw. zu. Sie bleiben offen, bis man den Knopf wieder drückt oder alle
-   * gelöst sind (nach dem Lösen zeigt die Liste gleich, was noch übrig ist).
-   * @param {boolean} [open] öffnen; ohne Angabe umschalten
-   * @returns {void}
-   */
-  toggleConflicts(open){
-    const el = this.part('edit-conflicts');
-    const button = this.part('edit-toolbar')?.querySelector('[data-action="conflicts"]');
-    if(!el) return;
-    const show = open ?? el.hidden;
-    el.hidden = !show || !el.children.length;
-    button?.setAttribute('aria-expanded', String(!el.hidden));
   }
 
   /**
@@ -2423,47 +2317,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Beginnt die Eingabe im Feld Instrument: Das Feld wird geleert (das bisherige steht als Platzhalter da), sonst
-   * zeigte die Liste nur Instrumente, die zum bisherigen Text passen. Vorgeschlagen werden die Instrumente, die
-   * Songs schon nutzen.
-   * @param {HTMLInputElement} input beliebiges Feld im Dialog "Spuren"
-   * @returns {void}
-   */
-  startInstrumentInput(input){
-    if(input.dataset.trackField !== 'instrument') return;
-    input.placeholder = input.dataset.label;
-    input.value = '';
-    this.suggestInstruments(input);
-  }
-
-  /**
-   * Beendet die Eingabe im Feld Instrument: Wurde nichts gewählt, steht wieder das bisherige darin.
-   * @param {HTMLInputElement} input beliebiges Feld im Dialog "Spuren"
-   * @returns {void}
-   */
-  endInstrumentInput(input){
-    if(input.dataset.trackField === 'instrument' && !input.value.trim()) input.value = input.dataset.label;
-  }
-
-  /**
-   * Füllt die Vorschlagsliste für das Feld Instrument: ohne Eingabe die Instrumente, die schon in Songs vorkommen (und
-   * das der Spur), mit Eingabe alle, deren Name den Text enthält (bei einer Zahl: deren Nummer damit beginnt).
-   * @param {HTMLInputElement} input beliebiges Feld im Dialog "Spuren"
-   * @returns {void}
-   */
-  suggestInstruments(input){
-    if(input.dataset.trackField !== 'instrument') return;
-    const text = input.value.trim().toLowerCase();
-    const programs = text
-      ? INSTRUMENT_NAMES.map((n, p) => p).filter(p => /^\d+$/.test(text)
-        ? String(p).startsWith(text) : instrumentLabel(p).toLowerCase().includes(text))
-      : [...new Set([...usedPrograms(), this.score.tracks[Number(input.dataset.track)].playbackInfo.program])]
-        .sort((a, b) => a - b);
-    document.getElementById('etrackPrograms').innerHTML = programs
-      .map(p => `<option value="${escapeHtml(instrumentLabel(p))}">`).join('');
-  }
-
-  /**
    * Blendet eine Spur in den Noten ein oder aus (Auge im Dialog "Spuren"); mindestens eine bleibt angezeigt.
    * @param {number} index Index der Spur
    * @returns {void}
@@ -2558,6 +2411,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     };
     this.fillChordSelect();
     value('text', beat.text ?? '');
+    value('syllable', this.syllableAt(beat));
     const mb = beat.voice.bar.masterBar;
     this.fillField(fields, '[data-bar="section"]', sectionName(mb.section));
     this.fillBarSignature();
@@ -2576,6 +2430,12 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       return;
     }
     const tex = this.tex;
+    // Takte, deren Länge nicht zur Taktart passt, kommen nicht in die Datei (Angaben fürs Leadsheet allein schon).
+    const problems = tex === this.savedTex ? [] : edit.barLengthProblems(this.score);
+    if(problems.length){
+      this.refuseSave(problems);
+      return;
+    }
     const sheet = this.sheetJson();
     try {
       let song = null;
@@ -2606,6 +2466,29 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     } catch(err){
       this.toast('Nicht gespeichert: ' + err.message);
     }
+  }
+
+  /**
+   * Dialog statt Speichern: Takte, deren Länge nicht zur Taktart passt, werden so nicht gespeichert. Genannt wird der
+   * erste dieser Takte, mit einem Knopf dorthin.
+   * @param {import('./notation.js').BarLengthProblem[]} problems Takte mit falscher Länge (barLengthProblems())
+   * @returns {void}
+   */
+  refuseSave(problems){
+    const bars = [...new Set(problems.map(p => p.bar.index))].sort((a, b) => a - b);
+    const first = problems.find(p => p.bar.index === bars[0]);
+    openOverlay(`<h2>Speichern nicht möglich</h2>
+      <p>In Takt ${bars[0] + 1} passt die Länge nicht zur Taktart (${escapeHtml(first.text)}).</p>
+      <div class="struct-actions">
+        <button class="btn" type="button" id="refuseGo">Zu Takt ${bars[0] + 1}</button>
+        <button class="btn btn-primary" type="button" id="refuseCancel">Abbrechen</button>
+      </div>`, true);
+    document.getElementById('refuseCancel').addEventListener('click', closeOverlay);
+    document.getElementById('refuseGo').addEventListener('click', () => {
+      closeOverlay();
+      const track = first.bar.staff.track.index;
+      this.moveTo(this.trackIndexes.includes(track) ? {track, bar: bars[0], beat: 0} : {bar: bars[0], beat: 0});
+    });
   }
 
   /**
@@ -2848,8 +2731,14 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const bar = staff.bars[0];
     const minor = bar.keySignatureType === this.alphaTab.model.KeySignatureType.Minor;
     this.fillField(toolbar, '[data-song="key"]', keyName(bar.keySignature, minor));
-    // Shuffle: Achtel-Triolen-Feeling im ganzen Song. Der Knopf zeigt den Zustand und schaltet um; bei einer anderen Art
-    // (meldet renderConflicts()) gilt er als aus.
+    // Erkennt die App aus Akkorden und Tönen eine andere Tonart, steht ein "!" daneben (nur ein Hinweis: Die notierte
+    // muss nicht zu allen Akkorden passen, z. B. Blues, modale Songs, entlehnte Akkorde).
+    const detected = detectKeySignature(score);
+    const hint = /** @type {HTMLElement} */ (toolbar.querySelector('[data-key-hint]'));
+    hint.hidden = !detected;
+    hint.title = detected ? `Erkannte Tonart: ${keyName(detected.keySignature, detected.minor)}` : '';
+    // Shuffle: Achtel-Triolen-Feeling im ganzen Song. Der Knopf zeigt den Zustand und schaltet um; eine andere Art
+    // (löst der Import, siehe conflicts.js) gilt als aus.
     const shuffle = score.masterBars[0].tripletFeel === this.alphaTab.model.TripletFeel.Triplet8th;
     const shuffleButton = toolbar.querySelector('[data-cmd="tripletFeel"]');
     shuffleButton.innerHTML = svgIcon(shuffle ? 'feelShuffle' : 'feelStraight', 48);
@@ -2863,10 +2752,59 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     info.hidden = !parts.length;
     info.title = 'Capo und Tuning (ändern im Dialog Transponieren)';
     this.fillBarSignature();
+    this.showTempoMismatches();
   }
 
   /**
-   * Füllt die Felder "Taktart" und "Tempo" im linken Panel mit den Werten am Takt des Cursors.
+   * Abschnitte ohne Tempowechsel, deren notiertes Tempo nicht zum Tempo der Audiospur passt (recordingTempoRegion() in
+   * notation.js; die Grenzen sind die notierten Tempowechsel).
+   * @returns {import('./notation.js').TempoRegion[]} in Taktfolge; leer ohne Sync-Punkte oder wenn alle passen
+   */
+  tempoMismatches(){
+    const bars = this.score.masterBars;
+    const list = [];
+    for(let bar = 0; bar < bars.length;){
+      const region = edit.recordingTempoRegion(this.alphaTab, this.score, bar);
+      if(region){
+        if(region.recorded !== region.tempo) list.push(region);
+        bar = region.end;
+      } else {
+        bar++;
+        while(bar < bars.length && !bars[bar].tempoAutomations.length) bar++;
+      }
+    }
+    return list;
+  }
+
+  /**
+   * "!" am Label "Audio" des unteren Panels, wenn irgendwo das notierte Tempo nicht zur Audiospur passt; der Tooltip
+   * listet alle Abschnitte, ein Klick springt zum ersten (gotoTempoMismatch()).
+   * @returns {void}
+   */
+  showTempoMismatches(){
+    const hint = /** @type {?HTMLElement} */ (this.part('edit-bottom')?.querySelector('[data-action="tempoHint"]'));
+    if(!hint || !this.score) return;
+    this.tempoMismatchList = this.tempoMismatches();
+    hint.hidden = !this.tempoMismatchList.length;
+    hint.title = this.tempoMismatchList.map(r => `Takt ${r.start + 1}–${r.end}: notiert ${r.tempo}, Audiospur ${r.recorded} BPM`)
+      .join('\n') + (this.tempoMismatchList.length ? '\nKlick: zum ersten Abschnitt' : '');
+  }
+
+  /**
+   * Setzt den Cursor auf den ersten Abschnitt, dessen Tempo nicht zur Audiospur passt (und die Abspielposition dorthin,
+   * damit der Sync-Editor ihn zeigt).
+   * @returns {void}
+   */
+  gotoTempoMismatch(){
+    const first = this.tempoMismatchList?.[0];
+    if(!first) return;
+    this.moveTo({bar: first.start, beat: 0});
+    this.seekToCursor();
+  }
+
+  /**
+   * Füllt die Felder "Taktart" und "Tempo" im linken Panel mit den Werten am Takt des Cursors; weicht das Tempo der
+   * Audiospur dort ab, steht ein "!" neben dem Tempo (Tooltip mit dem Tempo der Audiospur).
    * @returns {void}
    */
   fillBarSignature(){
@@ -2875,6 +2813,16 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     if(!panel || !mb) return;
     this.fillField(panel, '[data-song="ts"]', `${mb.timeSignatureNumerator}/${mb.timeSignatureDenominator}`);
     this.fillField(panel, '[data-song="tempo"]', Math.round(edit.tempoAt(this.score, this.pos.bar)));
+    // Tempo der Audiospur im Abschnitt ohne Tempowechsel am Cursor (aus den Sync-Punkten): weicht es ab, ein "!" daneben.
+    // Gemerkt je Takt und Stand der Noten: Die Rechnung geht über alle Sync-Punkte, der Cursor bewegt sich oft.
+    if(this.tempoRegions?.tex !== this.tex) this.tempoRegions = {tex: this.tex, bars: new Map()};
+    const cache = this.tempoRegions.bars;
+    if(!cache.has(this.pos.bar)) cache.set(this.pos.bar, edit.recordingTempoRegion(this.alphaTab, this.score, this.pos.bar));
+    const region = cache.get(this.pos.bar);
+    const hint = /** @type {?HTMLElement} */ (panel.querySelector('[data-tempo-hint]'));
+    if(!hint) return;
+    hint.hidden = !region || region.recorded === region.tempo;
+    hint.title = hint.hidden ? '' : `Tempo der Audiospur ab Takt ${region.start + 1} bis ${region.end}: ${region.recorded} BPM`;
   }
 
   /**
@@ -2919,7 +2867,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       return;
     }
     if(input.dataset.chordSelect !== undefined){
-      this.change(beat => this.setChordName(this.chordBeat(beat), input.value));
+      this.change(beat => this.setChordAt(beat, input.value));
       return;
     }
     const field = input.dataset.field;
@@ -2927,6 +2875,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const value = input.value.trim();
     this.change(beat => {
       if(field === 'text') beat.text = value || null;
+      if(field === 'syllable') this.setSyllableAt(beat, value);
     });
   }
 
@@ -3817,7 +3766,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Übernimmt ein Feld einer Spur im Dialog "Spuren": Name und Instrument. (Das Tuning gilt für alle Spuren und
+   * Übernimmt ein Feld einer Spur im Dialog "Spuren": Name und Instrument (Klang und Notenlage). (Das Tuning gilt für alle Spuren und
    * steht in der Werkzeugleiste, siehe applySongField().)
    * @param {HTMLInputElement} input Feld (data-track-field, data-track)
    * @returns {void}
@@ -3834,17 +3783,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         return;
       }
       this.change(() => { track.name = track.shortName = value; });
-    } else if(field === 'pitch'){
-      this.change(() => edit.setNotationPitch(track, Number(value)));
     } else if(field === 'instrument'){
-      const program = parseProgram(value);
-      if(program === null){
-        this.toast(`Kein Instrument „${value}“: eine Nummer von 0 bis 127 oder einen Namen eingeben.`);
-        input.value = input.dataset.label;
-        return;
-      }
-      input.value = input.dataset.label = instrumentLabel(program);
-      if(program !== track.playbackInfo.program) this.change(() => edit.setTrackProgram(this.alphaTab, track, program));
+      // Klang und Notenlage zusammen (docs/Instrumente.md).
+      const instrument = edit.instrumentByKey(value);
+      if(instrument) this.change(() => edit.setInstrument(this.alphaTab, track, instrument));
     }
   }
 
@@ -3891,7 +3833,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   applyChord(name, grip, oldName = ''){
     this.change(beat => {
       if(oldName && oldName !== name) this.renameSongChord(oldName, name);
-      this.setChordName(this.chordBeat(beat), name);
+      this.setChordAt(beat, name);
       if(grip) this.setSongChordGrip(name, grip);
     });
   }

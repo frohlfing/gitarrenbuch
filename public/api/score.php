@@ -15,7 +15,8 @@
  *                                  mit history=1. Token nötig.
  * PUT /api/score.php?slug=xyz   -> ersetzt score.atex. Body: alphaTex (text/plain, UTF-8), höchstens SCORE_MAX_BYTES.
  *                                  Antwort: das aktualisierte Lied. Token nötig. Nur für Lieder, die schon Noten
- *                                  haben (neue Noten kommen mit dem Import bzw. dem Gerüst über api/import.php).
+ *                                  haben (neue Noten kommen mit dem Import bzw. dem Gerüst über api/import.php). Der
+ *                                  bisherige Stand kommt in den Verlauf.
  *
  * Token wird per Header X-API-Token erwartet (siehe api/lib/http.php: require_token()).
  */

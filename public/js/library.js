@@ -5,7 +5,7 @@
  */
 
 import {
-  API_URL, apiWrite, audioUrl, coverUrl, deleteCover, escapeHtml, formatTime, importSong, LEVELS, loadScoreText,
+  addUpload, API_URL, apiWrite, audioUrl, coverUrl, deleteCover, escapeHtml, formatTime, importSong, LEVELS, loadScoreText,
   loadSongs, loadYoutubeInfo, playedTimes, searchCovers, setCover, uploadCover,
 } from './base.js';
 import {createScore, describeScoreLoss, loadAlphaTab, parseScore, readGpFile, scoreDuration} from './notation.js';
@@ -103,15 +103,11 @@ function cardHtml(s){
     ? `<div class="thumb"><img src="${escapeHtml(coverUrl(s))}" alt="" loading="lazy">`
     : `<div class="thumb placeholder" style="--h:${placeholderHue(s.slug)}">
         <span class="initial" aria-hidden="true">${escapeHtml(s.title.charAt(0).toUpperCase())}</span>`;
-  // Rot, wenn der Song nicht der Konvention entspricht (Capo, Spurrollen); gezeigt wird nur die wichtigste
-  // Abweichung, korrigiert wird im Editor.
-  const issue = s.issues?.[0];
-  return `<a class="card${issue ? ' card-issues' : ''}" href="#/song/${encodeURIComponent(s.slug)}">
+  return `<a class="card" href="#/song/${encodeURIComponent(s.slug)}">
     ${thumb}
       ${badges ? `<div class="badges">${badges}</div>` : ''}
     </div>
     <div class="body">
-      ${issue ? `<div class="issue-badge" title="${escapeHtml(issue.hint)}">&#9888; ${escapeHtml(issue.label)}</div>` : ''}
       <h3>${escapeHtml(s.title)}</h3>
       <div class="meta">${escapeHtml(s.artist || '')}</div>
       ${s.tags.length || level ? `<div class="tags">${level ? `<span class="tag level-${level.value}">${level.short}</span>`
@@ -152,17 +148,6 @@ const WITHOUT_AUDIO = ':ohne-audio';
  */
 export function knownTracks(){
   return [...new Set(SONGS.flatMap(s => s.tracks))].sort((a, b) => a.localeCompare(b, 'de'));
-}
-
-/**
- * Alle MIDI-Programme, die Spuren in den Songs nutzen (für die Vorschläge im Dialog "Spuren" des Editors).
- * @returns {number[]} aufsteigend, ohne Duplikate
- */
-export function usedPrograms(){
-  /** @type {Set<number>} */
-  const programs = new Set();
-  for(const song of SONGS) for(const program of song.instruments ?? []) programs.add(program);
-  return [...programs].sort((a, b) => a - b);
 }
 
 /**
@@ -941,7 +926,7 @@ export function openImportForm(onImported){
     btn.disabled = true;
     btn.textContent = 'Importiert …';
     try {
-      const {meta, tex, loss} = await readGpFile(file);
+      const {meta, tex, loss, changes, lyrics} = await readGpFile(file);
       if(loss && !await confirmLoss(errorBox, loss)){
         btn.disabled = false;
         btn.textContent = 'Importieren';
@@ -952,6 +937,13 @@ export function openImportForm(onImported){
       }
       // Die Quelle der Datei (z. B. die Seite des Tabs bei Ultimate Guitar) hält der Server beim Upload fest.
       const saved = await importSong({...meta, gpSource: byId('importUgInput').value.trim()}, tex, file);
+      // Konfliktlöser (conflicts.js): Liedtext, der nicht in die Textspur passte, kommt als Chord-Datei in den
+      // Upload-Ordner (übernehmen mit "Chord-Datei importieren"); die Änderungen nur in der Konsole.
+      for(const {name, text} of lyrics){
+        await addUpload(saved.slug, {file: new File([text], name, {type: 'text/plain;charset=utf-8'}),
+          description: 'Liedtext einer anderen Spur, beim Import nicht übernommen'});
+      }
+      if(changes.length) console.info(`Import ${saved.slug}:`, changes.map(c => (c.critical ? '⚠ ' : '') + c.text));
       storeSong(saved);
       closeOverlay();
       onImported(saved);

@@ -4,7 +4,7 @@ Funktionen, wo und in welcher Reihenfolge sie angezeigt werden, mit Tastenkürze
 Knöpfe sind umgesetzt; was noch fehlt, steht beim jeweiligen Punkt.
 
 Aufteilung: In der **Werkzeugleiste** steht, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu Speichern,
-Rückgängig, Verlauf, Uploads, Transponieren, Konflikte, Hilfe, ✕. **Links** steht alles, was den Schlag bzw. die Note am Cursor betrifft, auch Notenwerte und
+Rückgängig, Verlauf, Uploads, Transponieren, Hilfe, ✕. **Links** steht alles, was den Schlag bzw. die Note am Cursor betrifft, auch Notenwerte und
 Einfügen/Löschen (wie die Palette in Guitar Pro), zuletzt vom Takt am Cursor Abschnitt, Taktart und Tempo. **Rechts**
 steht der Liedtext (oben das Textfeld, darunter die Vorschau, die Linie dazwischen lässt sich ziehen), **unten** Audio
 (Sync-Editor, Höhe ziehbar). Spuren und Leadsheet öffnen als Dialoge über die Knöpfe der Werkzeugleiste. Der Akkord eines Schlags wird links gewählt (Auswahlliste, "+" für einen neuen mit Griff), die Griffbilder für das Blatt im Dialog "Leadsheet". Auf schmalen Bildschirmen ist das linke Panel anfangs zu; die
@@ -12,18 +12,10 @@ Notenwerkzeuge erreicht man dann über F2 bzw. die Tastenkürzel.
 
 Einschalten: "Bearbeiten" im Menü ⋮ der Abspielleiste, immer direkt.
 
-**Konflikte** unter der Werkzeugleiste, je Abweichung eine Zeile mit Knopf, der sie löst (nach jeder Änderung neu,
-Rückgängig mit Strg+Z). Alle Fälle mit Ursache und Lösung: `docs/Konflikte.md`.
-- Der Song läuft nicht von oben nach unten durch (Wiederholungszeichen, Volta-Klammern, Sprungzeichen, Wiederholungstakte) –
-  "Wiederholungen und Sprünge ausschreiben"
-- Capo ungleich (je Spur genannt) – "Capo angleichen": alle auf den Capo der Akkordspur, Klang bleibt
-- Tonart: notiert X, erkannt Y (aus Akkorden und Tönen) – "Tonart korrigieren"; passt die notierte, steht nirgends etwas
-- Triolen-Feeling, das nicht Shuffle (Achtel-Triolen) ist, etwa Sechzehntel-Triolen – "Feeling entfernen" (die Noten bleiben, wie sie sind)
-- Akkorde bzw. Liedtext auch außerhalb ihrer Spur (der mit den meisten) – "Akkorde/Liedtext nach „…“ übertragen";
-  fragt wie die Radiobuttons im Dialog "Spuren" nach, wenn sich dabei etwas verschiebt oder wegfällt
-- Unbekannte Akkordnamen – Namen, die die Regeln der Akkordtheorie nicht lesen (`parseChord()`); ohne Knopf, im Dialog "Akkord" ändern
-- Der Griff passt nicht zum Namen – die Töne eines Griffs sind andere als die des Namens (mit dem Namen, der zum Griff passt:
-  "Am (xx0232, klingt wie D)"); ohne Knopf, im Dialog "Akkord" ändern. Beides gilt auch nach einem Import.
+**Konflikte** (Abweichungen von der Form des Gitarrenbuchs: Wiederholungen, Capo oder Tuning ungleich, Akkorde oder
+Text in mehreren Spuren, unbekannte Akkordnamen, unpassende Griffe …) gibt es im Editor nicht: Der Import löst sie
+(`docs/Konflikte.md`), und beim Bearbeiten entstehen keine. Ein Akkord am Cursor kommt immer in die Akkordspur; beginnt
+dort an der Stelle kein Schlag, wird der klingende geteilt und angebunden (klingt gleich).
 
 Zum Ausprobieren: Song "Test Struktur-Editor" (ungleicher Capo, Wiederholung mit Volta-Klammern, Segno, To Coda,
 D.S. al Coda, Coda, D.C. al Fine, Fine; ausgeschrieben 13 → 25 Takte).
@@ -45,30 +37,33 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 ### Sonstiges
 - Hilfe (?) – zeigt die Tastenkürzel
 - ✕ – beendet den Bearbeitungsmodus (fragt bei Ungespeichertem nach)
-- ⚠ Konflikte – klappt die Abweichungen von der Form des Gitarrenbuchs auf, jede mit einem Knopf zum Lösen
 
 ## Linkes Panel "Am Cursor" (F2)
 
-### Notenwert
+Das Panel ist so breit, dass acht Knöpfe nebeneinander passen. Reihenfolge von oben: Note, Einfügen/löschen,
+Tonhöhe, Anschlag, Takt, Abschnitt, Akkord, Text über dem Schlag, Liedtext-Silbe.
+
+### Note
+Erste Reihe:
 - Ganze bis 32tel (+ kürzer, - länger); sind Schläge ausgewählt (Umschalt+←/→), gilt es für alle
-- Punktiert (.)
-- Doppelt punktiert (Strg+.)
 - Triole (/)
 - Pause (R)
+
+Zweite Reihe:
+- Punktiert (.)
+- Doppelt punktiert (Strg+.)
 - Haltebogen (L)
+- Hammer-on / Pull-off (H)
+- Slide (S)
+- Bend (B) – hochziehen und halten; jeder Druck eine Stufe weiter: ½ → full → 1½ → kein Bend
+- Vibrato (V)
+- Saite dämpfen (X) (in Guitar Pro "Dead Note")
 
 ### Einfügen, löschen (Icons)
 - Schlag einfügen (Einfg): eine Pause mit der Dauer des Schlags am Cursor, links neben ihm; Alt+Einfg fügt sie rechts neben ihm ein (auch am Taktende)
 - Entf: löscht die Zahl (Note) am Cursor; ist der Schlag leer (Pause), den Schlag; sind Schläge ausgewählt (Umschalt+←/→), alle ausgewählten. Der letzte Schlag eines Takts bleibt als Pause. Der Button "Schlag löschen" löscht den Schlag am Cursor immer
 - Takt einfügen (Strg+Einfg)
 - Takt löschen (Strg+Entf)
-
-### Note
-- Hammer-on / Pull-off (H)
-- Slide (S)
-- Bend (B) – hochziehen und halten; jeder Druck eine Stufe weiter: ½ → full → 1½ → kein Bend
-- Vibrato (V)
-- Saite dämpfen (X) (in Guitar Pro "Dead Note")
 
 ### Tonhöhe
 - Kreuz (Strg+9)
@@ -86,6 +81,23 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 - Arpeggio abwärts (Strg+Umschalt+D) – Wellenlinie, Pfeil nach oben
 - Arpeggio aufwärts (Strg+Umschalt+U) – Wellenlinie, Pfeil nach unten
 
+### Takt
+- Takt – Taktart und Tempo (BPM) nebeneinander, als Werte am Takt des Cursors. Die Taktart hat eine Auswahlliste (4/4, 3/4, 2/4, 6/8,
+  12/8, 2/2, 5/4, 7/8, 9/8), erweiterbar durch Eintippen. Eine Änderung gilt ab diesem Takt bis zum nächsten Wechsel; am ersten
+  Takt ist das Tempo das des Songs, danach ein Tempowechsel. Ist der Wert gleich dem davor, gibt es keinen Wechsel (einen Wechsel
+  entfernt man, indem man den Wert davor einträgt). Weicht das Tempo der Audiospur im Abschnitt am Cursor ab (aus den
+  Sync-Punkten, `recordingTempoRegion()`), steht wie bei der Tonart ein rotes "!" daneben, Tooltip z. B. "Tempo der
+  Audiospur ab Takt 1 bis 42: 177 BPM". Weicht irgendwo im Song ein Abschnitt ab, steht ein "!" auch am Label "Audio"
+  des unteren Panels; der Tooltip listet alle Abschnitte, ein Klick springt zum ersten
+
+### Abschnitt
+- Abschnitt (Umschalt+Einfg) – am Takt des Cursors; Auswahlliste (Intro, Verse, Pre-Chorus, Chorus, Bridge, Solo,
+  Interlude, Outro und die des Songs), erweiterbar; leer oder × entfernt ihn. Vor jedem Abschnitt steht automatisch ein
+  doppelter Taktstrich (am Ende des Takts davor, `applySectionBars()` in `js/notation.js`); beim Import und nach jeder
+  Änderung gilt nur diese Regel, doppelte Striche anderer Herkunft fallen weg
+
+(Eine Tabelle je Takt gibt es nicht: Taktart, Tempo und Abschnitt stehen hier, die Randnotiz ist der Text über dem Schlag.)
+
 ### Schlag
 - Akkord (A) – Auswahlliste mit den Akkorden des Songs (in der Reihenfolge ihres ersten Auftretens, je Eintrag Name und
   Griff, z. B. "D  xx0232"; "–" nimmt den Akkord weg); steht in der Akkordspur (Dialog "Spuren") am Schlag, der an
@@ -102,31 +114,25 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
   den Songs auf); eigene Griffe gehen beim Speichern dem Katalog vor
 
 - Text über dem Schlag (T) – freier Text, z. B. "leise"; erscheint auch als Randnotiz auf dem Leadsheet
+- Liedtext-Silbe (Umschalt+L) – die Silbe an der Stelle des Cursors, immer in der Textspur (wie der Akkord in der
+  Akkordspur; beginnt dort kein Schlag, wird der klingende geteilt und angebunden). So kommt eine Silbe genau auf einen
+  Schlag, ohne dass sich andere verschieben, z. B. auf den ersten Schlag eines Takts, der bisher keine hatte; leer
+  entfernt sie. Die Silbe wird ohne Trennstrich eingetragen (z. B. "ja"). Ein
+  Zeilenumbruch an der Silbe bleibt. Das Panel "Liedtext" zeigt den Text danach neu
 
-
-### Takt
-- Abschnitt (Umschalt+Einfg) – am Takt des Cursors; Auswahlliste (Intro, Verse, Pre-Chorus, Chorus, Bridge, Solo,
-  Interlude, Outro und die des Songs), erweiterbar; leer oder × entfernt ihn. Vor jedem Abschnitt steht automatisch ein
-  doppelter Taktstrich (am Ende des Takts davor, `applySectionBars()` in `js/notation.js`); beim Import und nach jeder
-  Änderung gilt nur diese Regel, doppelte Striche anderer Herkunft fallen weg
-- Takt – Taktart und Tempo (BPM) nebeneinander, als Werte am Takt des Cursors. Die Taktart hat eine Auswahlliste (4/4, 3/4, 2/4, 6/8,
-  12/8, 2/2, 5/4, 7/8, 9/8), erweiterbar durch Eintippen. Eine Änderung gilt ab diesem Takt bis zum nächsten Wechsel; am ersten
-  Takt ist das Tempo das des Songs, danach ein Tempowechsel. Ist der Wert gleich dem davor, gibt es keinen Wechsel (einen Wechsel
-  entfernt man, indem man den Wert davor einträgt)
-
-(Eine Tabelle je Takt gibt es nicht: Abschnitt, Taktart und Tempo stehen hier, die Randnotiz ist der Text über dem Schlag.)
 
 ## Werkzeugleiste: der ganze Song
 
 - Tonart – alle 15 Dur- und 15 Moll-Tonarten (Cb bis C#, Abm bis A#m); gilt immer für den ganzen Song (die Songs im
-  Gitarrenbuch wechseln die Tonart nicht). Strg+K setzt den Cursor ins Feld. Die erkannte Tonart steht nur bei den Konflikten, und nur
-  wenn sie von der notierten abweicht
+  Gitarrenbuch wechseln die Tonart nicht). Strg+K setzt den Cursor ins Feld. Weicht die aus Akkorden und Tönen
+  erkannte Tonart ab, steht ein rotes "!" daneben, der Tooltip nennt sie (kein Konflikt: die notierte muss nicht zu allen
+  Akkorden passen, siehe docs/Konflikte.md)
 - Shuffle – ein Knopf links neben "Transponieren", der den Zustand als Symbol zeigt (zwei Achtel = zwei gebalkte Achtel: gerade;
   zwei gebalkte Achtel = Triole aus Viertel und Achtel: Shuffle); ein Klick (oder Strg+/) schaltet um, für den ganzen Song. Mehr
-  braucht das Gitarrenbuch nicht (die Songs nutzen nur Shuffle, `\tf triplet8th`); ein anderes Feeling aus einem Import meldet ein
-  Konflikt, der Knopf gilt dann als aus
+  braucht das Gitarrenbuch nicht (die Songs nutzen nur Shuffle, `\tf triplet8th`); ein anderes Feeling aus einer GP-Datei löst
+  der Import (`docs/Konflikte.md`)
 - Capo und Tuning – rechts neben dem Knopf "Transponieren" nur als Anzeige wie im Kopf des Players ("**Capo 3** · **D**ADGBE": der Capo nur bei Capo > 0, das Tuning nur bei Abweichung vom Standard, abweichende Saiten fett); ändern lassen sie sich nur im Dialog Transponieren. Capo (alle Spuren): die Griffe bleiben (Tabs und Griffbilder ändern sich nicht, die Noten klingen um den Capo höher). Bei
-  ungleichem Capo zeigt die Anzeige den Capo der ersten Spur; "Capo angleichen" steht bei den Konflikten
+  ungleichem Capo (gibt es nach dem Import nicht mehr) zeigt die Anzeige den Capo der ersten Spur
 - Tuning (alle Spuren; Textfeld im Dialog), z. B. "D A D G B E"; beim Verlassen wird die Eingabe korrigiert: Großbuchstaben, Leerzeichen
   zwischen den Tönen (auch "dadgbe" geht), zu viele Töne fallen weg, fehlende und ungültige werden durch die Saiten des Standards
   ersetzt (`normalizeTuningText()` in `notation.js`). Das Standard-Tuning zeigt das Feld als "Standard"; beim Bearbeiten stehen
@@ -144,10 +150,6 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
   Griffen und Vorzeichen um; Capo und Tuning ändern nur die Noten. Die Tonart wandert mit dem Klang, ein Vorschlag nennt das
   Capo mit den leichtesten Griffen, bei Klangänderung steht der Befehl `bin/audio.php --transponieren` zum Kopieren da. Ein Schritt "Rückgängig"
   nimmt es zurück. Es wird keine Verschiebung gespeichert. Die Audiospur wird dabei nicht verändert; sie lässt sich lokal mit `php bin/audio.php --only=SLUG --transponieren=N` verschieben (siehe README).
-- Wiederholungen ausschreiben (nur als Konflikt, wenn der Song nicht von oben nach unten durchläuft, also meist nach einem Guitar-Pro-Import) – Wiederholungen, Volta-Klammern, Sprungzeichen (D.C., D.S., D.S.S., al Coda,
-  al Fine) und Takt-Wiederholungszeichen (Simile); mehrere Strophen an wiederholten Takten verteilen sich auf die
-  Durchgänge, Sync-Punkte kommen an ihren Durchgang. Nach einem Sprung wird nicht mehr wiederholt, von
-  Volta-Klammern gilt die letzte (wie üblich). Beispiel: "Für Elise" 25 → 45 Takte
 
 ### Stammdaten
 Der Dialog "Stammdaten" im Menü ⋮ (auch außerhalb des Bearbeitungsmodus), mit "Speichern" und "Abbrechen" und
@@ -288,15 +290,16 @@ Je Spur eine Zeile:
   wenn etwas wegfällt: ein Akkord, wo in der Zielspur schon ein anderer steht, oder Text in einer dritten Spur (der Text
   kommt aus der Spur mit dem meisten, er steht danach nur noch in einer). Ohne Akkorde bzw. Text merkt sich der Editor
   nur die Wahl; ohne Wahl kommen Akkorde in die erste Spur, Text in "vocal", sonst in die letzte.
-- Instrument (MIDI)
-- Notenlage: wie hoch die Noten im Notensystem gegenüber dem Klang stehen (2 Oktaven höher, 1 Oktave höher = Gitarre, wie klingend, 1 Oktave tiefer); Klang, Tabs und Akkorde bleiben
+- Instrument – Auswahlliste mit 13 Instrumenten (Schlagzeug nur bei einer Schlagzeugspur, nicht änderbar); es legt Klang
+  und Notenlage zusammen fest (Gitarre und Bass eine Oktave höher notiert, alle anderen wie klingend). Der Tooltip nennt
+  die Instrumente der Gruppe (z. B. Flöte: Querflöte, Blockflöte, Panflöte …). Liste: `docs/Instrumente.md`
 - ↑/↓ – Reihenfolge der Spuren; so stehen sie im Notenblatt und im Player (der sortiert nicht um)
 - ⧉ Spur duplizieren – Kopie direkt dahinter ("picking 2"), ohne Akkorde und Text
 - × löschen (mit Rückfrage; die letzte Spur bleibt)
-- Spur hinzufügen – Gitarrenspur im Standard-Tuning mit leeren Takten
+- Spur hinzufügen – Gitarrenspur mit Tuning und Capo des Songs, mit leeren Takten
 - Spur aus GuitarPro-Datei importieren – Datei wählen (gelesen und bereinigt wie beim Import), dann Spur, "Ab Takt der Datei" und "Auf
-  Takt des Songs" (für ein anderes Intro). Die Spur kommt ans Ende, ohne Akkorde und Text; Taktart, Tempo und
-  Abschnitte bleiben die des Songs. Takte davor werden Pausen, was über das Ende hinausgeht, fällt weg; Takte, deren
+  Takt des Songs" (für ein anderes Intro). Die Spur kommt ans Ende, ohne Akkorde und Text; Taktart, Tempo,
+  Vorzeichen, Capo, Tuning und Abschnitte bleiben die des Songs (die Spur wird umgerechnet, klingt gleich). Takte davor werden Pausen, was über das Ende hinausgeht, fällt weg; Takte, deren
   Länge nicht zur Taktart passt, nennt der Hinweis danach (am Cursor zeigt sie die Statuszeile: "Takt zu lang" bzw.
   "Takt zu kurz").
 
@@ -304,7 +307,7 @@ Je Spur eine Zeile:
 - Der Sync-Editor wie außerhalb des Modus (Wellenform, Marker ziehen, Anfang/Ende erkennen, + Punkt, Punkt löschen,
   alle verschieben, Tempo anpassen, Zoom), aber im Panel und ohne eigenes Speichern, Schließen und Rückgängig: Jede
   Änderung ist ein Schritt im Bearbeitungsmodus (Strg+Z, Speichern oben). Ohne Audiospur steht dort ein Hinweis.
-- Tempo der Audiospur – steht im Sync-Editor neben "ms verschieben" ("Tempo der Audiospur: 97 BPM"), berechnet aus den Sync-Punkten
+- Tempo der Audiospur – steht im Sync-Editor neben "ms verschieben" ("Tempo der Audiospur ab Takt 1 bis 42: 97 BPM"), berechnet aus den Sync-Punkten
   im Mittel vom ersten bis zum letzten Sync-Punkt des Abschnitts ohne notierten Tempowechsel, in dem der gewählte Punkt bzw. die
   Abspielposition liegt (ohne Tempowechsel ist das der ganze Song). Weicht es vom notierten Tempo ab, erscheint daneben der Knopf
   "Tempo 90 → 97 BPM", der nur das Tempo dieses Abschnitts anpasst (`recordingTempoRegion()` in `notation.js`)
