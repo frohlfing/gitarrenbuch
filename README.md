@@ -2,9 +2,8 @@
 
 Ein persönliches Gitarrenbuch: die Sammlung der Songs, die ich allein mit der Gitarre spiele und singe, als kleine
 PHP/JSON-API mit einem statischen Frontend. Songs kommen als Guitar-Pro-Datei (GP3 bis GP8, z. B. von Ultimate
-Guitar) ins Gitarrenbuch und werden mit [alphaTab](https://alphatab.net) als Noten und Tabs angezeigt und
-abgespielt, auch auf dem Smartphone am Notenständer. Das Cover holt sich das Gitarrenbuch selbst von Deezer oder
-iTunes.
+Guitar) ins Gitarrenbuch. Die Partitur (Noten und Tabs) wird mit [alphaTab](https://alphatab.net) angezeigt und
+abgespielt. 
 
 Das Gitarrenbuch ersetzt Guitar Pro: Bearbeitet wird nur noch in der App, Guitar-Pro-Dateien sind reines Import- und
 Exportformat. Am Ende steht für jeden Song eine ausdruckbare DIN-A4-Seite zum Spielen am Lagerfeuer: Akkorde über dem
@@ -106,7 +105,7 @@ Wo was liegt (je Song unter `data/songs/<slug>/`):
      entschlüsseln; ohne sie warnt es, und Formate fehlen. Node ginge auch, aber erst in neueren Versionen als 20.9.
    - ffmpeg (mit ffprobe): z. B. nach `C:\Program Files\ffmpeg\bin`.
      
-8. **alphaTab** liegt fertig unter `public/vendor/alphatab/` (1.8.4 aus npm, siehe `VERSION.txt`), mit **vier
+8. **alphaTab** liegt fertig unter `public/vendor/alphatab/` (1.8.4 aus npm, siehe `VERSION.txt`), mit **fünf
    eigenen Änderungen** in `alphaTab.core.mjs` (vermerkt als Kommentar ganz oben in der Datei). Bei
    einem Update von alphaTab prüfen, ob sie noch nötig sind, und sie sonst neu einfügen. Änderungen an alphaTab so
    wenige wie möglich: Was sich über Einstellungen lösen lässt, löst der Player.
@@ -149,9 +148,29 @@ Wo was liegt (je Song unter `data/songs/<slug>/`):
    - Ohne diese Änderung zeichnet der Browser den Umbruch als Leerzeichen: nicht zu sehen, die Silbe steht aber gut
      1 px weiter links (sie wird mittig unter die Note gesetzt und ist breiter).
 
-   **Für alle vier:**
+   **5. Betonung über den Tabs**
+   - Stelle: hinter der Klasse des Plektrumzeichens (minifiziert `class _o extends xh{get notationElement(){return
+     F.EffectPickStroke}…`, im Quelltext `PickStrokeEffectInfo`) und in der Liste der Effekte der Tab-Zeile (dieselbe
+     wie bei Änderung 2) hinter `{effect:new _o,mode:yh.OwnedTop}`.
+   - Neu: die Klassen `GbAccentGlyph` (das Akzentzeichen ">" der Notenschrift, `_t.ArticAccentAbove`, so groß wie das
+     Plektrumzeichen) und `GbAccentEffectInfo` (ein Zeichen an jedem Schlag mit einer betonten Note, eigene Zeile
+     `gitarrenbuch-accent`) sowie der Eintrag
+     `{effect:new GbAccentEffectInfo,mode:yh.OwnedTop,shouldCreate:t=>!t.showStandardNotation}`.
+     `GbAccentGlyph` macht seine Zeile halb so hoch wie das Zeichen und rückt es nach oben
+     (`this.offsetY=0,this.height*=.5`): So steht die Betonung näher unter dem Plektrumzeichen als mit dem üblichen
+     Abstand einer eigenen Zeile.
+   - Grund: alphaTab zeichnet die Betonung nur als Teil der Note im Notensystem; in der Ansicht "Tabs" fehlte sie
+     (wichtig für Strumming, z. B. `D.DuduDu` aus "Rhythmus ableiten"). Wie bei den Fingersätzen gilt der Eintrag nur
+     ohne Noten, in "Noten + Tabs" steht die Betonung also nicht doppelt.
+   - Ohne diese Änderung fehlt die Betonung in der Ansicht "Tabs" wieder, sonst geht nichts verloren. Starke Betonung
+     gibt es im Gitarrenbuch nicht (der Import macht sie zur einfachen, `cleanImportedScore()`).
+
+   **Für alle fünf:**
    - Die unveränderte Datei liegt daneben als `alphaTab.core.mjs.orig`.
-   - Der Browser hält `alphaTab.core.mjs` ohne Versionszähler im Cache; nach einer Änderung einmal mit Strg+F5 laden.
+   - `alphaTab.core.mjs` hat keinen Versionszähler, und der Worker von alphaTab lädt die Datei selbst nach (dort hilft
+     die Import-Map nicht). Deshalb schickt `public/.htaccess` für alle `.mjs` "Cache-Control: no-cache": Der Browser
+     fragt bei jedem Laden nach, ob sich die Datei geändert hat (sonst "304"), und eine geänderte Fassung kommt ohne
+     Strg+F5 an. Nur eine Fassung, die ein Browser schon vor dieser Regel im Cache hatte, braucht einmal "Cache leeren".
 
 ## Lokalen Testserver unter XAMPP (Windows) einrichten
 
@@ -325,31 +344,31 @@ Endpunkte (`GET`) sind ohne eigenes Token offen — Schutz vor öffentlichem Zug
 Auth vor der gesamten `public/`-Domain (siehe Setup, Schritt 5), die auch die statische `index.html` selbst mit
 abdeckt.
 
-| Methode | Endpunkt                              | Beschreibung                                                                                                                                    |
-|---------|---------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
-| GET     | `/api/songs.php`                      | Alle Songs, alphabetisch nach Titel (das Frontend sortiert ggf. um)                                                                             |
-| GET     | `/api/songs.php?slug=xyz`             | Einzelner Song                                                                                                                                  |
-| PUT     | `/api/songs.php?slug=xyz`             | Song bearbeiten (JSON-Body). Ändert sich der Slug (Interpret/Titel), wird der Ordner umbenannt                                                  |
-| DELETE  | `/api/songs.php?slug=xyz`             | Song samt Ordner (Rohmaterial inklusive) löschen                                                                                                |
-| POST    | `/api/import.php`                     | Neuen Song anlegen (`multipart/form-data`: `meta` = JSON wie bei PUT `songs.php`, `score` = alphaTex, `file` = Original-GP-Datei, optional)     |
-| GET     | `/api/score.php?slug=xyz`             | Noten `score.atex` ausliefern (für alphaTab)                                                                                                    |
-| GET     | `/api/score.php?slug=xyz&history=1`   | Liste der früheren Fassungen der Noten (id, time, size), die neueste zuerst (Knopf "Verlauf" im Bearbeitungsmodus)                              |
-| GET     | `/api/score.php?slug=xyz&version=ID`  | Ein früherer Stand als alphaTex (id aus der Liste)                                                                                            |
-| DELETE  | `/api/score.php?slug=xyz&version=ID`  | Einen früheren Stand löschen (Noten und Angaben für das Leadsheet); Antwort: die übrigen                                                        |
-| PUT     | `/api/score.php?slug=xyz`             | Noten ersetzen (Body: alphaTex als `text/plain`; Bearbeitungsmodus), alte Fassung nach `history/`. Nur für Songs mit Noten                      |
-| GET     | `/api/audio.php?slug=xyz`             | Audiospur `audio.mp3` ausliefern                                                                                                                |
-| PUT     | `/api/audio.php?slug=xyz`             | Audiospur ersetzen (Body: die MP3 als `audio/mpeg`; nutzt `bin/audio.php`)                                                                      |
-| GET     | `/api/cover.php?slug=xyz`             | Cover `cover.jpg` ausliefern                                                                                                                    |
-| GET     | `/api/cover.php?artist=…&title=…`     | Cover bei Deezer und iTunes suchen (`{"results": [...]}`, Deezer zuerst)                                                                        |
-| PUT     | `/api/cover.php?slug=xyz`             | Cover aus der Suche übernehmen (Body: `{"url": "…"}`, nur Bildserver von Deezer und iTunes)                                                     |
-| POST    | `/api/cover.php?slug=xyz`             | Eigenes Cover hochladen (`multipart/form-data`: `file`, JPEG; der Browser verkleinert und wandelt vorher um)                                    |
-| DELETE  | `/api/cover.php?slug=xyz`             | Cover entfernen                                                                                                                                 |
-| GET     | `/api/youtube.php?url=…`              | Titel und Länge eines YouTube-Videos (`{"id", "title", "seconds"}`, gelesen aus der Videoseite)                                                 |
-| GET     | `/api/uploads.php?slug=xyz`           | Uploads des Songs (`{"uploads": [{file, size, source, description, added}]}`)                                                                   |
-| GET     | `/api/uploads.php?slug=xyz&file=name` | Eine hochgeladene Datei (PDF und Text im Browser, sonst Download)                                                                               |
-| POST    | `/api/uploads.php?slug=xyz`           | Datei ablegen (`multipart/form-data`: `file` oder `url` für einen Direktlink, dazu `source`, `description`)                                     |
-| PUT     | `/api/uploads.php?slug=xyz&file=name` | Quelle und Beschreibung ändern (Body: `{"source": "…", "description": "…"}`)                                                                    |
-| DELETE  | `/api/uploads.php?slug=xyz&file=name` | Datei samt Angaben löschen (Papierkorb im Dialog "Uploads"); Antwort: die übrigen Uploads                                                       |
+| Methode | Endpunkt                              | Beschreibung                                                                                                                                |
+|---------|---------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| GET     | `/api/songs.php`                      | Alle Songs, alphabetisch nach Titel (das Frontend sortiert ggf. um)                                                                         |
+| GET     | `/api/songs.php?slug=xyz`             | Einzelner Song                                                                                                                              |
+| PUT     | `/api/songs.php?slug=xyz`             | Song bearbeiten (JSON-Body). Ändert sich der Slug (Interpret/Titel), wird der Ordner umbenannt                                              |
+| DELETE  | `/api/songs.php?slug=xyz`             | Song samt Ordner (Rohmaterial inklusive) löschen                                                                                            |
+| POST    | `/api/import.php`                     | Neuen Song anlegen (`multipart/form-data`: `meta` = JSON wie bei PUT `songs.php`, `score` = alphaTex, `file` = Original-GP-Datei, optional) |
+| GET     | `/api/score.php?slug=xyz`             | Noten `score.atex` ausliefern (für alphaTab)                                                                                                |
+| GET     | `/api/score.php?slug=xyz&history=1`   | Liste der früheren Fassungen der Noten (id, time, size), die neueste zuerst (Knopf "Verlauf" im Bearbeitungsmodus)                          |
+| GET     | `/api/score.php?slug=xyz&version=ID`  | Ein früherer Stand als alphaTex (id aus der Liste)                                                                                          |
+| DELETE  | `/api/score.php?slug=xyz&version=ID`  | Einen früheren Stand löschen (Noten und Angaben für das Leadsheet); Antwort: die übrigen                                                    |
+| PUT     | `/api/score.php?slug=xyz`             | Noten ersetzen (Body: alphaTex als `text/plain`; Bearbeitungsmodus), alte Fassung nach `history/`. Nur für Songs mit Noten                  |
+| GET     | `/api/audio.php?slug=xyz`             | Audiospur `audio.mp3` ausliefern                                                                                                            |
+| PUT     | `/api/audio.php?slug=xyz`             | Audiospur ersetzen (Body: die MP3 als `audio/mpeg`; nutzt `bin/audio.php`)                                                                  |
+| GET     | `/api/cover.php?slug=xyz`             | Cover `cover.jpg` ausliefern                                                                                                                |
+| GET     | `/api/cover.php?artist=…&title=…`     | Cover bei Deezer und iTunes suchen (`{"results": [...]}`, Deezer zuerst)                                                                    |
+| PUT     | `/api/cover.php?slug=xyz`             | Cover aus der Suche übernehmen (Body: `{"url": "…"}`, nur Bildserver von Deezer und iTunes)                                                 |
+| POST    | `/api/cover.php?slug=xyz`             | Eigenes Cover hochladen (`multipart/form-data`: `file`, JPEG; der Browser verkleinert und wandelt vorher um)                                |
+| DELETE  | `/api/cover.php?slug=xyz`             | Cover entfernen                                                                                                                             |
+| GET     | `/api/youtube.php?url=…`              | Titel und Länge eines YouTube-Videos (`{"id", "title", "seconds"}`, gelesen aus der Videoseite)                                             |
+| GET     | `/api/uploads.php?slug=xyz`           | Uploads des Songs (`{"uploads": [{file, size, source, description, added}]}`)                                                               |
+| GET     | `/api/uploads.php?slug=xyz&file=name` | Eine hochgeladene Datei (PDF und Text im Browser, sonst Download)                                                                           |
+| POST    | `/api/uploads.php?slug=xyz`           | Datei ablegen (`multipart/form-data`: `file` oder `url` für einen Direktlink, dazu `source`, `description`)                                 |
+| PUT     | `/api/uploads.php?slug=xyz&file=name` | Quelle und Beschreibung ändern (Body: `{"source": "…", "description": "…"}`)                                                                |
+| DELETE  | `/api/uploads.php?slug=xyz&file=name` | Datei samt Angaben löschen (Papierkorb im Dialog "Uploads"); Antwort: die übrigen Uploads                                                   |
 
 Jeder Song enthält zusätzlich das Feld `files`. Es listet, welche Dateien im Ordner liegen (`score`, `audio`, `cover`, 
 z. B. `["score", "audio", "cover"]`), wird bei jedem Lesen aus dem Dateisystem bestimmt und nicht gespeichert.
@@ -397,10 +416,17 @@ mit "Speichern". Sie gilt als Vorgabe: Was ein Gerät im Mixer einstellt, wird d
 Vorrang. Fehlt sie in einem Request, bleibt die gespeicherte; eine leere Liste löscht sie.
 
 **Instrument einer Spur:** eines von 13 aus einer festen Liste plus Schlagzeug (`INSTRUMENTS` in `js/notation.js`;
-Liste, Regeln und Analyse der GP-Dateien in `docs/Instrumente.md`). Ein Instrument legt Klang (General-MIDI-Programm)
-und Notenlage zusammen fest: Gitarre und Bass eine Oktave höher notiert, als sie klingen, alle anderen wie klingend
-(`displayTranspositionPitch` von alphaTab, in alphaTex `\displaytranspose`, bei Guitar Pro "Oktave"). Gewählt wird es
-im Dialog "Spuren"; beim Import ordnet der Konfliktlöser jeder Spur eines zu.
+Liste, Regeln und Analyse der GP-Dateien in `docs/Instrumente.md`). Ein Instrument legt nur den Klang fest
+(General-MIDI-Programm). Die Notenlage ist für alle Spuren gleich: Jede Spur ist Gitarren-Tab, ihr Tonraum ist der des
+Griffbretts, und sie wird wie Gitarre eine Oktave höher notiert, als sie klingt (`TAB_NOTATION`, `displayTranspositionPitch`
+von alphaTab, in alphaTex `\displaytranspose`, bei Guitar Pro "Oktave"). Gewählt wird das Instrument im Dialog "Spuren";
+beim Import ordnet der Konfliktlöser jeder Spur eines zu und macht Spuren ohne Saiten zu Tab.
+
+**Lautstärke:** Wie laut etwas klingt, regelt allein der Mixer; bei gleicher Einstellung sind alle Songs und Spuren
+gleich laut. Beim Einlesen (`parseScore()` → `normalizeLevels()` in `js/notation.js`) bekommt jede Spur dieselbe
+Lautstärke (`TRACK_VOLUME`, alphaTex `volume 12`) und die Mitte als Panorama (`balance 8`), jeder Schlag die Dynamik
+forte (`dy f`); Lautstärke- und Panorama-Automationen fallen weg. Akzente und Ghost Notes bleiben (Spielweise).
+Dynamikzeichen werden nirgends gezeigt.
 
 `tags` sind die Genres (in der Oberfläche "Genre"), mehrere je Song möglich, z. B. "Rock & Pop", "Folk",
 "Weihnachtslied"; das Formular zeigt die vorhandenen zum An- und Abwählen. 
@@ -848,7 +874,7 @@ Patterns kommen aus einem **Katalog** wie die Griffe aus dem Akkordkatalog: `dat
 `js/sheet.js`); fehlt die Datei, legt `api/patterns.php` sie mit der eingebauten Erstbefüllung an. Ein Pattern 
 beschreibt einen Takt im Raster (Achtel oder Sechzehntel), ein Zeichen bzw. Schritt je Rasterplatz:
 
-```json
+```
 {"id": "folk", "name": "Folk", "technique": "strumming", "timeSignature": "4/4", "grid": 8, "strokes": "d.du.udu"}
 {"id": "travis", "name": "Travis-Picking", "technique": "picking", "timeSignature": "4/4", "grid": 8,
  "steps": "p i q m p i q m"}

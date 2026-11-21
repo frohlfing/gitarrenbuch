@@ -452,9 +452,9 @@ export async function loadScoreText(slug){
 }
 
 /**
- * @typedef {{id: string, time: string, size: number}} ScoreVersion Aufgehobene Fassung der Noten (siehe
+ * @typedef {{id: string, time: string, size: number, note: string}} ScoreVersion Aufgehobene Fassung der Noten (siehe
  *   list_score_history() in api/lib/file_store.php): id zum Laden, time "2026-10-31 22:42:55" (Zeitpunkt des
- *   Überschreibens), size in Bytes
+ *   Überschreibens), size in Bytes, note: was sich beim Überschreiben geändert hat (leer ohne Notiz)
  */
 
 /**
@@ -492,13 +492,23 @@ export function deleteScoreVersion(slug, id){
 }
 
 /**
+ * Notiz für den Verlauf als Teil der Adresse.
+ * @param {string} note Notiz, leer = keine
+ * @returns {string} "&note=…" oder leer
+ */
+function noteParam(note){
+  return note ? `&note=${encodeURIComponent(note)}` : '';
+}
+
+/**
  * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor.
  * @param {string} slug Slug des Lieds
  * @param {string} tex Noten als alphaTex
+ * @param {string} [note] was sich geändert hat (steht im Verlauf beim aufgehobenen Stand)
  * @returns {Promise<Song>} das aktualisierte Lied (der bisherige Stand kommt in den Verlauf)
  */
-export function saveScore(slug, tex){
-  return apiWrite(`${API_URL}score.php?slug=${encodeURIComponent(slug)}`, {
+export function saveScore(slug, tex, note = ''){
+  return apiWrite(`${API_URL}score.php?slug=${encodeURIComponent(slug)}${noteParam(note)}`, {
     method: 'PUT',
     headers: {'Content-Type': 'text/plain; charset=utf-8'},
     body: tex,
@@ -530,10 +540,11 @@ export async function loadLeadsheet(slug, version = ''){
  * @param {Leadsheet} leadsheet Inhalt
  * @param {boolean} [keep] ob der bisherige Stand in den Verlauf kommt (false, wenn im selben Speichern schon die Noten
  *   gesichert wurden)
+ * @param {string} [note] was sich geändert hat (steht im Verlauf beim aufgehobenen Stand, nur mit keep)
  * @returns {Promise<Song>} das aktualisierte Lied
  */
-export function saveLeadsheet(slug, leadsheet, keep = true){
-  return apiWrite(`${API_URL}leadsheet.php?slug=${encodeURIComponent(slug)}${keep ? '' : '&keep=0'}`, {
+export function saveLeadsheet(slug, leadsheet, keep = true, note = ''){
+  return apiWrite(`${API_URL}leadsheet.php?slug=${encodeURIComponent(slug)}${keep ? noteParam(note) : '&keep=0'}`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(leadsheet),
@@ -888,6 +899,9 @@ const PATHS = {
   fadeOut: '<path d="M3 5Q11 10 21 12M3 19Q11 14 21 12"/>',
   // Slash-Note (Rhythmus ohne Tonhöhe): Hals und schräger Notenkopf
   slashNote: '<path d="M16 3v14"/><path fill="currentColor" stroke="none" d="M7 21h3.5l6-5.5H13z"/>',
+  // Bereinigen: Besen (Stiel schräg nach oben rechts, Borsten unten links)
+  clean: '<path d="M20.5 3.5L13 11"/><path d="M10.5 9.5l4 4c-.6 3-2.6 5.4-5 6.5-2.6-1.2-5-3.6-6.5-6.5 2.6-.6 5-2 7.5-4z"/>'
+    + '<path d="M7 18.5l2.5-3M4.6 16.4l3-2.4"/>',
   // Neu laden: Kreispfeil
   reload: '<path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/>',
   // Uploads: Büroklammer.

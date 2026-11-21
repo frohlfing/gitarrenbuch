@@ -9,9 +9,11 @@
  * - Die Rhythmen sind durchnummeriert. "Ähnliche zusammenfassen" übernimmt für jeden Rhythmus den häufigeren, dem er
  *   ähnlich ist (SIMILAR); der Knopf daneben (Kreispfeil) stellt nach einer Änderung die abgeleiteten wieder her.
  * - Jeder Rhythmus lässt sich ändern (Feld oder Klick ins Raster: nichts → ab → auf → gedämpft; Klick auf die
- *   Zählzeit betont). Ist ein anderer Rhythmus ähnlich (SIMILAR), bietet ein Knopf an, ihn zu übernehmen.
- * - Wechselt in einem Takt ein Akkord an einer Stelle, an der sein Rhythmus keinen Anschlag hat, steht dort eine rote
- *   Warnung, und "Übernehmen" ist gesperrt: Akkorde werden nie verschoben.
+ *   Zählzeit betont). Ist ein anderer Rhythmus ähnlich (SIMILAR) und fällt mit ihm
+ *   kein Anschlag eines Akkordwechsels weg, bietet ein Knopf an, ihn zu übernehmen.
+ * - Wechselt in einem Takt ein Akkord an einer Stelle, an der die Quellspur anschlägt, sein Rhythmus aber nicht, steht
+ *   dort eine rote Warnung, und "Übernehmen" ist gesperrt: Akkorde werden nie verschoben. Schlägt auch die Quellspur
+ *   dort nicht an (Haltebogen, Pause), ist das kein Fehler.
  * - Übernehmen legt die Spur "Rhythmus" als erste Spur an (die Akkorde stehen oben; Akustikgitarre, Capo und Tuning
  *   der Quellspur), schreibt je Takt seinen Rhythmus mit dem Griff des Akkords, der dann klingt (fillBar() in
  *   sheet.js), übernimmt Ein- und Ausblenden der Quellspur (an den Anschlag, der dort klingt) und zieht die Akkorde
@@ -157,15 +159,17 @@ function mergeRows(rows){
 
 /**
  * Fasst ähnliche Rhythmen zusammen: Jeder übernimmt den ersten häufigeren mit gleicher Taktart, dem er mindestens
- * SIMILAR ähnlich ist (similarity()).
+ * SIMILAR ähnlich ist (similarity()) und dessen Rhythmus in seinen Takten keinen Akkordwechsel ohne Anschlag ergibt
+ * (fits); sonst bleibt er für sich.
  * @param {RhythmRow[]} rows Rhythmen, häufigste zuerst
+ * @param {function(Pattern, Set<number>): boolean} [fits] ob ein Rhythmus in diesen Takten passt
  * @returns {RhythmRow[]}
  */
-export function mergeSimilar(rows){
+export function mergeSimilar(rows, fits = () => true){
   /** @type {RhythmRow[]} */
   const kept = [];
   for(const row of rows){
-    const target = kept.find(k => similarity(k.pattern, row.pattern) >= SIMILAR);
+    const target = kept.find(k => similarity(k.pattern, row.pattern) >= SIMILAR && fits(k.pattern, row.bars));
     if(target){
       for(const bar of row.bars) target.bars.add(bar);
       target.simplified ||= row.simplified;
@@ -270,13 +274,27 @@ function countAt(offset, denominator){
 }
 
 /**
- * Akkordwechsel in den Takten eines Rhythmus an Stellen ohne Anschlag (auch zwischen den Rasterplätzen).
+ * Stellen (Tick ab Songanfang), an denen eine Spur anschlägt (Schläge mit Noten, die nicht nur übergebunden sind).
+ * @param {import('../../types/alphatab').model.Track} track Spur
+ * @returns {Set<number>}
+ */
+export function attackTicks(track){
+  return new Set(track.staves[0].bars.flatMap(bar => (bar.voices[0] ? timeline(bar.voices[0]) : [])
+    .filter(e => e.beat.notes.length && !e.beat.notes.every(n => n.isTieDestination))
+    .map(e => bar.masterBar.start + e.start)));
+}
+
+/**
+ * Akkordwechsel in den Takten eines Rhythmus an Stellen ohne Anschlag (auch zwischen den Rasterplätzen). Gezählt
+ * werden nur Wechsel, an denen die Quellspur anschlägt: Klingt dort in der Quellspur nur ein Ton weiter (Haltebogen)
+ * oder ist Pause, wird der neue Akkord auch im Original erst später angeschlagen, und es fällt kein Anschlag weg.
  * @param {Score} score Noten
  * @param {RhythmRow} row Rhythmus
  * @param {{tick: number, name: string}[]} events Akkordwechsel (chordTimeline())
+ * @param {Set<number>} attacks Stellen, an denen die Quellspur anschlägt (attackTicks())
  * @returns {RhythmWarning[]}
  */
-export function rhythmWarnings(score, row, events){
+export function rhythmWarnings(score, row, events, attacks){
   const {grid, strokes} = row.pattern;
   const slotTicks = WHOLE_TICKS / grid;
   /** @type {RhythmWarning[]} */
@@ -285,7 +303,7 @@ export function rhythmWarnings(score, row, events){
     const mb = score.masterBars[i];
     const end = mb.start + mb.calculateDuration();
     for(const e of events){
-      if(e.tick < mb.start || e.tick >= end) continue;
+      if(e.tick < mb.start || e.tick >= end || !attacks.has(e.tick)) continue;
       const offset = e.tick - mb.start;
       const slot = offset / slotTicks;
       if(Number.isInteger(slot) && strokes[slot] && strokes[slot] !== '.') continue;
@@ -322,12 +340,15 @@ export function applyRhythm(alphaTab, tex, score, index, rows, library){
   const rhythmTrack = (at, name) => {
     // duplicateTrack() liest die Quellspur aus dem alphaTex vor der Änderung, dort hat sie noch ihren Index.
     const track = duplicateTrack(t => parseScore(alphaTab, t), tex, score, index, at);
-    track.name = track.shortName = freeTrackName(score, name);
+    track.name = track.shortName = freeTrackName(score, name, track);
     setInstrument(alphaTab, track, instrumentByKey('guitar'));
+    /** @type {?import('../../types/alphatab').model.Beat} letzter Schlag des vorigen Takts (klingt in den nächsten) */
+    let ringing = null;
     for(const bar of track.staves[0].bars){
       const pattern = perBar.get(bar.index);
       if(!pattern){
         for(const voice of bar.voices) for(const beat of voice.beats) makeRest(beat);
+        ringing = null;
         continue;
       }
       const start = score.masterBars[bar.index].start;
@@ -337,7 +358,8 @@ export function applyRhythm(alphaTab, tex, score, index, rows, library){
         const grip = gripFor(event, library);
         if(!grip) gripless.add(event.name);
         return grip;
-      });
+      }, ringing);
+      ringing = bar.voices[0].beats.at(-1) ?? null;
     }
     return track;
   };
@@ -348,7 +370,7 @@ export function applyRhythm(alphaTab, tex, score, index, rows, library){
   // Übernommen an den Anschlag der neuen Spur, der dort klingt (auch aus einem Takt davor, wenn der Ton der Quellspur
   // übergebunden ist und die neue Spur dort pausiert).
   const struck = track.staves[0].bars.flatMap(bar => (bar.voices[0] ? timeline(bar.voices[0]) : [])
-    .filter(e => e.beat.notes.length).map(e => ({bar: bar.index, at: e.start, beat: e.beat})));
+    .filter(e => e.beat.notes.some(n => !n.isTieDestination)).map(e => ({bar: bar.index, at: e.start, beat: e.beat})));
   for(const {bar, at, fade} of fades){
     const target = struck.findLast(e => e.bar < bar || (e.bar === bar && e.at <= at));
     if(target) target.beat.fade = fade;
@@ -374,6 +396,14 @@ export class RhythmDialog {
     this.score = parseScore(editor.alphaTab, editor.tex);
     /** Akkordwechsel. @type {{tick: number, name: string}[]} */
     this.events = chordTimeline(this.score);
+    /** Stellen, an denen die Quellspur anschlägt (für die Warnungen). @type {Set<number>} */
+    this.attacks = attackTicks(this.score.tracks[index]);
+    /**
+     * Ob ein Rhythmus in Takten passt: kein Akkordwechsel ohne Anschlag (für "Ähnliche zusammenfassen").
+     * @type {function(Pattern, Set<number>): boolean}
+     */
+    this.fits = (pattern, bars) => !rhythmWarnings(this.score, {bars, pattern, derived: true, simplified: false},
+      this.events, this.attacks).length;
     /** Rhythmen. @type {RhythmRow[]} */
     this.rows = analyzeRhythm(this.score, index);
     /** Dialog. @type {?HTMLElement} */
@@ -394,7 +424,8 @@ export class RhythmDialog {
           aria-label="Rhythmen anzeigen, wie sie in der Spur stehen">${svgIcon('reload')}</button>
         <span class="efield-hint rh-count" id="rhCount"></span>
         <p class="rh-hint">Zusammengefasst werden Rhythmen, wenn mindestens ${Math.round(SIMILAR * 100)} % der Schläge
-          gleich sind (in Sechzehnteln gerastert). Der häufigste Rhythmus gewinnt.</p>
+          gleich sind (in Sechzehnteln gerastert) und kein Akkordwechsel seinen Anschlag verliert. Der häufigste Rhythmus
+          gewinnt.</p>
       </div>
       <div class="rh" id="rhBox"></div>
       <div class="struct-actions">
@@ -408,7 +439,7 @@ export class RhythmDialog {
     this.box.addEventListener('change', e => this.typed(/** @type {HTMLInputElement} */ (e.target)));
     document.getElementById('rhCancel').addEventListener('click', closeOverlay);
     document.getElementById('rhMerge').addEventListener('click', () => {
-      this.rows = mergeSimilar(this.rows);
+      this.rows = mergeSimilar(this.rows, this.fits);
       this.changed = true;
       this.render();
     });
@@ -428,10 +459,11 @@ export class RhythmDialog {
   render(){
     let blocked = false;
     this.box.innerHTML = this.rows.map((row, k) => {
-      const warnings = rhythmWarnings(this.score, row, this.events);
+      const warnings = rhythmWarnings(this.score, row, this.events, this.attacks);
       blocked ||= warnings.length > 0;
+      // Angeboten werden nur Rhythmen, mit denen hier kein Anschlag eines Akkordwechsels wegfällt.
       const similar = this.rows.filter(o => o !== row && o.bars.size >= row.bars.size
-        && similarity(o.pattern, row.pattern) >= SIMILAR).slice(0, TAKE_MAX);
+        && similarity(o.pattern, row.pattern) >= SIMILAR && this.fits(o.pattern, row.bars)).slice(0, TAKE_MAX);
       const n = row.bars.size;
       const canHalve = row.pattern.grid === 16 && [...row.pattern.strokes].every((t, i) => i % 2 === 0 || t === '.');
       return `<div class="rh-row${warnings.length ? ' rh-bad' : ''}">
@@ -459,7 +491,7 @@ export class RhythmDialog {
     const n = this.rows.length;
     document.getElementById('rhCount').textContent = `${n} ${n === 1 ? 'Rhythmus' : 'Rhythmen'}`;
     /** @type {HTMLButtonElement} */ (document.getElementById('rhMerge')).disabled =
-      mergeSimilar(this.rows).length === n;
+      mergeSimilar(this.rows, this.fits).length === n;
     /** @type {HTMLButtonElement} */ (document.getElementById('rhReset')).disabled = !this.changed;
     const apply = /** @type {HTMLButtonElement} */ (document.getElementById('rhApply'));
     apply.disabled = blocked || !this.rows.length;

@@ -332,6 +332,34 @@ export function mergeChords(score, first = chordsTrack(score)){
 }
 
 /**
+ * Was "Akkorde bereinigen" ändern würde (ändert selbst nichts): Akkorde, die nur wiederholen, was schon klingt (gleicher
+ * Name wie der Akkord davor, in allen Spuren), fallen weg, außer am Anfang eines Abschnitts. Dort soll das Blatt den
+ * Akkord immer zeigen: Fehlt er, kommt der klingende hin (erst, wenn im Song schon ein Akkord stand).
+ * @param {Score} score Noten
+ * @returns {{repeated: Beat[], missing: {bar: number, name: string}[]}} repeated: Schläge (aller Spuren), deren
+ *   Akkord wegfällt; missing: Takte am Abschnittsanfang ohne Akkord auf der Eins, mit dem Namen des klingenden
+ */
+export function chordCleanup(score){
+  const merged = mergeChords(score);
+  const atSectionStart = tick => score.masterBars.some(mb => mb.section && mb.start === tick);
+  const ticks = new Set(merged.filter((m, i) => i > 0 && m.chord.name === merged[i - 1].chord.name
+    && !atSectionStart(m.tick)).map(m => m.tick));
+  /** @type {Beat[]} */
+  const repeated = [];
+  for(const track of score.tracks) for(const staff of track.staves) for(const bar of staff.bars){
+    for(const voice of bar.voices) for(const beat of voice.beats){
+      if(beat.chordId && ticks.has(bar.masterBar.start + beat.playbackStart)) repeated.push(beat);
+    }
+  }
+  const starts = new Set(merged.map(m => m.tick));
+  const missing = score.masterBars.filter(mb => mb.section && !starts.has(mb.start)).flatMap(mb => {
+    const sounding = merged.findLast(m => m.tick < mb.start);
+    return sounding ? [{bar: mb.index, name: sounding.chord.name}] : [];
+  });
+  return {repeated, missing};
+}
+
+/**
  * Leere Saite eines Notensystems.
  * @param {Staff} staff Notensystem
  * @param {number} string Saite wie in alphaTab (1 = tiefste)
@@ -632,14 +660,49 @@ export function scoreDuration(alphaTab, score){
 }
 
 /**
- * Liest alphaTex in ein Modell von alphaTab.
+ * Lautstärke jeder Spur (playbackInfo.volume von alphaTab, 0–16, in alphaTex `volume`). Wie laut etwas klingt, regelt
+ * allein der Mixer; bei gleicher Einstellung klingen alle Songs und Spuren gleich laut (normalizeLevels()).
+ */
+export const TRACK_VOLUME = 12;
+
+/** Panorama jeder Spur (playbackInfo.balance von alphaTab, 0–16, in alphaTex `balance`): Mitte. */
+export const TRACK_BALANCE = 8;
+
+/**
+ * Gleiche Lautstärke für alle: jede Spur TRACK_VOLUME und TRACK_BALANCE, jeder Schlag die Dynamik forte (die Vorgabe von
+ * alphaTab für neue Schläge, in alphaTex `dy f`); Lautstärke- und Panorama-Automationen fallen weg. Akzente und Ghost
+ * Notes bleiben, sie gehören zur Spielweise. Dynamikzeichen werden ohnehin nicht gezeigt (HIDDEN_SCORE_ELEMENTS in
+ * playback.js, HIDDEN_ELEMENTS in sheet.js).
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Score} score Noten, werden geändert
+ * @returns {void}
+ */
+export function normalizeLevels(alphaTab, score){
+  const {AutomationType, DynamicValue} = alphaTab.model;
+  const levels = [AutomationType.Volume, AutomationType.Balance];
+  for(const track of score.tracks){
+    track.playbackInfo.volume = TRACK_VOLUME;
+    track.playbackInfo.balance = TRACK_BALANCE;
+    for(const staff of track.staves) for(const bar of staff.bars) for(const voice of bar.voices) for(const beat of voice.beats){
+      beat.dynamics = DynamicValue.F;
+      if(beat.automations.some(a => levels.includes(a.type))){
+        beat.automations = beat.automations.filter(a => !levels.includes(a.type));
+      }
+    }
+  }
+}
+
+/**
+ * Liest alphaTex in ein Modell von alphaTab, mit gleicher Lautstärke für alle (normalizeLevels()).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {string} tex Inhalt von score.atex
  * @param {*} [settings] Einstellungen von alphaTab (z. B. die der Notenansicht)
  * @returns {Score} Noten
  */
 export function parseScore(alphaTab, tex, settings){
-  return alphaTab.importer.ScoreLoader.loadAlphaTex(tex, settings);
+  const score = alphaTab.importer.ScoreLoader.loadAlphaTex(tex, settings);
+  normalizeLevels(alphaTab, score);
+  return score;
 }
 
 /**
@@ -2508,10 +2571,12 @@ export function stripContent(track){
  * Freier Name für eine neue Spur: der gewünschte, ist er vergeben, mit angehängter Nummer ("picking 2").
  * @param {Score} score Noten
  * @param {string} name gewünschter Name
+ * @param {?Track} [self] die Spur, die den Namen bekommt, wenn sie schon in den Noten steht (ihr bisheriger Name
+ *   zählt nicht als vergeben)
  * @returns {string}
  */
-export function freeTrackName(score, name){
-  const taken = new Set(score.tracks.map(t => t.name.trim().toLowerCase()));
+export function freeTrackName(score, name, self = null){
+  const taken = new Set(score.tracks.filter(t => t !== self).map(t => t.name.trim().toLowerCase()));
   const base = name.trim() || 'Spur';
   if(!taken.has(base.toLowerCase())) return base;
   let n = 2;
@@ -2556,8 +2621,9 @@ export function duplicateTrack(parse, tex, score, index, at = index + 1){
 /**
  * Leitet aus einer Spur (z. B. Fingerstyle) eine reine Melodiespur ab und setzt sie als letzte Spur ein: Wo in der
  * Textspur an derselben Stelle eine Silbe steht, bleibt vom Schlag nur der höchste Ton (neu angeschlagen, ohne
- * Haltebogen davor) mit seiner Dauer, alle anderen Schläge werden Pausen, und aufeinanderfolgende Pausen werden zu
- * möglichst wenigen zusammengefasst (mergeRests()); weitere Stimmen der Spur werden Pausen. Die neue Spur heißt
+ * Haltebogen davor) mit seiner Dauer. Klingt dieser Ton per Haltebogen in die folgenden Schläge ohne Silbe weiter,
+ * bleibt auch die Fortsetzung samt Haltebogen. Alle anderen Schläge werden Pausen, und aufeinanderfolgende Pausen
+ * werden zu möglichst wenigen zusammengefasst (mergeRests()); weitere Stimmen der Spur werden Pausen. Die neue Spur heißt
  * "Melodie", hat das Instrument Gesang und bekommt den Text (moveContent()).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {function(string): Score} parse liest alphaTex ein
@@ -2578,23 +2644,32 @@ export function deriveMelodyTrack(alphaTab, parse, tex, score, index){
   const copy = parse(tex).tracks[index];
   stripContent(copy);
   const result = {notes: 0, bars: 0};
-  for(const staff of copy.staves) for(const bar of staff.bars) for(const [v, voice] of bar.voices.entries()){
-    for(const beat of voice.beats){
-      beat.text = null;
-      beat.brushType = alphaTab.model.BrushType.None;
-      beat.pickStroke = alphaTab.model.PickStroke.None;
-      const top = v === 0 && sung.has(`${bar.index}|${beat.playbackStart}`)
-        ? beat.notes.reduce((a, n) => (!a || n.realValue > a.realValue ? n : a), null) : null;
-      for(const note of [...beat.notes]) if(note !== top) beat.removeNote(note);
-      if(top){
-        top.isTieDestination = false;
-        top.tieOrigin = null;
-        result.notes++;
+  for(const staff of copy.staves){
+    /** @type {?Note} zuletzt behaltener Melodieton; klingt er per Haltebogen weiter, bleibt die Fortsetzung */
+    let held = null;
+    for(const bar of staff.bars) for(const [v, voice] of bar.voices.entries()){
+      for(const beat of voice.beats){
+        beat.text = null;
+        beat.brushType = alphaTab.model.BrushType.None;
+        beat.pickStroke = alphaTab.model.PickStroke.None;
+        let keep = null;
+        if(v === 0 && sung.has(`${bar.index}|${beat.playbackStart}`)){
+          keep = beat.notes.reduce((a, n) => (!a || n.realValue > a.realValue ? n : a), null);
+          if(keep){
+            keep.isTieDestination = false;
+            keep.tieOrigin = null;
+            result.notes++;
+          }
+        } else if(v === 0){
+          keep = held && beat.notes.find(n => n.isTieDestination && n.tieOrigin === held) || null;
+        }
+        for(const note of [...beat.notes]) if(note !== keep) beat.removeNote(note);
+        if(v === 0) held = keep;
       }
+      if(v === 0 && !mergeRests(alphaTab, voice)) result.bars++;
     }
-    if(v === 0 && !mergeRests(alphaTab, voice)) result.bars++;
   }
-  copy.name = copy.shortName = freeTrackName(score, 'Melodie');
+  copy.name = copy.shortName = freeTrackName(score, 'Melodie', copy);
   insertTrack(score, copy, score.tracks.length);
   setInstrument(alphaTab, copy, instrumentByKey('voice'));
   moveContent(alphaTab, score, 'lyrics', copy.index, 'insert');
@@ -2676,7 +2751,7 @@ export function importTrack(alphaTab, score, track, from, at){
     }
     octaves += moveToCapo(staff, ref.capo);
   }
-  track.name = track.shortName = freeTrackName(score, track.name);
+  track.name = track.shortName = freeTrackName(score, track.name, track);
   let bars = 0;
   let cut = 0;
   /** @type {Set<Bar>} übernommene Takte der ersten Notenzeile */
@@ -2834,15 +2909,13 @@ export function setTrackProgram(alphaTab, track, program){
 }
 
 /**
- * Ein Instrument einer Spur: Klang (General-MIDI-Programm) und Notenlage zusammen (Liste und Regeln in
- * docs/Instrumente.md).
+ * Ein Instrument einer Spur: der Klang (General-MIDI-Programm; Liste und Regeln in docs/Instrumente.md). Die Lage der
+ * Noten hängt nicht am Instrument: Jede Spur ist Gitarren-Tab und wird wie Gitarre notiert (TAB_NOTATION).
  * @typedef {Object} Instrument
  * @property {string} key Schlüssel, z. B. "guitar"
  * @property {string} name Name in der Auswahlliste, z. B. "Akustikgitarre"
  * @property {?number} program MIDI-Programm des Klangs; null beim Schlagzeug (Schlagzeugkanal)
  * @property {number[]} programs MIDI-Programme, die zu diesem Instrument werden
- * @property {?number} notation Lage der Noten (displayTranspositionPitch von alphaTab, in alphaTex `\displaytranspose`):
- *   -12 eine Oktave höher notiert als klingend (Gitarre, Bass), 0 wie klingend; null beim Schlagzeug
  * @property {string} examples Instrumente dieser Gruppe für den Tooltip, z. B. "Querflöte, Blockflöte, Panflöte"
  */
 
@@ -2859,33 +2932,33 @@ const programRange = (a, b) => Array.from({length: b - a + 1}, (_, i) => a + i);
  * @type {Instrument[]}
  */
 export const INSTRUMENTS = [
-  {key: 'piano', name: 'Klavier', program: 0, programs: programRange(0, 7), notation: 0,
+  {key: 'piano', name: 'Klavier', program: 0, programs: programRange(0, 7),
     examples: 'Flügel, E-Piano, Honky-Tonk, Cembalo, Clavinet'},
-  {key: 'mallets', name: 'Xylophon', program: 13, programs: [...programRange(8, 15), 108], notation: 0,
+  {key: 'mallets', name: 'Xylophon', program: 13, programs: [...programRange(8, 15), 108],
     examples: 'Glockenspiel, Vibraphon, Marimba, Celesta, Spieluhr, Röhrenglocken, Hackbrett, Kalimba'},
-  {key: 'organ', name: 'Orgel', program: 16, programs: programRange(16, 23), notation: 0,
+  {key: 'organ', name: 'Orgel', program: 16, programs: programRange(16, 23),
     examples: 'Hammond-Orgel, Kirchenorgel, Akkordeon, Bandoneon, Mundharmonika'},
-  {key: 'guitar', name: 'Akustikgitarre', program: 25, programs: [24, 25, 46, ...programRange(104, 107)], notation: -12,
+  {key: 'guitar', name: 'Akustikgitarre', program: 25, programs: [24, 25, 46, ...programRange(104, 107)],
     examples: 'Westerngitarre, Konzertgitarre (Nylon), Harfe, Banjo, Sitar, Koto'},
-  {key: 'electric', name: 'E-Gitarre', program: 27, programs: programRange(26, 28), notation: -12,
+  {key: 'electric', name: 'E-Gitarre', program: 27, programs: programRange(26, 28),
     examples: 'Jazzgitarre, cleane E-Gitarre, gedämpfte E-Gitarre'},
-  {key: 'distortion', name: 'E-Gitarre verzerrt', program: 30, programs: programRange(29, 31), notation: -12,
+  {key: 'distortion', name: 'E-Gitarre verzerrt', program: 30, programs: programRange(29, 31),
     examples: 'Overdrive, Distortion, Flageolett-Gitarre'},
-  {key: 'bass', name: 'Bass', program: 32, programs: programRange(32, 39), notation: -12,
+  {key: 'bass', name: 'Bass', program: 32, programs: programRange(32, 39),
     examples: 'E-Bass, akustischer Bass, Fretless, Slap-Bass, Synth-Bass'},
   {key: 'strings', name: 'Streicher', program: 48, programs: [...programRange(40, 45), ...programRange(47, 51), 110],
-    notation: 0, examples: 'Geige, Bratsche, Cello, Kontrabass, Pizzicato, Streichorchester, Fiddle, Pauke'},
-  {key: 'voice', name: 'Gesang', program: 53, programs: programRange(52, 54), notation: 0,
+    examples: 'Geige, Bratsche, Cello, Kontrabass, Pizzicato, Streichorchester, Fiddle, Pauke'},
+  {key: 'voice', name: 'Gesang', program: 53, programs: programRange(52, 54),
     examples: 'Chor, Stimme ("Ooh"), Synth-Stimme'},
-  {key: 'brass', name: 'Trompete', program: 56, programs: programRange(56, 63), notation: 0,
+  {key: 'brass', name: 'Trompete', program: 56, programs: programRange(56, 63),
     examples: 'Posaune, Tuba, Waldhorn, Blechbläsersatz'},
-  {key: 'reed', name: 'Klarinette', program: 71, programs: [...programRange(64, 71), 109, 111], notation: 0,
+  {key: 'reed', name: 'Klarinette', program: 71, programs: [...programRange(64, 71), 109, 111],
     examples: 'Saxophon (Sopran, Alt, Tenor, Bariton), Oboe, Englischhorn, Fagott, Dudelsack'},
-  {key: 'flute', name: 'Flöte', program: 73, programs: programRange(72, 79), notation: 0,
+  {key: 'flute', name: 'Flöte', program: 73, programs: programRange(72, 79),
     examples: 'Querflöte, Blockflöte, Piccolo, Panflöte, Okarina, Pfeifen'},
   {key: 'synth', name: 'Synth', program: 80, programs: [55, ...programRange(80, 103), ...programRange(112, 127)],
-    notation: 0, examples: 'Synthesizer (Melodie, Flächen), Klangeffekte, Orchesterschlag, Steel Drums, Geräusche'},
-  {key: 'drums', name: 'Schlagzeug', program: null, programs: [], notation: null, examples: 'Schlagzeug, Percussion'},
+    examples: 'Synthesizer (Melodie, Flächen), Klangeffekte, Orchesterschlag, Steel Drums, Geräusche'},
+  {key: 'drums', name: 'Schlagzeug', program: null, programs: [], examples: 'Schlagzeug, Percussion'},
 ];
 
 /** Tiefste leere Saite in der üblichen Lage (MIDI): Gitarre E2, Bass E1. */
@@ -2919,8 +2992,24 @@ export function instrumentOf(track){
 }
 
 /**
- * Setzt das Instrument einer Spur: Klang (setTrackProgram()) und Notenlage aller Notensysteme. Beim Schlagzeug
- * ändert sich nichts.
+ * Lage der Noten im Notensystem (displayTranspositionPitch von alphaTab, in alphaTex `\displaytranspose`): Jede Spur
+ * ist Gitarren-Tab, ihr Tonraum ist der des Griffbretts. Deshalb wird jede Spur wie Gitarre notiert, eine Oktave höher
+ * als sie klingt, gleich welches Instrument sie spielt; dieselben Bünde stehen in allen Spuren gleich hoch.
+ */
+export const TAB_NOTATION = -12;
+
+/**
+ * Notenlage, die ein Notensystem haben soll: TAB_NOTATION mit Saiten, sonst wie klingend.
+ * @param {Staff} staff Notensystem
+ * @returns {number}
+ */
+export function notationPitch(staff){
+  return hasStrings(staff) ? TAB_NOTATION : 0;
+}
+
+/**
+ * Setzt das Instrument einer Spur: Klang (setTrackProgram()) und Notenlage aller Notensysteme (notationPitch()). Beim
+ * Schlagzeug ändert sich nichts.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Track} track Spur, wird geändert
  * @param {Instrument} instrument Instrument
@@ -2929,7 +3018,47 @@ export function instrumentOf(track){
 export function setInstrument(alphaTab, track, instrument){
   if(instrument.program === null) return;
   setTrackProgram(alphaTab, track, instrument.program);
-  for(const staff of track.staves) if(!staff.isPercussion) staff.displayTranspositionPitch = instrument.notation;
+  for(const staff of track.staves) if(!staff.isPercussion) staff.displayTranspositionPitch = notationPitch(staff);
+}
+
+/** Bünde über der höchsten leeren Saite, bis zu denen eine Spur ohne Saiten beim Umwandeln liegen soll (toGuitarTab()). */
+const TAB_RANGE_FRETS = 12;
+
+/**
+ * Macht aus einem Notensystem ohne Saiten (Gesang, Orgel aus Guitar Pro) Gitarren-Tab: Standard-Tuning, kein Capo,
+ * Notenlage TAB_NOTATION. Der ganze Satz wandert um so viele Oktaven, dass möglichst viele Töne zwischen der tiefen
+ * leeren Saite und dem TAB_RANGE_FRETS. Bund der hohen liegen (bei Gleichstand die kleinste Verschiebung); dann werden
+ * die Töne wie beim Transponieren auf Saiten verteilt (stringedStaff()), einzelne Töne, die noch immer nicht zu greifen
+ * sind, um eine weitere Oktave.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Staff} staff Notensystem ohne Saiten, wird geändert
+ * @returns {{shift: number, octaves: number, skipped: number}} Verschiebung des Satzes in Halbtönen, einzeln oktavierte
+ *   und nicht zu greifende Töne
+ */
+export function toGuitarTab(alphaTab, staff){
+  /** @type {Array<{note: Note, pitch: number}>} */
+  const notes = [];
+  for(const bar of staff.bars) for(const voice of bar.voices) for(const beat of voice.beats) for(const note of beat.notes){
+    notes.push({note, pitch: note.realValueWithoutHarmonic});
+  }
+  const standard = alphaTab.model.Tuning.getDefaultTuningFor(6);
+  staff.stringTuning = new alphaTab.model.Tuning(standard.name, [...standard.tunings], true);
+  staff.capo = 0;
+  staff.showTablature = true;
+  staff.displayTranspositionPitch = TAB_NOTATION;
+  const low = Math.min(...staff.tuning);
+  const high = Math.max(...staff.tuning) + TAB_RANGE_FRETS;
+  const outside = shift => notes.filter(({pitch}) => pitch + shift < low || pitch + shift > high).length;
+  const shift = [0, 12, -12, 24, -24, 36, -36].reduce((best, s) => outside(s) < outside(best) ? s : best);
+  // Vorläufig alles auf die tiefe Saite (Bund auch außerhalb des Griffbretts); stringedStaff() verteilt neu.
+  for(const {note, pitch} of notes){
+    note.string = 1;
+    note.fret = pitch + shift - openString(staff, 1);
+  }
+  /** @type {TransposeResult} */
+  const result = {notes: 0, octaves: 0, skipped: 0, chords: 0};
+  stringedStaff(staff, 0, result);
+  return {shift, octaves: result.octaves, skipped: result.skipped};
 }
 
 /**

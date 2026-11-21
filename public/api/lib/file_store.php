@@ -69,6 +69,13 @@ function store_original(string $slug, string $localPath, string $originalName, ?
 const SCORE_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
+ * Höchstlänge der Notiz beim Speichern, was sich geändert hat (siehe history_note(); NOTE_MAX in js/editor.js).
+ *
+ * @var int Zeichen
+ */
+const NOTE_MAX = 200;
+
+/**
  * Prüft Noten im Format alphaTex, bevor sie gespeichert werden. Den Inhalt selbst kann nur alphaTab im Browser
  * auswerten; geprüft werden deshalb nur Größe und dass es Text in UTF-8 ist.
  *
@@ -145,14 +152,16 @@ function store_new_score(
  * Hebt den Stand eines Lieds vor dem Überschreiben auf, damit sich ein missglücktes Speichern rückgängig machen lässt
  * (im Bearbeitungsmodus der Knopf "Verlauf", siehe list_score_history()): die aktuelle score.atex als
  * history/score-<Zeitstempel>.atex und, daneben als score-<Zeitstempel>.json, die Angaben für das Leadsheet (Feld
- * leadsheet aus song.json), weil sie an den Takten der Noten hängen. Es bleiben die letzten SCORE_HISTORY_KEEP Stände.
+ * leadsheet aus song.json), weil sie an den Takten der Noten hängen, und die Notiz, was sich beim Überschreiben ändert
+ * (Feld note, nur wenn es eine gibt). Es bleiben die letzten SCORE_HISTORY_KEEP Stände.
  * Importierte Noten (store_new_score()) sind kein Stand, der Verlauf beginnt mit dem ersten Überschreiben.
  *
  * @param string $slug Slug des Lieds (score.atex muss existieren)
+ * @param string $note was sich ändert (history_note()), leer = keine Notiz
  * @return void
  * @throws RuntimeException wenn history/ nicht angelegt oder die Datei nicht kopiert werden kann
  */
-function keep_score_history(string $slug): void
+function keep_score_history(string $slug, string $note = ''): void
 {
     $dir = song_dir($slug) . '/history';
     if (!is_dir($dir) && !mkdir($dir, 0775) && !is_dir($dir)) {
@@ -167,7 +176,11 @@ function keep_score_history(string $slug): void
         // Leeres chords muss {} bleiben (wie in write_song_json()).
         $leadsheet['chords'] = (object) $leadsheet['chords'];
     }
-    $json = json_encode(['leadsheet' => (object) $leadsheet], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $data = ['leadsheet' => (object) $leadsheet];
+    if ($note !== '') {
+        $data['note'] = $note;
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (file_put_contents("$dir/" . basename($name, '.atex') . '.json', $json) === false) {
         throw new RuntimeException('Die bisherigen Angaben für das Leadsheet konnten nicht gesichert werden');
     }
@@ -185,7 +198,8 @@ function keep_score_history(string $slug): void
  *
  * @param string $slug Slug des Lieds
  * @return array[] je Fassung id (Dateiname ohne .atex, z. B. "score-20261031-224255"), time (Zeitpunkt des
- *                 Überschreibens, "2026-10-31 22:42:55") und size (Bytes)
+ *                 Überschreibens, "2026-10-31 22:42:55"), size (Bytes) und note (was sich beim Überschreiben
+ *                 geändert hat, leer ohne Notiz)
  */
 function list_score_history(string $slug): array
 {
@@ -197,9 +211,23 @@ function list_score_history(string $slug): array
         if (!preg_match('/^score-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d+)?$/', $id, $m)) {
             continue;
         }
-        $list[] = ['id' => $id, 'time' => "$m[1]-$m[2]-$m[3] $m[4]:$m[5]:$m[6]", 'size' => (int) filesize($file)];
+        $json = substr($file, 0, -5) . '.json';
+        $data = is_file($json) ? json_decode((string) file_get_contents($json), true) : null;
+        $list[] = ['id' => $id, 'time' => "$m[1]-$m[2]-$m[3] $m[4]:$m[5]:$m[6]", 'size' => (int) filesize($file),
+            'note' => is_string($data['note'] ?? null) ? $data['note'] : ''];
     }
     return $list;
+}
+
+/**
+ * Notiz für den Verlauf aus der Anfrage (Parameter note): eine Zeile, höchstens NOTE_MAX Zeichen.
+ *
+ * @return string leer ohne Notiz
+ */
+function history_note(): string
+{
+    $note = trim((string) preg_replace('/\s+/u', ' ', (string) ($_GET['note'] ?? '')));
+    return mb_substr($note, 0, NOTE_MAX);
 }
 
 /**
@@ -258,10 +286,11 @@ function delete_score_history(string $slug, string $id): void
  *
  * @param string $slug Slug des Lieds
  * @param string $tex Noten als alphaTex
+ * @param string $note was sich ändert (steht im Verlauf beim bisherigen Stand), leer = keine Notiz
  * @return array das aktualisierte Lied
  * @throws FileValidationException|NotFoundException|RuntimeException
  */
-function store_score(string $slug, string $tex): array
+function store_score(string $slug, string $tex, string $note = ''): array
 {
     if (read_song_json($slug) === null) {
         throw new NotFoundException("Song '$slug' nicht gefunden");
@@ -271,7 +300,7 @@ function store_score(string $slug, string $tex): array
     if (!is_file($target)) {
         throw new NotFoundException('Der Song hat noch keine Noten');
     }
-    keep_score_history($slug);
+    keep_score_history($slug, $note);
     $tmp = "$target.tmp";
     if (file_put_contents($tmp, $tex) === false || !rename($tmp, $target)) {
         @unlink($tmp);

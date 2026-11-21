@@ -1,41 +1,44 @@
 # Instrumente
 
-Jede Spur hat eines von 13 Instrumenten plus Schlagzeug. Ein Instrument legt zwei Dinge fest: den Klang (ein
-General-MIDI-Programm) und die Notenlage (wie hoch die Noten im Notensystem gegenüber dem Klang stehen). So gibt es im
-Dialog "Spuren" statt 128 Klängen und einer eigenen Spalte "Notenlage" nur eine kurze Auswahlliste. Der Konfliktlöser
-ordnet beim Import jeder Spur ein Instrument zu (Spalte "Programme"). Die Spalte "u. a." ist für den Tooltip gedacht.
+Jede Spur hat eines von 13 Instrumenten plus Schlagzeug. Ein Instrument legt den Klang fest (ein General-MIDI-Programm);
+so gibt es im Dialog "Spuren" statt 128 Klängen nur eine kurze Auswahlliste.
 
-Umgesetzt in `INSTRUMENTS`, `instrumentOf()`, `setInstrument()` und `normalizeTuningOctave()` (`public/js/notation.js`),
-im Dialog "Spuren" (`public/js/editor.js`) und im Konfliktlöser (`public/js/conflicts.js`, Schritte "Tuning in falscher
-Oktave" und "Instrument und Notenlage").
+**Notenlage:** Jede Spur ist Gitarren-Tab, auch Gesang, Flöte oder Klavier: Eingegeben wird auf dem Griffbrett, der
+Tonraum ist der der Gitarre. Deshalb wird jede Spur wie Gitarre notiert, eine Oktave höher, als sie klingt
+(`TAB_NOTATION`, `notationPitch()`), gleich welches Instrument; dieselben Bünde stehen in allen Spuren gleich hoch. Ob
+das Original eine Oktave höher oder tiefer klingt, nehmen wir in Kauf.
+
+Der Konfliktlöser ordnet beim Import jeder Spur ein Instrument zu (Spalte "Programme"). Die Spalte "u. a." ist für den
+Tooltip gedacht.
+
+Umgesetzt in `INSTRUMENTS`, `instrumentOf()`, `setInstrument()`, `notationPitch()`, `toGuitarTab()` und
+`normalizeTuningOctave()` (`public/js/notation.js`), im Dialog "Spuren" (`public/js/editor.js`) und im Konfliktlöser (`public/js/conflicts.js`, Schritte "Spur ohne Saiten",
+"Tuning in falscher Oktave" und "Instrument und Notenlage").
 
 ## Die Liste
 
-| Instrument         | MIDI           | Programme                    | Notenlage         | u. a.                                                                           |
-|--------------------|----------------|------------------------------|-------------------|---------------------------------------------------------------------------------|
-| Klavier            | 0              | 0–7                          | klingend          | Flügel, E-Piano, Honky-Tonk, Cembalo, Clavinet                                  |
-| Xylophon           | 13             | 8–15, 108                    | klingend          | Glockenspiel, Vibraphon, Marimba, Celesta, Spieluhr, Röhrenglocken, Hackbrett, Kalimba |
-| Orgel              | 16             | 16–23                        | klingend          | Hammond-Orgel, Kirchenorgel, Akkordeon, Bandoneon, Mundharmonika                |
-| Akustikgitarre     | 25             | 24, 25, 46, 104–107          | eine Oktave höher | Westerngitarre, Konzertgitarre (Nylon), Harfe, Banjo, Sitar, Koto              |
-| E-Gitarre          | 27             | 26–28                        | eine Oktave höher | Jazzgitarre, cleane E-Gitarre, gedämpfte E-Gitarre                              |
-| E-Gitarre verzerrt | 30             | 29–31                        | eine Oktave höher | Overdrive, Distortion, Flageolett-Gitarre                                       |
-| Bass               | 32             | 32–39                        | eine Oktave höher | E-Bass, akustischer Bass, Fretless, Slap-Bass, Synth-Bass                       |
-| Streicher          | 48             | 40–45, 47–51, 110            | klingend          | Geige, Bratsche, Cello, Kontrabass, Pizzicato, Streichorchester, Fiddle, Pauke  |
-| Gesang             | 53             | 52–54                        | klingend          | Chor, Stimme ("Ooh"), Synth-Stimme                                              |
-| Trompete           | 56             | 56–63                        | klingend          | Posaune, Tuba, Waldhorn, Blechbläsersatz                                        |
-| Klarinette         | 71             | 64–71, 109, 111              | klingend          | Saxophon (Sopran, Alt, Tenor, Bariton), Oboe, Englischhorn, Fagott, Dudelsack   |
-| Flöte              | 73             | 72–79                        | klingend          | Querflöte, Blockflöte, Piccolo, Panflöte, Okarina, Pfeifen                      |
-| Synth              | 80             | 55, 80–103, 112–127          | klingend          | Synthesizer (Melodie, Flächen), Klangeffekte, Orchesterschlag, Steel Drums, Geräusche |
-| Schlagzeug         | – (Kanal 10)   | Schlagzeugspuren             | –                 | Schlagzeug, Percussion                                                          |
+| Instrument         | MIDI           | Programme                    | u. a.                                                                           |
+|--------------------|----------------|------------------------------|---------------------------------------------------------------------------------|
+| Klavier            | 0              | 0–7                          | Flügel, E-Piano, Honky-Tonk, Cembalo, Clavinet                                  |
+| Xylophon           | 13             | 8–15, 108                    | Glockenspiel, Vibraphon, Marimba, Celesta, Spieluhr, Röhrenglocken, Hackbrett, Kalimba |
+| Orgel              | 16             | 16–23                        | Hammond-Orgel, Kirchenorgel, Akkordeon, Bandoneon, Mundharmonika                |
+| Akustikgitarre     | 25             | 24, 25, 46, 104–107          | Westerngitarre, Konzertgitarre (Nylon), Harfe, Banjo, Sitar, Koto              |
+| E-Gitarre          | 27             | 26–28                        | Jazzgitarre, cleane E-Gitarre, gedämpfte E-Gitarre                              |
+| E-Gitarre verzerrt | 30             | 29–31                        | Overdrive, Distortion, Flageolett-Gitarre                                       |
+| Bass               | 32             | 32–39                        | E-Bass, akustischer Bass, Fretless, Slap-Bass, Synth-Bass                       |
+| Streicher          | 48             | 40–45, 47–51, 110            | Geige, Bratsche, Cello, Kontrabass, Pizzicato, Streichorchester, Fiddle, Pauke  |
+| Gesang             | 53             | 52–54                        | Chor, Stimme ("Ooh"), Synth-Stimme                                              |
+| Trompete           | 56             | 56–63                        | Posaune, Tuba, Waldhorn, Blechbläsersatz                                        |
+| Klarinette         | 71             | 64–71, 109, 111              | Saxophon (Sopran, Alt, Tenor, Bariton), Oboe, Englischhorn, Fagott, Dudelsack   |
+| Flöte              | 73             | 72–79                        | Querflöte, Blockflöte, Piccolo, Panflöte, Okarina, Pfeifen                      |
+| Synth              | 80             | 55, 80–103, 112–127          | Synthesizer (Melodie, Flächen), Klangeffekte, Orchesterschlag, Steel Drums, Geräusche |
+| Schlagzeug         | – (Kanal 10)   | Schlagzeugspuren             | Schlagzeug, Percussion                                                          |
 
 - **MIDI** ist der Klang, den die Spur bekommt; **Programme** sind die General-MIDI-Programme (0–127), die zu diesem
   Instrument werden. Die Einteilung folgt den 16 Familien von General MIDI (je acht Programme, z. B. 24–31 Gitarre),
   bis auf wenige Ausnahmen: Harfe (46) und die gezupften Ethno-Instrumente (104–107) klingen wie eine gezupfte
   Gitarre, Kalimba (108) wie ein Xylophon, Fiddle (110) ist eine Geige, Dudelsack (109) und Shanai (111) sind
   Rohrblattinstrumente, die Pauke (47) bleibt bei den Streichern wie in General MIDI.
-- **Notenlage:** Gitarre und Bass werden üblicherweise eine Oktave höher notiert, als sie klingen (Violinschlüssel bzw.
-  Bassschlüssel mit kleiner 8 darunter); alle anderen Instrumente stehen, wie sie klingen. Das entspricht den
-  Guitar-Pro-Dateien im Upload-Ordner (Analyse unten).
 - **Schlagzeug** ist kein Programm, sondern der Schlagzeugkanal von General MIDI (Kanal 10): Jede Tonhöhe ist ein
   anderes Schlaginstrument. Für Schlagzeug gibt es keine Notenlage, keinen Capo und kein Tuning.
 - **Mehrere Saiten-Instrumente im Song:** Capo und Tuning müssen für die Spuren mit so vielen Saiten wie die Akkordspur
@@ -48,14 +51,17 @@ Oktave" und "Instrument und Notenlage").
    GP-Dateien hat eine Bassspur Programm 0).
 3. **Sonst nach dem Programm** (Spalte "Programme"). Das gilt auch für 6-saitige Spuren mit anderem Klang: Eine
    Melodie, die in Guitar Pro als Gitarren-Tab mit Gesangs- oder Flötenklang angelegt ist, wird Gesang bzw. Flöte
-   (Tab bleibt, Noten klingend).
-4. **Tuning in die übliche Lage:** Liegt das Tuning eine oder mehrere Oktaven über oder unter der üblichen Lage
+   (Tab bleibt).
+4. **Spur ohne Saiten** (Gesang, Orgel): wird Gitarren-Tab mit Standard-Tuning (`toGuitarTab()`). Der ganze Satz
+   wandert um so viele Oktaven, dass möglichst viele Töne zwischen tiefer leerer Saite (E2) und 12. Bund der hohen
+   (E5) liegen; einzelne Töne, die dann noch nicht zu greifen sind, um eine weitere Oktave (Datenverlust im Protokoll).
+5. **Tuning in die übliche Lage:** Liegt das Tuning eine oder mehrere Oktaven über oder unter der üblichen Lage
    (Gitarre E2 A2 D3 G3 B3 E4, Bass E1 A1 D2 G2; Grenze: tiefe Saite mehr als eine Quinte daneben), wird es um ganze
    Oktaven verschoben; die Bünde bleiben. Bei einer Gitarre ist das der Oktav-Trick aus Guitar Pro (Tuning E3 … mit
    "gleicher Oktave" statt E2 … mit "eine Oktave tiefer"); die Wiedergabe klingt danach so tief wie das echte
    Instrument (Datenverlust im Protokoll, weil sich der Klang ändert).
-5. **Klang und Notenlage** aus der Liste setzen. Ein anderer Klang (MIDI-Programm) ist kein Datenverlust: Noten, Tabs
-   und Akkorde bleiben, nur die Wiedergabe klingt nach dem Instrument der Liste; im Protokoll steht er als normale
+6. **Klang** aus der Liste setzen, **Notenlage** für Tab (`notationPitch()`). Ein anderer Klang (MIDI-Programm) ist
+   kein Datenverlust: Noten, Tabs und Akkorde bleiben, nur die Wiedergabe klingt nach dem Instrument der Liste; im Protokoll steht er als normale
    Änderung (z. B. "Spur „Trompete“: Trompete (vorher Klang 57)").
 
 ## Analyse der Guitar-Pro-Dateien (20.11.2026)

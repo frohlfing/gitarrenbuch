@@ -24,6 +24,7 @@
   --ls-pt:10.5;
   --at-glyph:34px;
   --fb-color:var(--accent);
+  --elyrics-h:50%;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -274,6 +275,9 @@ header p.sub{
 }
 .sheet .close:hover{color:var(--accent-dark);}
 .form-field{margin-bottom:1rem;}
+/* Fokus in der Farbe der App statt des schwarzen Rahmens des Browsers */
+.controls input[type=search]:focus-visible, .controls select:focus-visible, .form-field input:focus-visible,
+.form-field select:focus-visible, .form-field textarea:focus-visible{outline:none; border-color:var(--accent);}
 .form-field label, .form-field .label{
   display:block;
   font-size:.75rem;
@@ -542,6 +546,9 @@ header p.sub{
 .speed-pop button[aria-current="true"]{color:var(--accent-dark); font-weight:600;}
 /* Liste der Ansichten über ihrem Knopf: linksbündig, breiter */
 .view-pop{min-width:9.5rem;}
+/* Menü "Bereinigen" in der Leiste des Bearbeitungsmodus (editor.js): klappt nach unten auf */
+.etool-menu{position:relative; display:inline-flex;}
+.etool-pop{top:calc(100% + .3rem); bottom:auto; left:0; right:auto; min-width:12rem;}
 .view-pop button{text-align:left; padding:.6rem 1rem;}
 .view-pop button[aria-current="true"]{background:var(--accent); color:#fff;}
 /* Bereich zum Wiederholen in "Chords" (onLoopTick() in playback.js) */
@@ -677,10 +684,11 @@ header p.sub{
 /* Außerhalb des Modus ist die Leiste leer und unsichtbar (sie nimmt nur dessen Werkzeugleiste auf). */
 #songView:not(.editing) > .songbar{display:none;}
 /* Im Modus zeigt die feste Leiste nur die Werkzeugleiste (Ansicht und Spuren stecken darin, siehe editor.js) */
-#songView.editing .songbar{display:block; padding:0;}
+/* Über den Panels (25–27), damit das Menü "Bereinigen" aus der Leiste darüber aufklappt */
+#songView.editing .songbar{display:block; padding:0; z-index:28;}
 #songView.editing .songbar > :not(.edit-toolbar){display:none;}
 /* Schließen wie im Player: rundes ✕ */
-.edit-close{width:38px; height:38px; border-radius:50%; border:1px solid var(--rule); background:var(--card);
+.edit-close{width:34px; height:34px; border-radius:50%; border:1px solid var(--rule); background:var(--card);
   color:var(--ink); font-size:1.05rem; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;}
 .edit-close:hover{border-color:var(--accent); color:var(--accent-dark);}
 /* Knöpfe der Abspielleiste ohne Funktion im Modus */
@@ -688,7 +696,7 @@ header p.sub{
 /* Capo je Spur (rechtes Panel, nur bei ungleichem Capo) */
 #songView.editing .track-checks{padding:0;}
 #songView.editing .score-wrap{max-width:none;}
-#songView.editing{padding-bottom:calc(var(--bar-h) + var(--edit-bottom-h, 0px) + env(safe-area-inset-bottom) + 1rem);}
+#songView.editing{padding-bottom:calc(var(--bar-h) + var(--edit-bottom-h) + env(safe-area-inset-bottom) + 1rem);}
 #songView.editing .score-wrap, #songView.editing .score-status{
   margin-left:var(--edit-closed-w); margin-right:var(--edit-closed-w);
 }
@@ -804,8 +812,8 @@ header p.sub{
 
 /* Seitliche Panels: fest zwischen Leiste und unterem Panel; eingeklappt ein schmaler Streifen mit senkrechtem Titel */
 .edit-panel{
-  position:fixed; z-index:25; top:var(--edit-top, 0px);
-  bottom:calc(var(--bar-h) + var(--edit-bottom-h, 0px) + env(safe-area-inset-bottom));
+  position:fixed; z-index:25; top:var(--edit-top);
+  bottom:calc(var(--bar-h) + var(--edit-bottom-h) + env(safe-area-inset-bottom));
   display:flex; flex-direction:column;
   background:var(--card); border-color:var(--rule); border-style:solid; border-width:0;
 }
@@ -823,7 +831,7 @@ header p.sub{
 .edit-panel.collapsed .edit-panel-title{writing-mode:vertical-rl; flex:none;}
 .edit-left.collapsed .edit-panel-title{transform:rotate(180deg);}
 .edit-panel.collapsed .edit-panel-body{display:none;}
-.edit-panel-body{flex:1; overflow-y:auto; padding:0rem .7rem .8rem;}
+.edit-panel-body{flex:1; overflow-y:auto; padding:0 .7rem .8rem;}
 /* Überschriften der Gruppen im linken Panel: wie die Beschriftung der Felder (.efield) */
 .edit-panel h4{margin:.6rem 0 .2rem; font-size:.8rem; font-weight:400; line-height:inherit; color:var(--ink-soft);}
 /* Quadratische Knöpfe in der Palette links und in der Werkzeugleiste (Text-Knöpfe ausgenommen) */
@@ -940,14 +948,14 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 .edit-bottom-head{display:flex; align-items:center; gap:.8rem; padding:.2rem .6rem .2rem .8rem;}
 .edit-status{flex:1; text-align:right; font-size:.8rem; color:var(--ink-soft); font-variant-numeric:tabular-nums;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.edit-bottom-body{height:var(--edit-bottom-body-h, 200px); overflow-y:auto; padding:.5rem .8rem .7rem; border-top:1px solid var(--rule);}
+.edit-bottom-body{height:var(--edit-bottom-body-h); overflow-y:auto; padding:.5rem .8rem .7rem; border-top:1px solid var(--rule);}
 .edit-bottom.collapsed .edit-bottom-body{display:none;}
 .elyrics textarea{width:100%; height:100%; resize:none; font:inherit; font-size:.95rem; padding:.5rem .6rem;
   border:1px solid var(--rule); border-radius:6px; box-sizing:border-box;}
 /* Panel "Liedtext" rechts: oben das Textfeld (Höhe --elyrics-h, setzt editor.js), darunter die Vorschau "Text &
    Akkorde", dazwischen die Linie zum Ziehen */
 .edit-panel-body.elyrics{display:flex; flex-direction:column; overflow:hidden; padding:.5rem .7rem .6rem;}
-.elyrics-edit{flex:0 0 var(--elyrics-h, 50%); min-height:0; display:flex; flex-direction:column; gap:.3rem;}
+.elyrics-edit{flex:0 0 var(--elyrics-h); min-height:0; display:flex; flex-direction:column; gap:.3rem;}
 .elyrics-split{flex:none; height:10px; margin:.1rem 0; cursor:ns-resize; touch-action:none;
   background:linear-gradient(var(--rule), var(--rule)) center / 100% 2px no-repeat;}
 .elyrics-split:hover{background-image:linear-gradient(var(--accent), var(--accent));}
@@ -1035,7 +1043,7 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
    1 pt also 0,168cqw; alle anderen Größen sind in em und wachsen mit. */
 .ls-page{--ink:#1b1b1b; --ink-soft:#666; --rule:#c9c9c9; --card:#fff; --accent-dark:#9a3f00;
   position:relative; box-sizing:border-box; width:100%; min-height:141.43cqw; padding:6cqw 7cqw;
-  background:#fff; color:var(--ink); font-size:calc(var(--ls-pt, 10.5) * .168cqw); line-height:1.3;
+  background:#fff; color:var(--ink); font-size:calc(var(--ls-pt) * .168cqw); line-height:1.3;
   box-shadow:0 1px 4px rgba(0,0,0,.25);}
 .ls-page::after{content:""; position:absolute; left:0; right:0; top:141.43cqw; border-top:2px dashed #d32f2f;}
 .ls-head{display:flex; justify-content:space-between; align-items:flex-start; gap:1.5em;}
@@ -1047,10 +1055,10 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 /* Griffbrett (Dialog "Griffbrett"): Auswahl der Töne und die Zeichnung bis zum 15. Bund */
 .history-hint{margin:0 0 .8rem; font-size:.85rem; color:var(--ink-soft);}
 .history-list{list-style:none; margin:0; padding:0;}
-.history-list li{display:flex; align-items:center; gap:.8rem; padding:.4rem 0; border-top:1px solid var(--rule);}
+.history-list li{display:flex; flex-wrap:wrap; align-items:center; gap:.3rem .8rem; padding:.4rem 0; border-top:1px solid var(--rule);}
+.history-note{flex-basis:100%; font-size:.85rem; color:var(--ink-soft);}
 .history-list li:first-child{border-top:0;}
 .history-list li > span:first-child{flex:1;}
-.history-option{display:flex; align-items:center; gap:.4rem; margin-top:.8rem; font-size:.9rem;}
 .history-list .ebtn{flex:none;}
 .history-size{font-size:.8rem; color:var(--ink-soft);}
 .fb-title{margin:0 0 .6rem; font-size:1.1rem;}
@@ -1062,9 +1070,9 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 .fretboard .fb-string{stroke:var(--ink-soft);}
 .fretboard .fb-marker{fill:var(--rule);}
 .fretboard .fb-number, .fretboard .fb-string-name{fill:var(--ink-soft); font-size:14px;}
-.fretboard .fb-note circle{fill:var(--fb-color, var(--accent));}
+.fretboard .fb-note circle{fill:var(--fb-color);}
 .fretboard .fb-note text{fill:#fff; font-size:12px; font-weight:600;}
-.fretboard .fb-open circle{fill:var(--card); stroke:var(--fb-color, var(--accent)); stroke-width:2.5;}
+.fretboard .fb-open circle{fill:var(--card); stroke:var(--fb-color); stroke-width:2.5;}
 .fretboard .fb-open text{fill:var(--ink);}
 .fretboard .fb-root circle{stroke:var(--ink); stroke-width:2;}
 .fretboard .fb-open.fb-root circle{stroke:var(--fb-color); stroke-width:4;}
@@ -1121,7 +1129,7 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 .ls-at-svg{display:block; width:100%; height:auto;}
 .ls-at-svg svg{overflow:visible;}
 .ls-at-svg text{dominant-baseline:alphabetic; white-space:pre;}
-.ls-at-svg .at{font-family:'GbBravura', sans-serif; font-size:var(--at-glyph, 34px); font-style:normal; font-weight:normal; line-height:1;}
+.ls-at-svg .at{font-family:'GbBravura', sans-serif; font-size:var(--at-glyph); font-style:normal; font-weight:normal; line-height:1;}
 .ls-at-count{font:9px system-ui, sans-serif; text-anchor:middle; fill:#777;}
 .ls-at-count-beat{font-weight:700; fill:#222;}
 .ls-hints{margin:.6em 0; display:flex; flex-wrap:wrap; gap:.2em .8em;}
@@ -1212,7 +1220,7 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 
 /* Hinweis "Noch nicht umgesetzt" unter der Werkzeugleiste */
 .edit-toast{
-  position:fixed; z-index:40; left:50%; top:calc(var(--edit-top, 0px) + .5rem); transform:translateX(-50%);
+  position:fixed; z-index:40; left:50%; top:calc(var(--edit-top) + .5rem); transform:translateX(-50%);
   padding:.45rem .9rem; border-radius:6px; background:var(--dark); color:#fff; font-size:.85rem;
   opacity:0; pointer-events:none; transition:opacity .2s;
 }

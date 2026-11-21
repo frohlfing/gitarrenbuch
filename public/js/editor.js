@@ -17,7 +17,7 @@ import {
   chordsTrack, describeScoreLoss, KEY_NAMES, keyName, lyricsTrack, parseScore, readGpFile,
   stringedStaves, TRACK_NAMES, trackName, writeScore, writeScoreChecked,
 } from './notation.js';
-import {eyeIcon, showTrackNames, speakerIcon, SyncEditor} from './playback.js';
+import {eyeIcon, perFrame, showTrackNames, speakerIcon, SyncEditor} from './playback.js';
 import {
   captureTabs, LeadsheetTab, normalizeSheet, parseTimeSignature, remapTabs, SECTION_NAMES,
   sectionName, TIME_SIGNATURES,
@@ -188,6 +188,7 @@ export const SHORTCUTS = [
     ['Ende', 'letzter Takt'],
     ['Strg+↑/↓', 'vorige / nächste Spur'],
     ['Strg+Alt+←/→', 'voriger / nächster Abschnitt'],
+    ['Alt+G', 'Gehe zu Takt'],
     ['Leertaste', 'Abspielen / Pause'],
     ['Strg+Leertaste', 'von vorn abspielen'],
   ]],
@@ -430,6 +431,76 @@ function instrumentSelect(track){
     title="${escapeHtml(current.examples)}"${drums ? ' disabled' : ''}>${options.map(i =>
     `<option value="${i.key}" title="${escapeHtml(i.examples)}"${i === current ? ' selected' : ''}>${escapeHtml(i.name)}</option>`)
     .join('')}</select>`;
+}
+
+/** Höchstlänge der Notiz beim Speichern (wie NOTE_MAX in api/lib/file_store.php). */
+const NOTE_MAX = 200;
+
+/** Schlüssel im Browser für die angefangenen Änderungsnotizen: {slug: Notiz}. */
+const NOTES_KEY = 'gitarrenbuch_editor_notes';
+
+/**
+ * Feld für die Änderungsnotiz (Dialoge "Speichern" und "Änderungen speichern?"), mit der angefangenen Notiz des Songs.
+ * @param {string} slug Slug des Songs
+ * @returns {string} HTML
+ */
+function noteFieldHtml(slug){
+  return `<div class="form-field"><input type="text" id="saveNote" maxlength="${NOTE_MAX}" autocomplete="off"
+    placeholder="Änderungsnotiz" aria-label="Änderungsnotiz" value="${escapeHtml(draftNote(slug))}"></div>`;
+}
+
+/**
+ * Angefangene Änderungsnotiz eines Songs (bleibt über Abbrechen, Verwerfen und Schließen hinweg bis zum Speichern).
+ * @param {string} slug Slug des Songs
+ * @returns {string} leer ohne Notiz
+ */
+function draftNote(slug){
+  try {
+    return String(JSON.parse(localStorage.getItem(NOTES_KEY) ?? '{}')?.[slug] ?? '');
+  } catch(err){
+    return '';
+  }
+}
+
+/**
+ * Merkt sich die angefangene Änderungsnotiz eines Songs; leer vergisst sie.
+ * @param {string} slug Slug des Songs
+ * @param {string} note Notiz
+ * @returns {void}
+ */
+function keepDraftNote(slug, note){
+  try {
+    const notes = JSON.parse(localStorage.getItem(NOTES_KEY) ?? '{}') ?? {};
+    if(note) notes[slug] = note;
+    else delete notes[slug];
+    localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+  } catch(err){
+    // Ohne Speicher im Browser bleibt die Notiz nur bis zum Schließen des Dialogs.
+  }
+}
+
+/**
+ * Notiz aus dem Feld noteFieldHtml().
+ * @returns {string} ohne Leerraum am Rand, leer ohne Feld
+ */
+function noteValue(){
+  return /** @type {?HTMLInputElement} */ (document.getElementById('saveNote'))?.value.trim() ?? '';
+}
+
+/**
+ * Bindet das Feld noteFieldHtml() an: Jede Eingabe wird gemerkt (keepDraftNote()), Enter speichert (wie der Knopf).
+ * @param {string} slug Slug des Songs
+ * @param {function(): void} save Speichern
+ * @returns {void}
+ */
+function bindNoteField(slug, save){
+  const input = document.getElementById('saveNote');
+  input?.addEventListener('input', () => keepDraftNote(slug, noteValue()));
+  input?.addEventListener('keydown', e => {
+    if(e.key !== 'Enter') return;
+    e.preventDefault();
+    save();
+  });
 }
 
 /** Tasten, die Panels ein- und ausklappen (wie Guitar Pro: F2 Palette): Taste → Seite. */
@@ -727,6 +798,11 @@ export class NoteEditor {
       if(e.detail) target.closest('button')?.blur();
     };
     for(const part of this.parts) part.addEventListener('click', this.onClick);
+    // Ein Klick außerhalb schließt das Menü "Bereinigen".
+    this.onPointerDown = e => {
+      if(!/** @type {HTMLElement} */ (e.target).closest?.('.etool-menu')) this.toggleCleanMenu(false);
+    };
+    document.addEventListener('pointerdown', this.onPointerDown);
     this.onKey = e => this.handleKey(e);
     document.addEventListener('keydown', this.onKey);
     // Abspielen beginnt am Cursor. Nach jeder Änderung zeichnet alphaTab neu und stellt die Position an den Anfang;
@@ -825,9 +901,19 @@ export class NoteEditor {
         <label class="etool-field"><span>Tonart</span>${select(KEY_NAMES, 'data-song="key" title="Tonart des ganzen Songs"')}</label>
         <span class="etool-keyhint" data-key-hint hidden>!</span>
         ${todoButton(svgIcon('transpose'), 'Transponieren: Halbtöne, Capo und Tuning ändern, mit Vorschau', '', 'transpose')}
+        <div class="etool-menu">
+          <button type="button" class="ebtn" data-action="cleanMenu" aria-haspopup="true" aria-expanded="false"
+            title="Bereinigen" aria-label="Bereinigen">${svgIcon('clean')}</button>
+          <div class="speed-pop view-pop etool-pop" data-clean-pop hidden>
+            <button type="button" data-cmd="tidyChords"
+              title="Überflüssige Akkorde entfernen; fehlende am Abschnittsanfang setzen">Akkorde bereingigen</button>
+          </div>
+        </div>
         <span class="etool-info" data-song-info></span>
       </div>
       <div class="egroup edit-end">
+        <label class="etool-field" title="Springe zu Takt (Alt+G)"><span>Gehe zu</span>
+          <input type="number" min="1" placeholder="Takt" data-goto aria-label="Gehe zu Takt"></label>
         <button type="button" class="ebtn ebtn-help" data-action="help" title="Tastenkürzel (?)"
           aria-label="Tastenkürzel">?</button>
         <button type="button" class="edit-close" data-action="done" title="Bearbeiten beenden"
@@ -1105,7 +1191,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {void}
    */
   handleClick(target){
-    const el = /** @type {?HTMLElement} */ (target.closest('[data-action], [data-collapse], '
+    // Ein Eintrag im Menü "Bereinigen" schließt es (der Befehl läuft weiter unten).
+    if(target.closest('[data-clean-pop]')) this.toggleCleanMenu(false);
+    const el =/** @type {?HTMLElement} */ (target.closest('[data-action], [data-collapse], '
       + '[data-duration], [data-cmd], [data-todo], [data-bar-goto], [data-ls-action], '
       + '[data-show-track], [data-track-audible], [data-clear-section]'));
     if(!el) return;
@@ -1121,6 +1209,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       this.leadsheetTab.action(el);
     } else if(el.dataset.cmd){
       this.run(el.dataset.cmd, el);
+    } else if(el.dataset.action === 'cleanMenu'){
+      this.toggleCleanMenu();
     } else if(el.dataset.action === 'done'){
       this.finish();
     } else if(el.dataset.action === 'tempoHint'){
@@ -1193,6 +1283,11 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     if(alt && shift && (key === 'ArrowUp' || key === 'ArrowDown')) return key === 'ArrowUp' ? 'semitoneUp' : 'semitoneDown';
     if(ctrl && alt && (key === 'ArrowUp' || key === 'ArrowDown')) return key === 'ArrowUp' ? 'stringUp' : 'stringDown';
     if(alt && !shift && key === 'Insert') return 'insertBeatAfter';
+    if(alt && !shift && key === 'g') return () => {
+      const input = /** @type {HTMLInputElement} */ (this.part('edit-toolbar').querySelector('[data-goto]'));
+      input.focus();
+      input.select();
+    };
     if(alt) return null;
     switch(key){
       case 'ArrowLeft': return shift ? 'selectBeatLeft' : () => this.moveTo(edit.stepBeat(this.score, this.pos, -1));
@@ -1257,7 +1352,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     };
     /** @type {Object<string, function(): void>} */
     const commands = {
-      save: () => void this.save(),
+      save: () => this.askSave(),
+      tidyChords: () => this.tidyChords(),
       undo: () => this.undo(this.undoStack, this.redoStack),
       redo: () => this.undo(this.redoStack, this.undoStack),
       shorter: () => this.changeBeats(beat => edit.stepDuration(beat, 1)),
@@ -1662,6 +1758,46 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
+   * Öffnet bzw. schließt das Menü "Bereinigen" (Besen in der Leiste, unter dem Knopf).
+   * @param {boolean} [open] öffnen; ohne Angabe umschalten
+   * @returns {void}
+   */
+  toggleCleanMenu(open){
+    const pop = /** @type {?HTMLElement} */ (this.part('edit-toolbar')?.querySelector('[data-clean-pop]'));
+    if(!pop) return;
+    const show = open ?? pop.hidden;
+    pop.hidden = !show;
+    pop.previousElementSibling.setAttribute('aria-expanded', String(show));
+  }
+
+  /**
+   * Menü "Bereinigen", Eintrag "Akkorde": doppelte Akkorde entfernen und an jeden Abschnittsanfang den klingenden
+   * setzen (chordCleanup() in notation.js; neue Akkorde in die Akkordspur). Ein Schritt für "Rückgängig"; gibt es
+   * nichts zu tun, bleibt alles, wie es war.
+   * @returns {void}
+   */
+  tidyChords(){
+    const plan = edit.chordCleanup(this.score);
+    if(!plan.repeated.length && !plan.missing.length){
+      this.toast('Akkorde sind schon bereinigt.');
+      return;
+    }
+    this.change(() => {
+      const {repeated, missing} = edit.chordCleanup(this.score);
+      for(const beat of repeated) beat.chordId = null;
+      const staff = this.score.tracks[this.contentTrack('chords')]?.staves[0];
+      for(const {bar, name} of missing){
+        const beat = staff?.bars[bar]?.voices[0]?.beats[0];
+        if(beat) this.setChordName(beat, name);
+      }
+    });
+    const parts = [];
+    if(plan.repeated.length) parts.push(`${plan.repeated.length} doppelte entfernt`);
+    if(plan.missing.length) parts.push(`${plan.missing.length} am Abschnittsanfang gesetzt`);
+    this.toast(`Akkorde: ${parts.join(', ')}.`);
+  }
+
+  /**
    * Setzt einen Akkord an die Stelle des Schlags am Cursor, in der Akkordspur (chordBeat()); geht das dort nicht,
    * sagt es ein Hinweis.
    * @param {Beat} beat Schlag am Cursor
@@ -1948,9 +2084,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     // renderFinished davor.
     // Beim Schreiben in einem Feld (z. B. Liedtext) rollt die Seite nicht zum Cursor.
     const redraw = () => this.drawCursor(!document.activeElement?.matches('input, textarea, select'));
-    // Beim Abspielen wandert die Silbe im Liedtext und in der Vorschau mit.
+    // Beim Abspielen wandert die Silbe im Liedtext und in der Vorschau mit (einmal je Bild, perFrame()).
+    const follow = perFrame((/** @type {number} */ tick) => this.followPlayback(tick));
     const offs = [api.renderFinished.on(redraw), api.postRenderFinished.on(redraw),
-      api.playerPositionChanged.on(e => this.followPlayback(e.currentTick))];
+      api.playerPositionChanged.on(e => follow(e.currentTick))];
     this.offRender = () => offs.forEach(off => off());
     this.cursorEl = document.createElement('div');
     this.cursorEl.className = 'edit-cursor';
@@ -1984,6 +2121,26 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const ticks = api.tickCache;
     const tick = beat && ticks ? ticks.getBeatStart(beat) : undefined;
     if(tick !== undefined && tick !== api.tickPosition) api.tickPosition = tick;
+  }
+
+  /**
+   * Setzt den Cursor auf den Schlag, der an einer Abspielposition klingt (Klick in die Wellenform der Audiospur), in
+   * der Spur am Cursor; hat sie dort keinen Schlag, in irgendeiner sichtbaren Spur. Beim Abspielen bleibt der Cursor:
+   * Er markiert die Bearbeitung, nicht die Abspielposition.
+   * @param {number} tick MIDI-Tick in Abspielreihenfolge
+   * @returns {void}
+   */
+  cursorToTick(tick){
+    const ticks = this.player.api?.tickCache;
+    if(this.player.isPlaying || !this.score || !ticks) return;
+    const found = ticks.findBeat(new Set([this.pos.track]), tick)?.beat
+      ?? ticks.findBeat(new Set(this.trackIndexes), tick)?.beat;
+    if(!found) return;
+    // Der Cursor zählt in der ersten Stimme: deren Schlag, der zur selben Zeit klingt.
+    const bar = found.voice.bar;
+    const beat = found.voice.index === 0 ? found : bar.voices[0]?.beats.findLast(b => b.playbackStart <= found.playbackStart);
+    if(!beat) return;
+    this.moveTo({track: bar.staff.track.index, bar: bar.index, beat: beat.index});
   }
 
   /**
@@ -2167,7 +2324,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       return;
     }
     sync.innerHTML = '';
-    this.sync = new SyncEditor(sync, this.player, {onEdit: () => this.syncEdited()});
+    this.sync = new SyncEditor(sync, this.player, {onEdit: () => this.syncEdited(), onSeek: tick => this.cursorToTick(tick)});
     try {
       await this.sync.open();
     } catch(err){
@@ -2432,6 +2589,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const save = /** @type {HTMLButtonElement} */ (toolbar.querySelector('[data-cmd="save"]'));
     save.classList.toggle('ebtn-dirty', this.dirty);
     save.disabled = !this.dirty;
+    /** @type {HTMLInputElement} */ (toolbar.querySelector('[data-goto]')).max = String(this.score.masterBars.length);
     const fields = this.part('edit-left');
     const value = (name, v) => {
       const input = /** @type {HTMLInputElement} */ (fields.querySelector(`[data-field="${name}"]`));
@@ -2450,9 +2608,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   /**
    * Speichert die Noten: Griffbilder vereinheitlichen (wie beim Import), als alphaTex schreiben, prüfen, hochladen.
    * Der Server hebt die vorige Fassung auf (history/). Danach, wenn geändert, die Angaben für das Leadsheet.
+   * @param {string} [note] was sich geändert hat (steht im Verlauf beim aufgehobenen Stand)
    * @returns {Promise<void>}
    */
-  async save(){
+  async save(note = ''){
     if(!this.dirty){
       this.toast('Keine Änderungen');
       return;
@@ -2465,6 +2624,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       return;
     }
     const sheet = this.sheetJson();
+    const keeps = this.keepsHistory();
     try {
       let song = null;
       const scoreSaved = tex !== this.savedTex;
@@ -2472,14 +2632,14 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         const result = parseScore(this.alphaTab, tex);
         // Ohne Katalog (Netzfehler) behalten die Akkorde ihren eigenen meistgenutzten Griff.
         normalizeChords(this.alphaTab, result, await loadChordLibraryOrEmpty(), true);
-        song = await saveScore(this.player.slug, writeScoreChecked(this.alphaTab, result));
+        song = await saveScore(this.player.slug, writeScoreChecked(this.alphaTab, result), note);
         this.savedTex = tex;
       }
       // Nach den Noten: Passen sie nicht (Prüfung), bleiben auch die Angaben je Takt ungespeichert, so passen beide
       // Dateien weiter zueinander.
       if(sheet !== this.savedSheet){
         // Die Noten haben den bisherigen Stand schon in den Verlauf gelegt (mit den damaligen Angaben).
-        song = await saveLeadsheet(this.player.slug, JSON.parse(sheet), !scoreSaved);
+        song = await saveLeadsheet(this.player.slug, JSON.parse(sheet), !scoreSaved, note);
         this.savedSheet = sheet;
       }
       // Zuletzt: Die Vorgaben gelten für die Spuren, wie sie nach dem Speichern der Noten sind.
@@ -2490,6 +2650,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       this.saved = true;
       this.onSaved(song);
       this.updateState();
+      // Die Notiz steht jetzt im Verlauf; ohne neuen Stand (nur Ansicht) bleibt sie für das nächste Speichern.
+      if(keeps) keepDraftNote(this.player.slug, '');
       this.toast('Gespeichert');
     } catch(err){
       this.toast('Nicht gespeichert: ' + err.message);
@@ -2582,6 +2744,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     }
     openOverlay(`<h2>Änderungen speichern?</h2>
       <p>Möchtest du die Änderungen speichern?</p>
+      ${this.keepsHistory() ? noteFieldHtml(this.player.slug) : ''}
       <div class="struct-actions">
         <button class="btn btn-primary" type="button" id="finishSave">Ja, speichern</button>
         <button class="btn" type="button" id="finishDiscard">Nein, verwerfen</button>
@@ -2590,12 +2753,51 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       closeOverlay();
       this.onClose(this.saved);
     });
-    document.getElementById('finishSave').addEventListener('click', async () => {
+    const finishSave = async () => {
+      const note = noteValue();
       closeOverlay();
-      await this.save();
+      await this.save(note);
       // Misslang das Speichern (Meldung unten), bleibt der Bearbeitungsmodus offen.
       if(!this.dirty) this.onClose(this.saved);
-    });
+    };
+    document.getElementById('finishSave').addEventListener('click', () => void finishSave());
+    bindNoteField(this.player.slug, () => void finishSave());
+  }
+
+  /**
+   * Ob Speichern einen Stand in den Verlauf legt (geänderte Noten oder Angaben für das Leadsheet; die Vorgaben der
+   * Ansicht allein nicht).
+   * @returns {boolean}
+   */
+  keepsHistory(){
+    return this.tex !== this.savedTex || this.sheetJson() !== this.savedSheet;
+  }
+
+  /**
+   * Speichern aus der Leiste (Strg+S): Legt es einen Stand in den Verlauf, fragt erst ein Dialog, was sich geändert hat
+   * (optional, steht dann im Verlauf).
+   * @returns {void}
+   */
+  askSave(){
+    if(!this.dirty || !this.keepsHistory()){
+      void this.save();
+      return;
+    }
+    openOverlay(`<h2>Speichern</h2>
+      ${noteFieldHtml(this.player.slug)}
+      <div class="struct-actions">
+        <button class="btn btn-primary" type="button" id="saveOk">Speichern</button>
+        <button class="btn" type="button" id="saveCancel">Abbrechen</button>
+      </div>`, true);
+    const ok = () => {
+      const note = noteValue();
+      closeOverlay();
+      void this.save(note);
+    };
+    document.getElementById('saveOk').addEventListener('click', ok);
+    document.getElementById('saveCancel').addEventListener('click', closeOverlay);
+    bindNoteField(this.player.slug, ok);
+    document.getElementById('saveNote').focus();
   }
 
   /**
@@ -2607,6 +2809,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     clearTimeout(this.toastTimer);
     clearTimeout(this.lyricsTimer);
     document.removeEventListener('keydown', this.onKey);
+    document.removeEventListener('pointerdown', this.onPointerDown);
     this.player.el.play.removeEventListener('click', this.onPlay, true);
     this.player.el.loop.hidden = false;
     this.offRender?.();
@@ -2869,11 +3072,30 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
+   * Feld "Gehe zu" in der Leiste: Cursor auf den ersten Schlag dieses Takts (in der Spur am Cursor); danach ist das Feld
+   * wieder leer und die Tasten gehören wieder den Noten.
+   * @param {HTMLInputElement} input Feld (Taktnummer ab 1)
+   * @returns {void}
+   */
+  gotoBar(input){
+    const count = this.score?.masterBars.length ?? 0;
+    const bar = Math.round(Number(input.value));
+    if(!count || !Number.isFinite(bar) || input.value.trim() === '') return;
+    this.moveTo({bar: Math.min(Math.max(bar, 1), count) - 1, beat: 0});
+    input.value = '';
+    input.blur();
+  }
+
+  /**
    * Übernimmt ein geändertes Feld: Schlag am Cursor (linkes Panel), Spur oder Spurwahl (Dialog "Spuren").
    * @param {HTMLInputElement} input Feld
    * @returns {void}
    */
   applyField(input){
+    if(input.dataset.goto !== undefined){
+      this.gotoBar(input);
+      return;
+    }
     if(input.dataset.trackField){
       this.applyTrackField(input);
       return;
@@ -2974,25 +3196,23 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         return;
       }
     }
-    const rows = versions.map((v, i) => {
+    const rows = versions.map(v => {
       const when = new Date(v.time.replace(' ', 'T')).toLocaleString('de-DE');
-      return `<li><span>${escapeHtml(when)}</span><span class="history-size">${Math.round(v.size / 1024)} KB${i ? '' : ' (zuletzt ersetzt)'}</span>
+      return `<li><span>${escapeHtml(when)}</span><span class="history-size">${Math.round(v.size / 1024)} KB</span>
         <button type="button" class="btn btn-34" data-version="${escapeHtml(v.id)}">Laden</button>
         <button type="button" class="ebtn" data-delete="${escapeHtml(v.id)}" title="Diesen Stand löschen"
-          aria-label="Diesen Stand löschen">${svgIcon('trash')}</button></li>`;
+          aria-label="Diesen Stand löschen">${svgIcon('trash')}</button>${v.note ? `
+        <span class="history-note">${escapeHtml(v.note)}</span>` : ''}</li>`;
     }).join('');
     openOverlay(`<h2>Verlauf</h2>
       <p class="history-hint">Jedes Speichern hebt den vorigen Stand der Noten und des Leadsheets auf.
         Geladen wird in den Editor, wie ein Schritt: Mit Rückgängig (Strg+Z) kommt der jetzige Stand zurück.
         Gespeichert wird erst mit Speichern, dann wandert auch der jetzige Stand in den Verlauf.</p>
-      ${rows ? `<ul class="history-list">${rows}</ul>
-        <label class="history-option"><input type="checkbox" id="historySheet" checked> Angaben für das Leadsheet mit laden</label>`
-        : '<p class="empty">Es gibt noch keine früheren Stände.</p>'}`);
+      ${rows ? `<ul class="history-list">${rows}</ul>` : '<p class="empty">Es gibt noch keine früheren Stände.</p>'}`);
     for(const button of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.history-list [data-version]'))){
       button.addEventListener('click', () => {
-        const withSheet = /** @type {HTMLInputElement} */ (document.getElementById('historySheet')).checked;
         closeOverlay();
-        void this.loadVersion(button.dataset.version, withSheet);
+        void this.loadVersion(button.dataset.version);
       });
     }
     for(const button of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.history-list [data-delete]'))){
@@ -3008,19 +3228,19 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Lädt einen aufgehobenen Stand in den Editor (ein Schritt für "Rückgängig", noch nicht gespeichert).
+   * Lädt einen aufgehobenen Stand in den Editor, Noten samt Angaben für das Leadsheet (ein Schritt für "Rückgängig",
+   * noch nicht gespeichert).
    * @param {string} id Kennung des Stands (siehe loadScoreHistory())
-   * @param {boolean} withSheet ob die Angaben für das Leadsheet mitkommen (sonst bleiben die jetzigen)
    * @returns {Promise<void>}
    */
-  async loadVersion(id, withSheet){
+  async loadVersion(id){
     try {
       const slug = this.player.slug;
       const tex = await loadScoreVersion(slug, id);
-      const sheet = withSheet ? JSON.stringify(normalizeSheet(await loadLeadsheet(slug, id))) : null;
+      const sheet = JSON.stringify(normalizeSheet(await loadLeadsheet(slug, id)));
       // Vorab lesen: Ein Stand, der sich nicht einlesen lässt, darf den Editor nicht zerlegen.
       parseScore(this.alphaTab, tex, this.player.api.settings);
-      if(tex === this.tex && (sheet === null || sheet === this.sheetJson())){
+      if(tex === this.tex && sheet === this.sheetJson()){
         this.toast('Dieser Stand ist der jetzige.');
         return;
       }
@@ -3311,8 +3531,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {void}
    */
   followPlayback(tick){
-    const ticks = this.player.api.tickCache;
-    const track = this.lyricsTarget();
+    const ticks = this.player.api?.tickCache;
+    const track = this.score && this.lyricsTarget();
     if(!this.score || !ticks || !track || this.part('edit-right').classList.contains('collapsed')) return;
     let found = null;
     search: for(const bar of track.staves[0].bars) for(const beat of bar.voices[0]?.beats ?? []){

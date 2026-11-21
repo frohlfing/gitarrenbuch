@@ -9,8 +9,9 @@ import {simplifyChord} from './chordfile.js';
 import {findGrips, gripToneProblem, nameGrip} from './chordgrips.js';
 import {parseChord} from './chordtheory.js';
 import {
-  chordsTrack, hasLyrics, instrumentOf, lyricsTrack, moveContent, moveToCapo, normalizeTuningOctave, parseScore, sameTuning,
-  setInstrument, setTuning, splitTicks, stringedStaves, timeline, trackName, tuningStaves, unrollRepeats, writeScore,
+  chordsTrack, hasLyrics, hasStrings, instrumentOf, lyricsTrack, moveContent, moveToCapo, normalizeTuningOctave,
+  notationPitch, parseScore, sameTuning, setInstrument, setTuning, splitTicks, stringedStaves, timeline, toGuitarTab,
+  trackName, tuningStaves, unrollRepeats, writeScore,
 } from './notation.js';
 import {lyricsLines} from './textview.js';
 
@@ -84,8 +85,9 @@ export function resolveConflicts(alphaTab, tex, library){
     changes.push(...lengths);
     score = parse(writeScore(alphaTab, score));
   }
-  // 3. bis 9.
+  // 3. bis 12.
   changes.push(...fixTripletFeel(alphaTab, score));
+  changes.push(...fixPitchedTracks(alphaTab, score));
   changes.push(...fixTuningOctaves(alphaTab, score));
   changes.push(...fixInstruments(alphaTab, score));
   changes.push(...fixCapo(score));
@@ -94,7 +96,7 @@ export function resolveConflicts(alphaTab, tex, library){
   const lyrics = fixLyricsTracks(score, changes);
   changes.push(...fixChordNames(score, library));
   changes.push(...fixGrips(score));
-  // 10. Griffbilder: eigene bleiben, fehlende kommen aus dem Katalog.
+  // 13. Griffbilder: eigene bleiben, fehlende kommen aus dem Katalog.
   normalizeChords(alphaTab, score, library, true);
   // Nichts geändert: die Noten wie gegeben (das Neuschreiben allein ändert nichts).
   if(!changes.length && !lyrics.length) return {tex, changes, lyrics};
@@ -196,6 +198,32 @@ function fixTripletFeel(alphaTab, score){
 }
 
 /**
+ * Spuren ohne Saiten (Gesang, Orgel …): Jede Spur ist Gitarren-Tab, ihr Tonraum ist der des Griffbretts. Solche Spuren
+ * werden Tab mit Standard-Tuning und wandern dabei um ganze Oktaven ins Griffbrett (toGuitarTab()); klingt die Spur
+ * dadurch anders als im Original, steht es als Datenverlust im Protokoll.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Score} score Noten, werden geändert
+ * @returns {Change[]} Änderungen
+ */
+function fixPitchedTracks(alphaTab, score){
+  const changes = [];
+  for(const track of score.tracks) for(const staff of track.staves){
+    if(staff.isPercussion || hasStrings(staff)) continue;
+    const {shift, octaves, skipped} = toGuitarTab(alphaTab, staff);
+    const octave = n => `${Math.abs(n / 12)} Oktave${Math.abs(n) > 12 ? 'n' : ''}`;
+    const parts = [
+      shift ? `alle Töne ${octave(shift)} ${shift > 0 ? 'höher' : 'tiefer'}` : '',
+      octaves ? `${octaves} weitere Töne um eine Oktave versetzt` : '',
+      skipped ? `${skipped} Töne nicht zu greifen` : '',
+    ].filter(Boolean);
+    const text = `Spur „${trackName(track)}“ ohne Saiten: jetzt Gitarren-Tab`
+      + (parts.length ? ` (${parts.join(', ')})` : '') + '.';
+    changes.push(shift || octaves || skipped ? lossy(text) : done(text));
+  }
+  return changes;
+}
+
+/**
  * Tuning in der üblichen Lage (Gitarre um E2, Bass um E1): Liegt es eine oder mehrere Oktaven daneben (Oktav-Trick aus
  * Guitar Pro), wird es um die Oktaven verschoben; die Bünde bleiben, der Klang wandert mit (deshalb Datenverlust).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
@@ -219,8 +247,8 @@ function fixTuningOctaves(alphaTab, score){
 
 /**
  * Instrument und Notenlage: Jede Spur bekommt das Instrument nach den Regeln in docs/Instrumente.md (instrumentOf())
- * mit seinem Klang und seiner Notenlage. Beides ist kein Datenverlust: Noten, Tabs und Akkorde bleiben, nur Wiedergabe
- * und Darstellung ändern sich.
+ * mit seinem Klang, und jedes Notensystem die Notenlage für Tab (notationPitch(), gleich welches Instrument). Beides ist
+ * kein Datenverlust: Noten, Tabs und Akkorde bleiben, nur Wiedergabe und Darstellung ändern sich.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
@@ -231,14 +259,15 @@ function fixInstruments(alphaTab, score){
     const instrument = instrumentOf(track);
     if(instrument.program === null) continue;
     const program = track.playbackInfo.program;
-    const pitches = [...new Set(track.staves.filter(st => !st.isPercussion).map(st => st.displayTranspositionPitch))];
+    const staves = track.staves.filter(st => !st.isPercussion);
+    const pitches = [...new Set(staves.map(st => st.displayTranspositionPitch))];
     const soundChanged = program !== instrument.program;
-    const notationChanged = pitches.some(p => p !== instrument.notation);
+    const notationChanged = staves.some(st => st.displayTranspositionPitch !== notationPitch(st));
     if(!soundChanged && !notationChanged) continue;
     setInstrument(alphaTab, track, instrument);
     const text = `Spur „${trackName(track)}“: ${instrument.name}`
       + (soundChanged ? ` (vorher Klang ${program})` : '')
-      + (notationChanged ? `; Notenlage ${instrument.notation ? 'eine Oktave höher' : 'klingend'} (vorher ${pitches.join(', ')})` : '')
+      + (notationChanged ? `; Notenlage wie Tab, eine Oktave höher notiert (vorher ${pitches.join(', ')})` : '')
       + '.';
     changes.push(done(text));
   }

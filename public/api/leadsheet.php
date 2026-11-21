@@ -35,8 +35,9 @@
  *                                   -> dasselbe aus einem aufgehobenen Stand (id aus api/score.php?history=1).
  * PUT /api/leadsheet.php?slug=xyz   -> ersetzt das Feld leadsheet in song.json (ohne Einträge fällt es weg). Body wie
  *                                      oben (ohne "leadsheet"). Vorher kommt der bisherige Stand in den Verlauf
- *                                      (siehe keep_score_history()), außer mit &keep=0 (der Editor setzt es, wenn er
- *                                      im selben Speichern schon die Noten gesichert hat). Antwort: das
+ *                                      (siehe keep_score_history(); mit &note=… samt Notiz, was sich ändert), außer
+ *                                      mit &keep=0 (der Editor setzt es, wenn er im selben Speichern schon die Noten
+ *                                      gesichert hat). Antwort: das
  *                                      aktualisierte Lied. Token nötig.
  */
 
@@ -256,7 +257,7 @@ try {
             require_token();
             $data = validate_leadsheet(read_json_body());
             if (($_GET['keep'] ?? '1') !== '0' && is_file(song_dir($slug) . '/' . SONG_FILES['score'])) {
-                keep_score_history($slug);
+                keep_score_history($slug, history_note());
             }
             // Das Layout steht nur da, wenn es von der Vorgabe abweicht (sonst hätte es jeder Song).
             if ($data['layout'] === LEADSHEET_LAYOUT) {

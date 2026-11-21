@@ -399,14 +399,16 @@ function pickString(string, frets){
 /**
  * Schreibt ein Pattern in einen Takt (erste Stimme, weitere fallen weg): je Anschlag ein Schlag mit dem Griff des dann
  * klingenden Akkords, so lang bis zum nächsten Anschlag (bei krummen Längen angebunden). Ohne Akkord Pausen.
- * Betonte Anschläge bekommen einen Akzent, Zupftöne ihren Finger als Fingersatz.
+ * Betonte Anschläge bekommen einen Akzent, Zupftöne ihren Finger als Fingersatz. Beginnt der Takt ohne Anschlag und
+ * klingt der letzte Anschlag des Takts davor noch (ringing), wird er bis zum ersten Anschlag übergebunden statt Pause.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Bar} bar Takt einer sechssaitigen Spur
  * @param {Pattern} pattern Pattern (Taktart wie der Takt)
  * @param {function(number): ?number[]} gripAt Griff zum Tick im Takt
+ * @param {?Beat} [ringing] letzter Schlag des Takts davor (nur Töne, die nicht gedämpft sind, klingen weiter)
  * @returns {void}
  */
-export function fillBar(alphaTab, bar, pattern, gripAt){
+export function fillBar(alphaTab, bar, pattern, gripAt, ringing = null){
   const {model} = alphaTab;
   const tokens = patternTokens(pattern);
   const strum = pattern.technique === 'strumming';
@@ -418,7 +420,24 @@ export function fillBar(alphaTab, bar, pattern, gripAt){
   const spans = [];
   if(!starts.length || starts[0] > 0) spans.push({from: 0, to: starts[0] ?? tokens.length, slot: -1});
   starts.forEach((slot, k) => spans.push({from: slot, to: starts[k + 1] ?? tokens.length, slot}));
+  const held = ringing?.isRest === false ? ringing.notes.filter(n => !n.isDead) : [];
   for(const {from, to, slot} of spans){
+    if(slot < 0 && from === 0 && held.length){
+      for(const {duration, dots} of splitTicks(to * slotTicks) ?? [{duration: pattern.grid, dots: 0}]){
+        const beat = new model.Beat();
+        beat.duration = duration;
+        beat.dots = dots;
+        for(const {string, fret} of held){
+          const note = new model.Note();
+          note.string = string;
+          note.fret = fret;
+          note.isTieDestination = true;
+          beat.addNote(note);
+        }
+        voice.addBeat(beat);
+      }
+      continue;
+    }
     const frets = slot >= 0 ? gripAt(from * slotTicks) : null;
     const token = tokens[slot] ?? '.';
     const sign = token.toLowerCase();
@@ -1721,7 +1740,7 @@ const COUNT_SPACE = 14;
 /** Angaben über den Noten, die auf der Tab-Stelle nichts verloren haben (stehen im Kopf des Blatts). */
 const HIDDEN_ELEMENTS = ['ScoreTitle', 'ScoreSubTitle', 'ScoreArtist', 'ScoreAlbum', 'ScoreWords', 'ScoreMusic',
   'ScoreWordsAndMusic', 'ScoreCopyright', 'GuitarTuning', 'ChordDiagrams', 'EffectCapo', 'TrackNames', 'EffectMarker',
-  'EffectTempo', 'EffectLyrics'];
+  'EffectTempo', 'EffectLyrics', 'EffectDynamics'];
 
 /** Schrift für Texte in der Tab (Akkordnamen, Taktnummern) wie im Player. */
 const TEXT_FONT = '"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';

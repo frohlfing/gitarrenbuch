@@ -6,7 +6,7 @@
  *
  * GET /api/score.php?slug=xyz   -> alphaTex als text/plain (UTF-8), 404, falls Lied oder Datei fehlt. Kein Token nötig.
  * GET /api/score.php?slug=xyz&history=1
- *                               -> JSON-Liste der aufgehobenen Fassungen, die neueste zuerst: id, time, size (siehe
+ *                               -> JSON-Liste der aufgehobenen Fassungen, die neueste zuerst: id, time, size, note (siehe
  *                                  list_score_history()). Kein Token nötig.
  * GET /api/score.php?slug=xyz&version=<id>
  *                               -> alphaTex dieser Fassung (id aus der Liste) als text/plain, 404, falls es sie nicht gibt.
@@ -16,7 +16,7 @@
  * PUT /api/score.php?slug=xyz   -> ersetzt score.atex. Body: alphaTex (text/plain, UTF-8), höchstens SCORE_MAX_BYTES.
  *                                  Antwort: das aktualisierte Lied. Token nötig. Nur für Lieder, die schon Noten
  *                                  haben (neue Noten kommen mit dem Import bzw. dem Gerüst über api/import.php). Der
- *                                  bisherige Stand kommt in den Verlauf.
+ *                                  bisherige Stand kommt in den Verlauf, mit &note=… samt Notiz, was sich ändert.
  *
  * Token wird per Header X-API-Token erwartet (siehe api/lib/http.php: require_token()).
  */
@@ -50,7 +50,7 @@ try {
             require_token();
             // Ein Byte mehr als erlaubt lesen, damit validate_score() zu große Noten erkennt.
             $tex = (string) file_get_contents('php://input', false, null, 0, SCORE_MAX_BYTES + 1);
-            json_response(200, store_score($slug, $tex));
+            json_response(200, store_score($slug, $tex, history_note()));
 
         case 'DELETE':
             require_token();

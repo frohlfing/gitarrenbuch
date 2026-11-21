@@ -12,11 +12,12 @@ Bearbeiten entstehen keine (siehe "Konflikte durch Bearbeiten"). Eine Anzeige vo
 | 1   | Song läuft nicht von oben nach unten durch   | ausschreiben                                                               |
 | 2   | Capo ungleich                                | kleinster Capo für alle, die anderen umgerechnet                           |
 | 3   | Tuning ungleich                              | tiefstes Tuning für alle, die anderen umgerechnet                          |
-| 4   | Triolen-Feeling, das nicht Shuffle ist       | Achtel-Varianten werden Shuffle, Sechzehntel-Varianten fallen weg          |
-| 5   | Akkorde stehen auch außerhalb der Akkordspur | in die Akkordspur; an derselben Stelle gewinnt die Akkordspur              |
-| 6   | Liedtext steht auch außerhalb der Textspur   | entfernt; abweichender Text als Chord-Datei in den Upload-Ordner           |
-| 7   | Unbekannte Akkordnamen                       | Name aus dem Griff, sonst vereinfacht, sonst entfernt                      |
-| 10  | Der Griff passt nicht zum Namen              | der Name gewinnt, Griff = erster Vorschlag der Griffsuche                  |
+| 4       | Spur ohne Saiten                  | wird Gitarren-Tab mit Standard-Tuning (`toGuitarTab()`): Jede Spur ist Tab, ihr Tonraum ist der des Griffbretts. Der ganze Satz wandert um so viele Oktaven, dass möglichst viele Töne zwischen tiefer leerer Saite und 12. Bund der hohen liegen; einzelne Töne, die dann noch nicht zu greifen sind, um eine weitere Oktave. Klingt die Spur dadurch anders, ist das Datenverlust |
+| 5   | Triolen-Feeling, das nicht Shuffle ist       | Achtel-Varianten werden Shuffle, Sechzehntel-Varianten fallen weg          |
+| 6   | Akkorde stehen auch außerhalb der Akkordspur | in die Akkordspur; an derselben Stelle gewinnt die Akkordspur              |
+| 7   | Liedtext steht auch außerhalb der Textspur   | entfernt; abweichender Text als Chord-Datei in den Upload-Ordner           |
+| 8   | Unbekannte Akkordnamen                       | Name aus dem Griff, sonst vereinfacht, sonst entfernt                      |
+| 11  | Der Griff passt nicht zum Namen              | der Name gewinnt, Griff = erster Vorschlag der Griffsuche                  |
 
 ## 1. Song läuft nicht von oben nach unten durch
 
@@ -123,11 +124,12 @@ prüft das Ergebnis (`exportScore()`); der Server legt den Song an (`api/import.
 | 1   | Song läuft nicht von oben nach unten durch | GP-Dateien sparen Platz mit Wiederholungen, Volta-Klammern und D.S./Coda        |
 | 2   | Capo ungleich                              | Guitar Pro hat den Capo je Spur; Gesang oder Bass oft ohne                      |
 | 3   | Tuning ungleich                            | Spuren aus verschiedenen Quellen, z. B. eine Gitarre einen Halbton tiefer       |
-| 4   | Triolen-Feeling, das nicht Shuffle ist     | GP5 kennt auch Sechzehntel-Triolen, GP6 bis GP8 dazu punktiert und Scottish (Achtel und Sechzehntel); GP3/GP4 nur Achtel-Triolen (im alphaTab-Importer nachgesehen) |
-| 5   | Akkorde auch außerhalb der Akkordspur      | Akkorde stehen in GP oft an mehreren Spuren (Gitarre, Gesang)                   |
-| 6   | Liedtext auch außerhalb der Textspur       | Text an einer Gitarrenspur und an der Gesangsspur                               |
-| 7   | Unbekannte Akkordnamen                     | freie Namen aus Guitar Pro ("N.C.", "Dsus2/4", "Em/", Tippfehler)               |
-| 10  | Der Griff passt nicht zum Namen            | Griffbilder in GP sind frei gezeichnet und oft falsch benannt                   |
+| 4       | Spur ohne Saiten                  | wird Gitarren-Tab mit Standard-Tuning (`toGuitarTab()`): Jede Spur ist Tab, ihr Tonraum ist der des Griffbretts. Der ganze Satz wandert um so viele Oktaven, dass möglichst viele Töne zwischen tiefer leerer Saite und 12. Bund der hohen liegen; einzelne Töne, die dann noch nicht zu greifen sind, um eine weitere Oktave. Klingt die Spur dadurch anders, ist das Datenverlust |
+| 5   | Triolen-Feeling, das nicht Shuffle ist     | GP5 kennt auch Sechzehntel-Triolen, GP6 bis GP8 dazu punktiert und Scottish (Achtel und Sechzehntel); GP3/GP4 nur Achtel-Triolen (im alphaTab-Importer nachgesehen) |
+| 6   | Akkorde auch außerhalb der Akkordspur      | Akkorde stehen in GP oft an mehreren Spuren (Gitarre, Gesang)                   |
+| 7   | Liedtext auch außerhalb der Textspur       | Text an einer Gitarrenspur und an der Gesangsspur                               |
+| 8   | Unbekannte Akkordnamen                     | freie Namen aus Guitar Pro ("N.C.", "Dsus2/4", "Em/", Tippfehler)               |
+| 11  | Der Griff passt nicht zum Namen            | Griffbilder in GP sind frei gezeichnet und oft falsch benannt                   |
 | –   | Takte mit falscher Länge                   | GP erlaubt unvollständige Takte                                                 |
 
 ### Konfliktlöser: die Regeln
@@ -141,21 +143,26 @@ Schritte in dieser Reihenfolge:
 | 1       | Wiederholungen und Sprünge (1)    | ausschreiben (`unrollRepeats()`): jeder Takt so oft, wie er gespielt wird; Text mehrerer Strophen und Sync-Punkte auf die Durchgänge verteilt                          |
 | 2       | Takte mit falscher Länge          | zu kurz: am Ende mit Pausen auffüllen; zu lang: von hinten den letzten Schlag verkürzen, notfalls Schläge löschen (und die Lücke mit Pausen füllen)                    |
 | 3       | Triolen-Feeling (4)               | punktierte Achtel und Scottish (Achtel) werden Shuffle (Achtel-Triolen); Sechzehntel-Triolen, punktierte Sechzehntel und Scottish (Sechzehntel) fallen weg             |
-| 4       | Tuning in falscher Oktave         | liegt das Tuning eine oder mehrere Oktaven neben der üblichen Lage (Gitarre um E2, Bass um E1; Grenze: tiefe Saite mehr als eine Quinte daneben), wird es um die Oktaven verschoben (`normalizeTuningOctave()`); die Bünde bleiben, der Klang wandert mit (Datenverlust). Das ist der Oktav-Trick aus Guitar Pro |
-| 5       | Instrument und Notenlage          | jede Spur bekommt ihr Instrument aus der festen Liste (`instrumentOf()`, `docs/Instrumente.md`) mit dessen Klang und Notenlage; weder ein anderer Klang noch eine andere Notenlage ist Datenverlust (Noten, Tabs und Akkorde bleiben) |
-| 6       | Capo ungleich (2)                 | der kleinste Capo aller Spuren mit Saiten; die anderen werden umgerechnet (`moveToCapo()`, klingt gleich, kein Bund rutscht unter 0)                                    |
-| 7       | Tuning ungleich (3)               | das tiefste Tuning, das eine Spur verwendet (kleinste Summe der Tonhöhen), unter den Spuren mit so vielen Saiten wie die Akkordspur; die anderen werden umgerechnet (`setTuning(…, true)`, klingt gleich) |
-| 8       | Akkorde außerhalb der Akkordspur (5) | in die Akkordspur (`moveContent()`, Modus "insert": fehlt dort ein Schlag, wird der klingende geteilt und angebunden, klingt gleich); zwei verschiedene Akkorde an derselben Stelle: die Akkordspur gewinnt |
-| 9       | Liedtext außerhalb der Textspur (6) | nur die Textspur behält ihren Text; der Text anderer Spuren fällt weg. Ist er derselbe (mindestens 90 % gleiche Wörter, z. B. dieselben Strophen in einem anderen Rhythmus), ohne Weiteres; weicht er ab, kommt er als Chord-Datei in den Upload-Ordner ("<Spur> – Liedtext.txt", Datenverlust) |
-| 10      | Unbekannte Akkordnamen (7)        | hat der Akkord einen Griff (mindestens drei Saiten), der Name aus dem Griff (`nameGrip()`); sonst vereinfacht (`simplifyChord()`); ist er dann noch unbekannt ("N.C."), fällt der Akkord weg |
-| 11      | Griff passt nicht zum Namen (8)   | der Name gewinnt; der Griff wird der erste Vorschlag der Griffsuche (`findGrips()`, wie im Dialog "Akkord", ohne den Katalog)                                           |
-| 12      | Griffbilder                       | `normalizeChords(…, true)`: eigene Griffe bleiben, fehlende kommen aus dem Katalog                                                                                     |
+| 4       | Spur ohne Saiten                  | wird Gitarren-Tab mit Standard-Tuning (`toGuitarTab()`): Jede Spur ist Tab, ihr Tonraum ist der des Griffbretts. Der ganze Satz wandert um so viele Oktaven, dass möglichst viele Töne zwischen tiefer leerer Saite und 12. Bund der hohen liegen; einzelne Töne, die dann noch nicht zu greifen sind, um eine weitere Oktave. Klingt die Spur dadurch anders, ist das Datenverlust |
+| 5       | Tuning in falscher Oktave         | liegt das Tuning eine oder mehrere Oktaven neben der üblichen Lage (Gitarre um E2, Bass um E1; Grenze: tiefe Saite mehr als eine Quinte daneben), wird es um die Oktaven verschoben (`normalizeTuningOctave()`); die Bünde bleiben, der Klang wandert mit (Datenverlust). Das ist der Oktav-Trick aus Guitar Pro |
+| 6       | Instrument und Notenlage          | jede Spur bekommt ihr Instrument aus der festen Liste (`instrumentOf()`, `docs/Instrumente.md`) mit dessen Klang, jedes Notensystem die Notenlage für Tab (eine Oktave höher notiert als klingend, gleich welches Instrument, `notationPitch()`); weder ein anderer Klang noch eine andere Notenlage ist Datenverlust (Noten, Tabs und Akkorde bleiben) |
+| 7       | Capo ungleich (2)                 | der kleinste Capo aller Spuren mit Saiten; die anderen werden umgerechnet (`moveToCapo()`, klingt gleich, kein Bund rutscht unter 0)                                    |
+| 8       | Tuning ungleich (3)               | das tiefste Tuning, das eine Spur verwendet (kleinste Summe der Tonhöhen), unter den Spuren mit so vielen Saiten wie die Akkordspur; die anderen werden umgerechnet (`setTuning(…, true)`, klingt gleich) |
+| 9       | Akkorde außerhalb der Akkordspur (5) | in die Akkordspur (`moveContent()`, Modus "insert": fehlt dort ein Schlag, wird der klingende geteilt und angebunden, klingt gleich); zwei verschiedene Akkorde an derselben Stelle: die Akkordspur gewinnt |
+| 10      | Liedtext außerhalb der Textspur (6) | nur die Textspur behält ihren Text; der Text anderer Spuren fällt weg. Ist er derselbe (mindestens 90 % gleiche Wörter, z. B. dieselben Strophen in einem anderen Rhythmus), ohne Weiteres; weicht er ab, kommt er als Chord-Datei in den Upload-Ordner ("<Spur> – Liedtext.txt", Datenverlust) |
+| 11      | Unbekannte Akkordnamen (7)        | hat der Akkord einen Griff (mindestens drei Saiten), der Name aus dem Griff (`nameGrip()`); sonst vereinfacht (`simplifyChord()`); ist er dann noch unbekannt ("N.C."), fällt der Akkord weg |
+| 12      | Griff passt nicht zum Namen (8)   | der Name gewinnt; der Griff wird der erste Vorschlag der Griffsuche (`findGrips()`, wie im Dialog "Akkord", ohne den Katalog)                                           |
+| 13      | Griffbilder                       | `normalizeChords(…, true)`: eigene Griffe bleiben, fehlende kommen aus dem Katalog                                                                                     |
+
+Ohne eigenen Schritt und ohne Eintrag im Protokoll gleicht schon das Einlesen (`parseScore()` → `normalizeLevels()`)
+die Lautstärke an: jede Spur `volume 12` und `balance 8`, jeder Schlag forte; Lautstärke- und Panorama-Automationen
+fallen weg (README, "Lautstärke").
 
 Der Import fragt nicht nach und speichert keinen Bericht; die Änderungen stehen nur in der Konsole, solche mit
 **Datenverlust** mit "⚠" (`critical` in `conflicts.js`). Als Datenverlust gelten: zu lange Takte (letzter Schlag
-verkürzt, Schläge gelöscht), geändertes Triolen-Feeling, beim Capo eine Oktave versetzte Noten, beim Tuning Noten, die
+verkürzt, Schläge gelöscht), geändertes Triolen-Feeling, oktavierte Töne einer Spur ohne Saiten, beim Capo eine Oktave versetzte Noten, beim Tuning Noten, die
 sich nicht umrechnen ließen, weggefallene Akkorde (mit Takt, Name, Herkunftsspur und dem Akkord, der bleibt, z. B. "Takt 3: Am7 aus „Guitar (Picking)“ entfällt, Am bleibt"), nicht übernommener
-Liedtext und entfernte unbekannte Akkorde. Ein anderer Klang (Schritt 5) ist kein Datenverlust.
+Liedtext und entfernte unbekannte Akkorde. Ein anderer Klang (Schritt 6) ist kein Datenverlust.
 
 ### Andere Wege, auf denen Noten hereinkommen
 
@@ -214,11 +221,12 @@ Im Editor entstehen keine Konflikte:
 | 1   | kann man keine Wiederholungen oder Sprünge setzen                                                          |
 | 2   | übernimmt "Spur hinzufügen" Capo und Tuning des Songs, "Spur aus Guitar-Pro-Datei importieren" rechnet die Spur um  |
 | 3   | ebenso                                                                                                     |
-| 4   | kennt der Knopf in der Leiste nur Shuffle                                                                  |
-| 5   | kommen neue Akkorde immer in die Akkordspur                                                                |
-| 6   | schreibt das Panel "Liedtext" immer in die Textspur                                                        |
-| 7   | übernimmt "Chord-Datei importieren" unbekannte Namen nicht, der Dialog "Akkord" lässt sie nicht zu         |
-| 8   | übernimmt der Dialog "Akkord" nur Griffe, die zum Namen passen                                             |
+| 4       | Spur ohne Saiten                  | wird Gitarren-Tab mit Standard-Tuning (`toGuitarTab()`): Jede Spur ist Tab, ihr Tonraum ist der des Griffbretts. Der ganze Satz wandert um so viele Oktaven, dass möglichst viele Töne zwischen tiefer leerer Saite und 12. Bund der hohen liegen; einzelne Töne, die dann noch nicht zu greifen sind, um eine weitere Oktave. Klingt die Spur dadurch anders, ist das Datenverlust |
+| 5   | kennt der Knopf in der Leiste nur Shuffle                                                                  |
+| 6   | kommen neue Akkorde immer in die Akkordspur                                                                |
+| 7   | schreibt das Panel "Liedtext" immer in die Textspur                                                        |
+| 8   | übernimmt "Chord-Datei importieren" unbekannte Namen nicht, der Dialog "Akkord" lässt sie nicht zu         |
+| 9   | übernimmt der Dialog "Akkord" nur Griffe, die zum Namen passen                                             |
 
 Ein Akkord am Cursor kommt immer in die Akkordspur: Beginnt dort an der Stelle kein Schlag, wird der klingende geteilt
 und angebunden (`chordBeat(…, true)` in `editor.js`, klingt gleich). Nur ein älterer Stand aus dem Verlauf, der vor dem

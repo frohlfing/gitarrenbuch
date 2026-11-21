@@ -30,7 +30,10 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 ("Noten" und "Chords" fehlen); Tabs sind immer zu sehen.
 
 ### Bearbeitung
-- Speichern (Strg+S) – blau, solange etwas ungespeichert ist (Noten und die Angaben aus dem Dialog "Leadsheet")
+- Speichern (Strg+S) – blau, solange etwas ungespeichert ist (Noten und die Angaben aus dem Dialog "Leadsheet"). Legt
+  das Speichern einen Stand in den Verlauf, fragt erst ein Dialog nach einer Änderungsnotiz (Feld optional, Enter
+  speichert; steht im Verlauf). Dasselbe Feld hat der Dialog "Änderungen speichern?" beim Beenden. Eine angefangene
+  Notiz merkt sich der Browser je Song (auch nach Abbrechen, Verwerfen oder ✕) bis zum nächsten Speichern
 - Rückgängig (Strg+Z)
 - Wiederholen (Strg+Y)
 
@@ -144,9 +147,17 @@ Zweite Reihe:
   (Bass) behält ihr Tuning; sie steht im Tooltip des Felds
 - Verlauf (Uhr-Icon neben Rückgängig/Wiederholen) – Dialog mit den aufgehobenen Ständen (jedes Speichern hebt den vorigen
   unter `history/` auf: die Noten als `score-<Zeitstempel>.atex`, die Angaben für das Leadsheet daneben als `.json`),
-  neueste zuerst, je mit Zeitpunkt, Größe, "Laden" und Papierkorb (löscht den Stand). Geladen wird in den Editor als ein
-  Schritt für "Rückgängig" und noch nicht gespeichert; das Häkchen "Angaben für das Leadsheet mit laden" ist an (ohne
-  bleiben die jetzigen Angaben). Importierte Noten sind kein Stand: Der Verlauf beginnt mit dem ersten Überschreiben.
+  neueste zuerst, je mit Zeitpunkt, Größe, "Laden" und Papierkorb (löscht den Stand), darunter die Änderungsnotiz
+  des Speicherns, das diesen Stand ersetzt hat (im `.json` als `note`). Geladen werden immer die Noten samt allen
+  Angaben für das Leadsheet, in den Editor als ein Schritt für "Rückgängig" und noch nicht gespeichert. Importierte
+  Noten sind kein Stand: Der Verlauf beginnt mit dem ersten Überschreiben.
+- Bereinigen (Besen hinter "Transponieren") – Menü für Aufräumarbeiten am ganzen Song, je ein Schritt für
+  "Rückgängig"; gibt es nichts zu tun, sagt es ein Hinweis und nichts ändert sich:
+  - Akkorde – entfernt Akkorde, die nur den klingenden wiederholen (gleicher Name wie der davor, in allen Spuren), und
+    setzt an jeden Abschnittsanfang ohne Akkord den klingenden (in die Akkordspur); dort bleiben auch Wiederholungen
+    stehen (`chordCleanup()` in `notation.js`)
+- Gehe zu (Alt+G) – Feld rechts vor "?", leer mit Platzhalter "Takt": Zahl und Enter setzt den Cursor auf den ersten Schlag
+  dieses Takts (Spur bleibt), danach ist das Feld wieder leer und die Tasten gehören wieder den Noten
 - Transponieren (Icon ganz links in der Leiste) – Dialog mit Halbtönen (−12 bis +12), Capo und Tuning, Vorschau vorher/nachher
   und "Anwenden". Halbtöne schreiben Noten, Tabs (neu gegriffen, mit Blick auf Lage der Greifhand und Saiten), Akkordnamen samt
   Griffen und Vorzeichen um; Capo und Tuning ändern nur die Noten. Die Tonart wandert mit dem Klang, ein Vorschlag nennt das
@@ -300,23 +311,27 @@ Je Spur eine Zeile:
 - ↑/↓ – Reihenfolge der Spuren; so stehen sie im Notenblatt und im Player (der sortiert nicht um)
 - ⧉ Spur duplizieren – Kopie direkt dahinter ("picking 2"), ohne Akkorde und Text
 - ♪ Melodie ableiten – neue Spur "Melodie" (Instrument Gesang) als letzte Spur, aus dieser Spur, z. B. aus dem Fingerstyle: Wo
-  in der Textspur eine Silbe steht, bleibt der höchste Ton des Schlags mit seiner Dauer, alle anderen Schläge werden
-  Pausen; aufeinanderfolgende Pausen werden zu möglichst wenigen zusammengefasst (in Takten mit Triolen oder
+  in der Textspur eine Silbe steht, bleibt der höchste Ton des Schlags mit seiner Dauer; klingt er per Haltebogen in
+  Schläge ohne Silbe weiter, bleibt die Fortsetzung. Alle anderen Schläge werden Pausen; aufeinanderfolgende Pausen werden zu möglichst wenigen zusammengefasst (in Takten mit Triolen oder
   Vorschlägen nicht), weitere Stimmen werden Pausen. Der Text zieht in die neue Spur (`deriveMelodyTrack()` und
   `mergeRests()` in `js/notation.js`)
-- ⇅ Rhythmus ableiten – Dialog (`js/rhythmdialog.js`): alle Rhythmen, die in dieser Spur vorkommen (je Takt aus den
-  Anschlägen, ab auf geraden, auf auf ungeraden Rasterplätzen, gedämpft als x), gleiche zusammengefasst, häufigste
-  zuerst, mit Ort ("ganzer Song", "Verse, Chorus", "Takte in 2/4", "Takte mit C", "letzter Takt jedes Abschnitts
-  Chorus", sonst die Takte). Jeder Rhythmus ist änderbar (Feld oder Klick ins Raster, Raster Achtel/Sechzehntel);
-  Rhythmen sind nummeriert; "Rhythmus 1 übernehmen" bei ähnlichen (ab 75 % gleicher Rasterplätze), "Ähnliche
-  zusammenfassen" für alle (ausgegraut, wenn es nichts zusammenzufassen gibt), der Kreispfeil daneben zeigt nach
-  einer Änderung wieder die Rhythmen, wie sie in der Spur stehen. Der Ort steht als Abschnitte mit Anteil da
-  ("Verse (14 von 32 Takten), Chorus"). Anschläge neben dem Sechzehntelraster (32tel, Triolen) fallen beim Ableiten
-  ungefragt weg, der Rhythmus heißt dann "vereinfacht". Je Rhythmus wechselt ein Knopf das Raster ("in Sechzehnteln",
-  "in Achteln"); liegen Anschläge auf Sechzehnteln dazwischen, heißt er "auf Achtel vereinfachen" und lässt sie weg. Wechselt ein Akkord an einer Stelle ohne Anschlag: rote Warnung, "Übernehmen" gesperrt
-  (Akkorde werden nie verschoben). Übernehmen legt die Spur "Rhythmus" als erste Spur an (die Akkorde stehen oben) (Akustikgitarre, Capo und
-  Tuning der Spur), je Anschlag der Griff des klingenden Akkords; Ein- und Ausblenden der Spur kommen mit (an den
-  Anschlag, der dort klingt); die Akkorde ziehen in die neue Spur. Ohne Katalog
+- Rhythmus ableiten (Slash-Note) – Dialog (`js/rhythmdialog.js`): alle Rhythmen, die in dieser Spur vorkommen (je Takt
+  aus den Anschlägen; ab auf geraden, auf auf ungeraden Rasterplätzen, gedämpft als x), gleiche zusammengefasst,
+  nummeriert, häufigste zuerst, mit Ort ("ganzer Song", "Verse, Chorus", "Takte in 2/4", "Takte mit C", "letzter Takt
+  jedes Abschnitts Chorus", sonst die Abschnitte mit Anteil: "Verse (14 von 32 Takten), Chorus"). Anschläge neben dem
+  Sechzehntelraster (32tel, Triolen) fallen beim Ableiten ungefragt weg, der Rhythmus heißt dann "vereinfacht".
+  - Jeder Rhythmus ist änderbar: Feld oder Klick ins Raster; ein Knopf wechselt das Raster ("in Sechzehnteln", "in
+    Achteln"), liegen Anschläge auf Sechzehnteln dazwischen, heißt er "auf Achtel vereinfachen" und lässt sie weg.
+  - "Rhythmus 1 übernehmen" bei ähnlichen (ab 75 % gleicher Rasterplätze) und "Ähnliche zusammenfassen" für alle, beides
+    nur, wo dabei kein Anschlag eines Akkordwechsels wegfällt (ausgegraut, wenn es nichts zusammenzufassen gibt); der
+    Kreispfeil daneben zeigt nach einer Änderung wieder die Rhythmen, wie sie in der Spur stehen.
+  - Wechselt ein Akkord an einer Stelle, an der die Spur anschlägt, der Rhythmus aber nicht: rote Warnung, "Übernehmen"
+    gesperrt (Akkorde werden nie verschoben). Schlägt auch die Spur dort nicht an (Haltebogen, Pause), ist es kein
+    Fehler.
+  - Übernehmen legt die Spur "Rhythmus" als erste Spur an (die Akkorde stehen oben; Akustikgitarre, Capo und Tuning
+    der Spur), je Anschlag der Griff des klingenden Akkords; beginnt ein Takt ohne Anschlag, klingt der letzte Anschlag
+    davor übergebunden weiter (keine Pause); Ein- und Ausblenden der Spur kommen mit (an den Anschlag,
+    der dort klingt); die Akkorde ziehen in die neue Spur. Ohne Katalog
 - × löschen (mit Rückfrage; die letzte Spur bleibt)
 - Spur hinzufügen – Gitarrenspur mit Tuning und Capo des Songs, mit leeren Takten
 - Spur aus GuitarPro-Datei importieren – Datei wählen (gelesen und bereinigt wie beim Import), dann Spur, "Ab Takt der Datei" und "Auf

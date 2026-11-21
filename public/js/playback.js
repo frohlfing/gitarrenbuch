@@ -93,6 +93,28 @@ function median(values){
 }
 
 /**
+ * Fasst häufige Aufrufe auf einen je Bildschirmbild zusammen: alphaTab meldet die Abspielposition mehrere hundert Mal
+ * pro Sekunde. Die Arbeit der Anzeige (DOM, Canvas) läge sonst so oft auf dem Hauptthread, über den sich der Synth seine
+ * Audiopuffer holt; ist er zu lange belegt, stottert der Synth (die Audiospur nicht, sie läuft im eigenen Knoten).
+ * Ausgeführt wird mit den Argumenten des letzten Aufrufs.
+ * @template {any[]} A
+ * @param {function(...A): void} fn Anzeige
+ * @returns {function(...A): void} gibt sofort zurück; fn läuft im nächsten Bild
+ */
+export function perFrame(fn){
+  /** @type {?A} */
+  let args = null;
+  return (...a) => {
+    if(!args) requestAnimationFrame(() => {
+      const last = args;
+      args = null;
+      fn(...last);
+    });
+    args = a;
+  };
+}
+
+/**
  * Schlag der ersten Stimme einer Spur, der an einer Stelle klingt (beginnt oder schon klingt).
  * @param {Track} track Spur
  * @param {number} tick MIDI-Tick ab Songanfang (ohne Wiederholungen)
@@ -545,11 +567,12 @@ export function showTrackNames(alphaTab, score){
  * Teile der Noten, die alphaTab nicht zeichnen soll (Namen aus alphaTab.NotationElement): Titel, Interpret usw.
  * stehen schon in der Kopfzeile der Seite, die Griffbilder darüber für alle Ansichten gleich, das Tuning (mit dem
  * Spurnamen davor) und der Capo in der Kopfzeile. "Capo. fret 1" über dem ersten Takt verdeckte außerdem den
- * Akkordnamen.
+ * Akkordnamen. Dynamikzeichen ("f") nützen nichts: Alle Schläge haben dieselbe Dynamik (normalizeLevels() in
+ * notation.js).
  */
 const HIDDEN_SCORE_ELEMENTS = [
   'ScoreTitle', 'ScoreSubTitle', 'ScoreArtist', 'ScoreAlbum', 'ScoreWords', 'ScoreMusic', 'ScoreWordsAndMusic',
-  'ScoreCopyright', 'GuitarTuning', 'ChordDiagrams', 'EffectCapo',
+  'ScoreCopyright', 'GuitarTuning', 'ChordDiagrams', 'EffectCapo', 'EffectDynamics',
 ];
 
 /**
@@ -974,14 +997,19 @@ export class Player {
       setTimeout(() => this.applyLevels());
     });
     api.playerStateChanged.on(e => this.onStateChanged(e.state));
+    // Audiospur und Tempo folgen jeder Meldung, die Anzeige einmal je Bild (perFrame()).
+    const show = perFrame((/** @type {number} */ time, /** @type {number} */ end, /** @type {number} */ tick) => {
+      if(!this.api) return;
+      this.onPosition(time, end);
+      this.highlightText(tick);
+      this.showCurrentChord(tick);
+      this.showPatterns(tick);
+    });
     api.playerPositionChanged.on(e => {
-      this.onPosition(e.currentTime, e.endTime);
       this.mixer?.onPosition(e.currentTick, e.isSeek,
         api.playbackSpeed * recordingTempoAt(this.midiSyncPoints, e.currentTick));
       this.applySpeed(e.currentTick);
-      this.highlightText(e.currentTick);
-      this.showCurrentChord(e.currentTick);
-      this.showPatterns(e.currentTick);
+      show(e.currentTime, e.endTime, e.currentTick);
     });
     api.error.on(err => this.setStatus(escapeHtml('Fehler: ' + (err.message || err))));
 
@@ -2205,8 +2233,9 @@ export class SyncEditor {
   /**
    * @param {HTMLElement} root leeres Element für den Editor
    * @param {Player} player geladener Player mit Mixer
-   * @param {{onEdit: function(): void}} callbacks onEdit nach jeder Änderung an den Noten (die der Bearbeitungsmodus
-   *   dann übernimmt)
+   * @param {{onEdit: function(): void, onSeek: function(number): void}} callbacks onEdit nach jeder Änderung an den
+   *   Noten (die der Bearbeitungsmodus dann übernimmt), onSeek nach einem Klick in die Wellenform mit dem MIDI-Tick der
+   *   Stelle (der Bearbeitungsmodus setzt dort seinen Cursor)
    */
   constructor(root, player, callbacks){
     /** Element des Editors. */
@@ -2284,7 +2313,8 @@ export class SyncEditor {
       this.viewStart = Number(this.scroll.value);
       this.draw();
     });
-    this.unsubscribe.push(this.api.playerPositionChanged.on(e => this.onPosition(e.currentTick)));
+    const position = perFrame((/** @type {number} */ tick) => { if(this.unsubscribe.length) this.onPosition(tick); });
+    this.unsubscribe.push(this.api.playerPositionChanged.on(e => position(e.currentTick)));
     this.resizeObserver.observe(this.canvas);
 
     await this.analyzeAudio();
@@ -2828,7 +2858,9 @@ export class SyncEditor {
       const p = this.points[hit];
       this.setStatus(escapeHtml(`Takt ${this.label(p)} bei ${formatMs(p.millisecondOffset)}`));
     } else if(this.mixer.synced){
-      this.api.tickPosition = this.mixer.audioMsToTick(this.msAt(e));
+      const tick = this.mixer.audioMsToTick(this.msAt(e));
+      this.api.tickPosition = tick;
+      this.callbacks.onSeek(tick);
     }
     this.updateButtons();
     this.draw();
