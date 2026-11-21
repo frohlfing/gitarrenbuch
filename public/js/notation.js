@@ -894,7 +894,7 @@ export function applyRecordingTempo(alphaTab, midi, points){
  * nur Tabs daran ab, ganze Takte bleiben leer) und keine Anzeige-Angaben je Spur (Noten, Tabs, Schrägstriche wählt
  * der Player); als Name des Tunings nur das Tuning selbst (GP-Dateien haben dort oft Notizen wie "Key: C (orig.
  * D)"); kein Systemtrenner (die schrägen Doppelstriche zwischen den Notenzeilen); doppelte Taktstriche nur vor
- * Abschnitten (applySectionBars()). Alles andere bleibt wie in der
+ * Abschnitten (applySectionBars()); nur einfache Betonungen (eine starke wird zur einfachen). Alles andere bleibt wie in der
  * Datei: Tonart und Vorzeichen, Spurnamen, Capo je Spur. Was von der Konvention abweicht (ein Capo, Akkorde und Text
  * in einer Spur …), löst danach resolveConflicts() in conflicts.js.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
@@ -913,7 +913,13 @@ function cleanImportedScore(alphaTab, score, library){
     staff.showNumbered = false;
     // Name des bekannten Tunings zu den Tonhöhen ("Guitar Standard Tuning"), sonst keiner.
     if(staff.stringTuning) staff.stringTuning.name = alphaTab.model.Tuning.findTuning(staff.tuning)?.name ?? '';
-    for(const bar of staff.bars) for(const voice of bar.voices) for(const beat of voice.beats) beat.slashed = false;
+    for(const bar of staff.bars) for(const voice of bar.voices) for(const beat of voice.beats){
+      beat.slashed = false;
+      // Nur eine Art Betonung: eine starke wird zur einfachen.
+      for(const note of beat.notes){
+        if(note.accentuated === alphaTab.model.AccentuationType.Heavy) note.accentuated = alphaTab.model.AccentuationType.Normal;
+      }
+    }
   }
 }
 
