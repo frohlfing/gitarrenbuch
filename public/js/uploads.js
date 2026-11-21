@@ -83,7 +83,8 @@ function uploadHtml(slug, u, pick){
 /**
  * Öffnet den Dialog "Uploads" eines Lieds.
  * @param {string} slug Slug des Lieds
- * @param {?UploadPick} [pick] zur Auswahl einer Datei (siehe oben); ohne zeigt der Dialog alle Uploads
+ * @param {?UploadPick} [pick] zur Auswahl einer Datei (siehe oben); ohne zeigt der Dialog alle Uploads. Die Felder
+ *   zum Hochladen stehen erst nach "Datei hinzufügen" da (Knopf unter der Liste).
  * @returns {void}
  */
 export function openUploads(slug, pick = null){
@@ -91,6 +92,8 @@ export function openUploads(slug, pick = null){
     <h2>${escapeHtml(pick?.title ?? 'Uploads')}</h2>
     <div id="uplError"></div>
     <ul class="upl-list" id="uplList"><li class="upl-none">Lädt …</li></ul>
+    <div class="btn-row" id="uplShowRow"><button class="btn btn-34" id="uplShowAdd" type="button">Datei hinzufügen</button></div>
+    <div id="uplAddArea" hidden>
     <div class="upl-tabs" role="tablist">
       <button type="button" role="tab" id="uplTabFile" data-upl-tab="file" aria-selected="true">Datei hochladen</button>
       <button type="button" role="tab" id="uplTabUrl" data-upl-tab="url" aria-selected="false">Direktlink</button>
@@ -121,7 +124,7 @@ export function openUploads(slug, pick = null){
       </div>
       <div class="btn-row"><button class="btn btn-primary" id="uplFetch" type="button">Laden</button></div>
     </div>
-    <div class="btn-row"><button class="btn" id="uplClose" type="button">Schließen</button></div>
+    </div>
   `);
 
   const byId = id => document.getElementById(id);
@@ -159,7 +162,11 @@ export function openUploads(slug, pick = null){
   };
   void reload();
 
-  byId('uplClose').addEventListener('click', closeOverlay);
+  // Die Felder zum Hochladen stehen erst nach "Datei hinzufügen" da.
+  byId('uplShowAdd').addEventListener('click', () => {
+    byId('uplAddArea').hidden = false;
+    byId('uplShowRow').hidden = true;
+  });
 
   // Reiter: Datei hochladen oder Direktlink (je eine Karte sichtbar, damit der Dialog nicht scrollen muss).
   for(const tab of document.querySelectorAll('[data-upl-tab]')){

@@ -879,6 +879,17 @@ const PATHS = {
     + '<path d="M7.8 8.8h9" stroke-width="3"/>',
   // Transponieren: Pfeil nach oben und nach unten.
   transpose: '<path d="M7 20V5M3 9l4-4 4 4M17 4v15M13 15l4 4 4-4"/>',
+  // Achtelnote (Melodie): Hals mit Fähnchen und gefüllter Notenkopf
+  melodyNote: '<path d="M15 3v14M15 3q1 4 5 6"/><ellipse fill="currentColor" stroke="none" cx="11" cy="17.5" rx="4.2" ry="3"'
+    + ' transform="rotate(-20 11 17.5)"/>',
+  // Betonung (Akzent): kurzes, kräftiges ">"
+  accent: '<path stroke-width="2.6" d="M7 7.5l10 4.5-10 4.5"/>',
+  // Ausblenden: Decrescendo-Gabel mit leicht geschwungenen Linien wie in alphaTab, schließt sich nach rechts
+  fadeOut: '<path d="M3 5Q11 10 21 12M3 19Q11 14 21 12"/>',
+  // Slash-Note (Rhythmus ohne Tonhöhe): Hals und schräger Notenkopf
+  slashNote: '<path d="M16 3v14"/><path fill="currentColor" stroke="none" d="M7 21h3.5l6-5.5H13z"/>',
+  // Neu laden: Kreispfeil
+  reload: '<path d="M20 12a8 8 0 1 1-2.4-5.7M20 4v5h-5"/>',
   // Uploads: Büroklammer.
   upload: '<path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9.7 17.2a1.7 1.7 0 0 1-2.4-2.4L15 7"/>',
   // Ändern: Stift.

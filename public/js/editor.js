@@ -22,6 +22,7 @@ import {
   captureTabs, LeadsheetTab, normalizeSheet, parseTimeSignature, remapTabs, SECTION_NAMES,
   sectionName, TIME_SIGNATURES,
 } from './sheet.js';
+import {RhythmDialog} from './rhythmdialog.js';
 import {applyRetune, TransposeDialog} from './transposedialog.js';
 import {buildTextModel, lyricsLines, lyricsSectionStarts, renderTextView} from './textview.js';
 import {CHORD_EXTENSIONS, GP_EXTENSIONS, openUploads} from './uploads.js';
@@ -409,6 +410,8 @@ const EFFECTS = [
     [svgIcon('brushUp'), 'Anschlag aufwärts (Strg+U)', 'brushUp'],
     [svgIcon('arpeggioDown'), 'Arpeggio abwärts (Strg+Umschalt+D)', 'arpeggioDown'],
     [svgIcon('arpeggioUp'), 'Arpeggio aufwärts (Strg+Umschalt+U)', 'arpeggioUp'],
+    [svgIcon('accent'), 'Betonung (Akzent auf allen Noten des Schlags)', 'accent'],
+    [svgIcon('fadeOut'), 'Ausblenden (Fade-out, z. B. am Schluss)', 'fadeOut'],
   ]],
 ];
 
@@ -985,7 +988,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    * @returns {void}
    */
   openTracksDialog(){
-    const box = this.openEditDialog('Spuren', 'etracks-dialog', '<div class="etrack-list"></div>');
+    const box = this.openEditDialog('Spuren', 'etracks-dialog', `<div class="etrack-list"></div>
+      <div class="struct-actions etrack-close"><button class="btn" type="button" data-close-dialog>Schließen</button></div>`);
+    box.querySelector('[data-close-dialog]').addEventListener('click', closeOverlay);
     // Nach einem Dialog darüber (z. B. Spur importieren) steht die Liste so, wie die Noten jetzt sind.
     box.addEventListener('overlayshow', () => this.renderTracks());
     this.renderTracks();
@@ -1063,12 +1068,16 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                 title="Spur nach unten"${i < last ? '' : ' disabled'}>↓</button>
               <button type="button" class="ebtn" data-cmd="trackDuplicate" data-track="${i}"
                 title="Spur duplizieren (ohne Akkorde und Text)">⧉</button>
+              <button type="button" class="ebtn" data-cmd="trackMelody" data-track="${i}"
+                title="Melodie ableiten (höchste Töne mit Text)">${svgIcon('melodyNote')}</button>
+              <button type="button" class="ebtn" data-cmd="trackRhythm" data-track="${i}"
+                title="Rhythmus ableiten (Strumming mit den Akkorden)">${svgIcon('slashNote')}</button>
               <button type="button" class="ebtn ebtn-danger" data-cmd="trackDelete" data-track="${i}"
                 title="Spur löschen"${last ? '' : ' disabled'}>×</button></span>
           </div>`;
       }).join('')}
       <div class="etrack-foot">
-        ${todoButton('+ Spur', 'Gitarrenspur hinzufügen (mit Tuning und Capo des Songs)', 'ebtn-text', 'addTrack')}
+        ${todoButton('Spur hinzufügen', 'Gitarrenspur hinzufügen (mit Tuning und Capo des Songs)', 'ebtn-text', 'addTrack')}
         ${todoButton('Spur aus GuitarPro-Datei importieren', 'Spur aus einer hochgeladenen Guitar-Pro-Datei übernehmen, '
           + 'z. B. die Melodie', 'ebtn-text', 'trackImport')}
       </div>`;
@@ -1280,6 +1289,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       brushUp: () => this.change(beat => edit.toggleBeatProp(beat, 'brushType', BrushType.BrushUp)),
       arpeggioDown: () => this.change(beat => edit.toggleBeatProp(beat, 'brushType', BrushType.ArpeggioDown)),
       arpeggioUp: () => this.change(beat => edit.toggleBeatProp(beat, 'brushType', BrushType.ArpeggioUp)),
+      fadeOut: () => this.change(beat => edit.toggleBeatProp(beat, 'fade', at.model.FadeType.FadeOut)),
+      accent: () => this.change(beat => edit.toggleAccent(at, beat)),
       chordNew: () => void this.openChordDialog(false),
       chordEdit: () => void this.openChordDialog(true),
       insertBeat: () => this.change(beat => edit.insertBeat(at, beat)),
@@ -1333,6 +1344,21 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         // Aus dem alphaTex gelesen statt aus dem Modell kopiert: So ist die Kopie vollständig und unabhängig.
         this.changeTracks(score => edit.duplicateTrack(t => parseScore(at, t), this.tex, score, index), index + 1, 0);
         this.toast(`Kopie „${trackName(this.score.tracks[index + 1])}“ angelegt, ohne Akkorde und Text.`);
+      },
+      trackRhythm: () => new RhythmDialog(this, Number(el.dataset.track)).open(),
+      trackMelody: () => {
+        const index = Number(el.dataset.track);
+        if(!lyricsTrack(this.score)){
+          this.toast('Der Song hat keinen Liedtext: Die Melodie richtet sich nach den Silben.');
+          return;
+        }
+        let result = null;
+        this.changeTracks(score => {
+          result = edit.deriveMelodyTrack(at, t => parseScore(at, t), this.tex, score, index);
+        }, this.score.tracks.length, 0);
+        if(result) this.toast(`Spur „${trackName(this.score.tracks.at(-1))}“ angelegt: ${result.notes} Töne, Pausen `
+          + 'zusammengefasst; der Text steht jetzt dort.'
+          + (result.bars ? ` In ${result.bars} Takten mit Triolen oder Vorschlägen blieben die Pausen, wie sie sind.` : ''));
       },
       chordFile: () => openUploads(this.player.slug, {
         title: 'ChordPro- oder Textdatei',
@@ -2398,6 +2424,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     pressed('brushUp', beat.brushType === BrushType.BrushUp);
     pressed('arpeggioDown', beat.brushType === BrushType.ArpeggioDown);
     pressed('arpeggioUp', beat.brushType === BrushType.ArpeggioUp);
+    pressed('fadeOut', beat.fade === this.alphaTab.model.FadeType.FadeOut);
+    pressed('accent', beat.notes.some(n => n.accentuated));
     const toolbar = this.part('edit-toolbar');
     toolbar.querySelector('[data-cmd="undo"]').disabled = !this.undoStack.length;
     toolbar.querySelector('[data-cmd="redo"]').disabled = !this.redoStack.length;
@@ -2555,8 +2583,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     openOverlay(`<h2>Änderungen speichern?</h2>
       <p>Möchtest du die Änderungen speichern?</p>
       <div class="struct-actions">
-        <button class="btn" type="button" id="finishDiscard">Nein, verwerfen</button>
         <button class="btn btn-primary" type="button" id="finishSave">Ja, speichern</button>
+        <button class="btn" type="button" id="finishDiscard">Nein, verwerfen</button>
       </div>`, true);
     document.getElementById('finishDiscard').addEventListener('click', () => {
       closeOverlay();
@@ -2949,7 +2977,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const rows = versions.map((v, i) => {
       const when = new Date(v.time.replace(' ', 'T')).toLocaleString('de-DE');
       return `<li><span>${escapeHtml(when)}</span><span class="history-size">${Math.round(v.size / 1024)} KB${i ? '' : ' (zuletzt ersetzt)'}</span>
-        <button type="button" class="btn" data-version="${escapeHtml(v.id)}">Laden</button>
+        <button type="button" class="btn btn-34" data-version="${escapeHtml(v.id)}">Laden</button>
         <button type="button" class="ebtn" data-delete="${escapeHtml(v.id)}" title="Diesen Stand löschen"
           aria-label="Diesen Stand löschen">${svgIcon('trash')}</button></li>`;
     }).join('');
@@ -3158,7 +3186,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
           ? `Griff: ${strings} Angaben von der tiefen Saite aus, z. B. "x02210" (x = nicht gespielt; ab Bund 10 mit "-" trennen).`
           : overwrites ? 'Der Akkord steht schon im Song: Der neue Griff gilt für alle Stellen.' : '';
       const chord = name ? parseChord(name) : null;
-      byId('chordOk').disabled = !chord || !gripOk;
       // Die Töne des Akkords; ein Name, den die Regeln nicht kennen, geht nicht.
       const tones = byId('chordTones');
       tones.classList.toggle('hint-warn', !!name && !chord);
@@ -3167,6 +3194,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       const mismatch = byId('chordMismatch');
       const problem = gripOk && chord ? gripToneProblem(chord, parseGrip(grip), tuning) : null;
       mismatch.hidden = !problem;
+      // Übernehmen nur mit bekanntem Namen und einem Griff, der dazu passt.
+      byId('chordOk').disabled = !chord || !gripOk || !!problem;
       if(problem){
         const alike = nameGrip(parseGrip(grip), tuning, 3);
         mismatch.innerHTML = `Der Griff passt nicht zu ${escapeHtml(name)}.`

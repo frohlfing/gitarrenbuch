@@ -393,8 +393,8 @@ function showSong(song){
 }
 
 /**
- * Dialog "Darstellung" aus dem Menü: Skalierung von Noten und Chords. Gilt für alle Songs und wird mit OK
- * übernommen.
+ * Dialog "Darstellung" aus dem Menü: Skalierung von Noten und Chords. Gilt für alle Songs; "Speichern" übernimmt sie
+ * und merkt sie im Browser (localStorage, savePrefs() in playback.js), "Abbrechen" lässt alles, wie es war.
  * @param {Player} songPlayer Player der Liedansicht
  * @returns {void}
  */
@@ -409,8 +409,12 @@ function openDisplayDialog(songPlayer){
           .join('')}
       </select>
     </div>
-    <button class="btn btn-primary" id="displayOk" type="button">OK</button>
+    <div class="struct-actions">
+      <button class="btn btn-primary" id="displayOk" type="button">Speichern</button>
+      <button class="btn" id="displayCancel" type="button">Abbrechen</button>
+    </div>
   `, true);
+  document.getElementById('displayCancel').addEventListener('click', closeOverlay);
   document.getElementById('displayOk').addEventListener('click', () => {
     songPlayer.setDisplay({
       scale: Number(/** @type {HTMLSelectElement} */ (document.getElementById('displayScale')).value),

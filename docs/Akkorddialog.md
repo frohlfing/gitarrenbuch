@@ -57,7 +57,8 @@ Das ist das Regelwerk für den Akkorddialog, geprüft gegen chordgrips.js, chord
   weiteren sind anklickbar. Ein Griff muss genau so viele Angaben haben wie die Spur Saiten, Bünde 0 bis 24 oder x, 
   mindestens eine gespielte Saite.
 - Rote Warnung, wenn der Griff im Feld nicht zum Namen passt: „Der Griff passt nicht zu Am. Er klingt wie A6sus4/D.“ 
-  Bis zu drei Namen, rot als Knöpfe, ein Klick übernimmt den Namen. Die Warnung sperrt „Übernehmen“ nicht.
+  Bis zu drei Namen, rot als Knöpfe, ein Klick übernimmt den Namen. Solange die Warnung steht, ist „Übernehmen“
+  gesperrt: Ein Griff muss zu seinem Namen passen.
 - Hat der Name im Song schon einen anderen Griff, steht rot „Der neue Griff gilt für alle Stellen“.
 - Überschrift: „Akkord hinzufügen“ bzw. „Akkord bearbeiten“.
 

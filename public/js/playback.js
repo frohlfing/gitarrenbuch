@@ -7,9 +7,9 @@ import {
   loadScoreText, markPlayed, useCreditLogos,
 } from './base.js';
 import {
-  applyRecordingTempo, applySongMeta, loadAlphaTab, lyricsTrack, mergeChords, parseScore,
+  applyRecordingTempo, applySongMeta, joinSyllables, loadAlphaTab, lyricsTrack, mergeChords, parseScore,
   playbackSyncPoints, QUARTER_TICKS, readScoreInfo, recordingTempoAt, recordingTempoRegion, sortSyncPoints,
-  stringedStaves, syncSegmentAt, trackName,
+  stringedStaves, syncSegmentAt, timeline, trackName,
 } from './notation.js';
 import {deriveBar, patternGridHtml, similarity, slotCount, TECHNIQUES} from './sheet.js';
 import {buildTextModel, playTimeline, renderTextView} from './textview.js';
@@ -90,6 +90,20 @@ const AUDIO_SAMPLE_RATE = 16000;
 function median(values){
   const v = values.slice().sort((a, b) => a - b);
   return v[Math.floor(v.length / 2)];
+}
+
+/**
+ * Schlag der ersten Stimme einer Spur, der an einer Stelle klingt (beginnt oder schon klingt).
+ * @param {Track} track Spur
+ * @param {number} tick MIDI-Tick ab Songanfang (ohne Wiederholungen)
+ * @returns {?import('../../types/alphatab').model.Beat}
+ */
+function soundingBeat(track, tick){
+  const bar = track.staves[0]?.bars.find(b => b.masterBar.start <= tick
+    && tick < b.masterBar.start + b.masterBar.calculateDuration());
+  if(!bar?.voices[0]) return null;
+  const at = tick - bar.masterBar.start;
+  return timeline(bar.voices[0]).find(e => e.start <= at && at < e.end)?.beat ?? null;
 }
 
 /**
@@ -742,6 +756,11 @@ export class Player {
    * @type {?Track}
    */
   lyricsOwner = null;
+  /**
+   * Schläge einer anderen Spur, auf die applyLyrics() den Text gelegt hat, weil die Spur mit dem Text ausgeblendet ist.
+   * @type {import('../../types/alphatab').model.Beat[]}
+   */
+  projectedLyrics = [];
   /** Akkord, den der Streifen gerade zeigt (siehe showCurrentChord()); null für keinen. */
   currentChord = null;
   /**
@@ -1215,9 +1234,9 @@ export class Player {
 
   /**
    * Stellt Noten und Tabs aller Spuren nach prefs.staves ein ("both" = Noten und Tabs, "tab" = nur Tabs, "score" =
-   * nur Noten), je Notensystem (nicht über settings.display.staveProfile). Was die Datei je Spur vorgibt, zählt nicht (aus GP kamen viele Spuren mit nur Tabs, zwei nur mit
-   * Rhythmus-Schrägstrichen). Notensysteme ohne Saiten (z. B. Schlagzeug) haben nur Noten. Neu gezeichnet wird vom
-   * Aufrufer.
+   * nur Noten), je Notensystem (nicht über settings.display.staveProfile). Was die Datei je Spur vorgibt, zählt nicht
+   * (aus GP kamen viele Spuren mit nur Tabs, zwei nur mit Rhythmus-Schrägstrichen). Notensysteme ohne Saiten (z. B.
+   * Schlagzeug) haben nur Noten. Neu gezeichnet wird vom Aufrufer.
    * @param {Score} score geladene Noten
    * @returns {void}
    */
@@ -1721,10 +1740,11 @@ export class Player {
   /**
    * Zeigt die Akkorde über den Noten einmal, an der obersten angezeigten Spur: alle Akkorde des Songs nach der Regel
    * der Konvention zusammengetragen (mergeChords(): bei verschiedenen Akkorden an einer Stelle gewinnt die
-   * Akkordspur), so wie sie der Editor in die Akkordspur schreibt (moveContent() in notation.js). alphaTab hängt einen Akkordnamen an
-   * einen Schlag; hat die oberste Spur an der Stelle keinen (z. B. weil eine lange Note klingt), kommt er an die
-   * nächste angezeigte Spur, die dort einen hat. Dafür werden die Akkorde im geladenen Modell umgehängt (beat.chordId,
-   * staff.chords); gespeichert wird dieses Modell nie.
+   * Akkordspur), so wie sie der Editor in die Akkordspur schreibt (moveContent() in notation.js), auch wenn die
+   * Akkordspur ausgeblendet ist. alphaTab hängt einen Akkordnamen an einen Schlag; hat die oberste Spur an der Stelle
+   * keinen (z. B. weil eine lange Note klingt), kommt er an die nächste angezeigte Spur, die dort einen hat, und hat
+   * keine einen, an den Schlag der obersten Spur, der dann klingt. Dafür werden die Akkorde im geladenen Modell
+   * umgehängt (beat.chordId, staff.chords); gespeichert wird dieses Modell nie.
    * @param {Track[]} tracks angezeigte Spuren in der angezeigten Reihenfolge (orderTracks())
    * @returns {void}
    */
@@ -1746,7 +1766,7 @@ export class Player {
       return map;
     });
     for(const {tick, chord} of this.mergedChords){
-      const beat = beatsAt.map(map => map.get(tick)).find(Boolean);
+      const beat = beatsAt.map(map => map.get(tick)).find(Boolean) ?? (tracks[0] ? soundingBeat(tracks[0], tick) : null);
       if(!beat) continue;
       const staff = beat.voice.bar.staff;
       // Eigener Schlüssel: Unter dem Namen kann die Spur einen anderen Griff haben.
@@ -1769,20 +1789,45 @@ export class Player {
   }
 
   /**
-   * Zeigt den Liedtext nur an einer der angezeigten Spuren: an der Spur mit dem Text (lyricsTrack()), wenn sie
-   * angezeigt wird, sonst an der angezeigten Spur mit dem meisten Text. In vielen Songs steht derselbe Text in mehreren
-   * Spuren; mehrfach würde er die Noten nur auseinanderdrücken. Geändert wird nur das geladene Modell (beat.lyrics),
-   * die Originale stehen in trackLyrics.
+   * Zeigt den Liedtext an genau einer der angezeigten Spuren: an der Spur mit dem Text (lyricsTrack()), wenn sie
+   * angezeigt wird, sonst unter der untersten angezeigten Spur (projectLyrics()). Geändert wird nur das geladene
+   * Modell (beat.lyrics), die Originale stehen in trackLyrics.
    * @param {Track[]} tracks angezeigte Spuren
    * @returns {void}
    */
   applyLyrics(tracks){
-    const count = t => this.trackLyrics.get(t)?.length ?? 0;
-    const owner = tracks.includes(this.lyricsOwner) && count(this.lyricsOwner)
-      ? this.lyricsOwner
-      : [...tracks].sort((a, b) => count(b) - count(a))[0];
+    const shown = tracks.includes(this.lyricsOwner);
+    for(const beat of this.projectedLyrics) beat.lyrics = null;
+    this.projectedLyrics = [];
     for(const [track, beats] of this.trackLyrics){
-      for(const [beat, lyrics] of beats) beat.lyrics = track === owner ? lyrics : null;
+      for(const [beat, lyrics] of beats) beat.lyrics = shown && track === this.lyricsOwner ? lyrics : null;
+    }
+    const bottom = this.orderTracks(tracks).at(-1);
+    if(!shown && this.lyricsOwner && bottom) this.projectLyrics(bottom);
+  }
+
+  /**
+   * Legt den Text der Textspur zur Anzeige auf eine andere Spur: je Silbe auf den Schlag, der dort an derselben Stelle
+   * beginnt, sonst auf den, der dann klingt (mehrere Silben auf einem Schlag hängt joinSyllables() aneinander).
+   * Gemerkt in projectedLyrics, damit applyLyrics() es wieder wegnehmen kann.
+   * @param {Track} track angezeigte Spur ohne Text
+   * @returns {void}
+   */
+  projectLyrics(track){
+    const staff = track.staves[0];
+    for(const [beat, lyrics] of this.trackLyrics.get(this.lyricsOwner) ?? []){
+      const voice = staff.bars[beat.voice.bar.index]?.voices[0];
+      if(!voice) continue;
+      const at = beat.playbackStart;
+      const line = timeline(voice);
+      const target = (line.find(e => e.start === at) ?? line.find(e => e.start < at && at < e.end))?.beat;
+      if(!target) continue;
+      if(!this.projectedLyrics.includes(target)){
+        target.lyrics = [...lyrics];
+        this.projectedLyrics.push(target);
+      } else {
+        target.lyrics = lyrics.map((l, k) => joinSyllables(target.lyrics[k] ?? '', l));
+      }
     }
   }
 

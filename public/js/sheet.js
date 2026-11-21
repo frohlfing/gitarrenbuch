@@ -2226,7 +2226,7 @@ function stringedTracks(score, six = false){
  * @param {number} slot Rasterplatz
  * @returns {string} neuer Text für das Feld "Patterns"
  */
-function editPattern(pattern, kind, slot){
+export function editPattern(pattern, kind, slot){
   const slots = slotCount(pattern.timeSignature, pattern.grid) ?? 0;
   const strum = pattern.technique === 'strumming';
   const tokens = patternTokens(pattern);

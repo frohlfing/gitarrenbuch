@@ -212,7 +212,7 @@ Im Editor entstehen keine Konflikte:
 | Nr. | Im Editor …                                                                                                |
 |-----|------------------------------------------------------------------------------------------------------------|
 | 1   | kann man keine Wiederholungen oder Sprünge setzen                                                          |
-| 2   | übernimmt "+ Spur" Capo und Tuning des Songs, "Spur aus Guitar-Pro-Datei importieren" rechnet die Spur um  |
+| 2   | übernimmt "Spur hinzufügen" Capo und Tuning des Songs, "Spur aus Guitar-Pro-Datei importieren" rechnet die Spur um  |
 | 3   | ebenso                                                                                                     |
 | 4   | kennt der Knopf in der Leiste nur Shuffle                                                                  |
 | 5   | kommen neue Akkorde immer in die Akkordspur                                                                |

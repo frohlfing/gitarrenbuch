@@ -259,6 +259,8 @@ header p.sub{
 @media (max-width:520px){ .move-option{grid-template-columns:1fr;} }
 .struct-form .hint{font-size:.75rem; color:var(--ink-soft);}
 .struct-actions{display:flex; gap:.6rem; margin-top:.4rem;}
+/* Knöpfe in Dialogen, die keine Aktionsknöpfe unten sind: so hoch wie die Felder (34 px) */
+.btn.btn-34{height:34px; min-height:34px; padding-top:0; padding-bottom:0;}
 .struct-form.busy{opacity:.6; pointer-events:none;}
 .check-field{display:flex; align-items:center; gap:.5rem; margin-bottom:1rem; cursor:pointer;}
 .sheet .close{
@@ -729,6 +731,24 @@ header p.sub{
 .tp-keyrow{display:flex; flex-wrap:wrap; align-items:center; gap:.4rem 1.4rem; margin-bottom:.8rem;}
 .tp-keyrow .btn{margin-left:.4rem;}
 .tp-newkey{margin:1rem 0 0;}
+/* Dialog "Rhythmus ableiten" (rhythmdialog.js): je Rhythmus Ort, Raster mit Feld, Knöpfe zum Übernehmen, Warnung */
+.sheet:has(.rh){max-width:min(900px, 100%);}
+/* Rechts bündig mit dem Text der Rhythmen darunter (Abstand setzt rhythmdialog.js, alignTools()) */
+.rh-tools{display:flex; flex-wrap:wrap; gap:.4rem .8rem; align-items:center; margin-bottom:.6rem;}
+.rh-tools .rh-count{margin-left:auto;}
+.rh{display:flex; flex-direction:column; gap:.6rem; max-height:min(70vh, 720px); overflow:auto; padding-right:.3rem;}
+.rh-row{border:1px solid var(--rule); border-radius:8px; padding:.5rem .7rem;}
+.rh-row.rh-bad{border-color:var(--danger);}
+.rh-head{display:flex; flex-wrap:wrap; gap:.2rem .6rem; align-items:baseline; margin-bottom:.3rem;}
+.rh-head .rh-bars{margin-left:auto;}
+.rh-edit{display:flex; flex-wrap:wrap; gap:.4rem .8rem; align-items:center;}
+.rh-edit .pgrid td[data-cell]{cursor:pointer;}
+.sheet .rh-edit input[type=text]{width:10rem; padding:0 .5rem; font:inherit; font-family:ui-monospace, monospace;
+  border:1px solid var(--rule); border-radius:6px; background:var(--card); color:var(--ink);}
+.rh-hint{flex-basis:100%; margin:0; font-size:.8rem; color:var(--ink-soft);}
+.rh-title{font-weight:400;}
+.rh-take{display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.4rem;}
+.rh-warn{margin:.4rem 0 0; color:var(--danger); font-weight:600;}
 .tp{display:grid; grid-template-columns:max-content minmax(0, max-content); gap:0 1.6rem; align-items:start;}
 .tp-row .hint{white-space:nowrap;}
 .tp-row .form-field input{width:130px; max-width:100%;}
@@ -955,9 +975,9 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 .sheet:has(.edit-dialog){max-width:1100px;}
 .sheet:has(.etab-leadsheet){max-width:1300px;}
 .sheet:has(.etracks-dialog){width:fit-content; max-width:min(1100px, 100%);}
-/* Einheitliche Höhe der Eingabefelder und Auswahllisten in allen Dialogen */
+/* Einheitliche Höhe der Eingabefelder und Auswahllisten in allen Dialogen, wie die Knöpfe (.ebtn) und die Panels */
 .sheet input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]), .sheet select{
-  height:40px; box-sizing:border-box; padding-top:0; padding-bottom:0;}
+  height:34px; box-sizing:border-box; padding-top:0; padding-bottom:0;}
 /* Dialog "Leadsheet" (sheet.js): links Patterns und Tab-Stellen, rechts die Vorschau der Seite */
 .etab-leadsheet{display:flex; gap:.6rem; height:min(72vh, 760px);}
 .els-list{flex:1; min-width:0; overflow:auto; padding-right:.3rem;}
@@ -1172,15 +1192,19 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
   align-items:center;}
 .etrack input[type=radio]{justify-self:center; margin:0;}
 .etrack-vis{display:flex; gap:.25rem;}
-.etrack .mix-icon{width:30px; height:30px;}
+.etrack .mix-icon{width:34px; height:34px;}
 .etrack-head span:nth-child(3), .etrack-head span:nth-child(4){text-align:center;}
 .etrack input[type=text], .etrack select{font:inherit; font-size:.85rem; padding:.25rem .4rem; border:1px solid var(--rule);
   border-radius:6px; background:var(--card); color:var(--ink); min-width:0;}
 .etrack input:disabled{background:var(--paper); color:var(--ink-soft);}
 .etrack-head{font-size:.75rem; color:var(--ink-soft);}
 .etrack-buttons{display:flex; gap:.2rem;}
-.etrack-buttons .ebtn{min-width:28px; height:28px;}
+.etrack-buttons .ebtn{min-width:34px; height:34px; font-size:1.05rem;}
+/* Pfeile und × sitzen in der Schrift etwas tief: angehoben, damit sie mittig stehen (die Icons sind es schon) */
+.etrack-buttons .ebtn:not(:has(svg)){padding-bottom:3px;}
+.etrack-buttons .ebtn-danger:not(:has(svg)){padding-bottom:5px;}
 .etrack-foot{display:flex; align-items:center; gap:1.2rem; margin-top:.4rem; flex-wrap:wrap;}
+.etrack-close{margin-top:1.4rem;}
 .edit-panel-body{overflow-x:hidden;}
 /* Einheitliche Höhe von Feldern, Auswahllisten und Knöpfen in den Panels (links, rechts) */
 .edit-panel input:not([type=checkbox]):not([type=radio]), .edit-panel select, .edit-panel .ebtn:not(.ebtn-collapse){
@@ -1252,6 +1276,8 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 .pgrid-preview{min-height:3.2rem; padding:.3rem .4rem; border:1px dashed var(--rule); border-radius:6px; overflow-x:auto;}
 .ebar-suggest .pgrid{margin-bottom:.2rem;}
 .pgrid-mute{font-size:1.25rem; font-weight:600; line-height:1;}
+/* Gedämpft (×) oben bündig mit den Plektrumzeichen daneben */
+.pgrid-token .pgrid-mute{position:relative; top:-.35em;}
 
 
 /* Favorit und Einstufung (js/marks-ui.js). Einstufung in Ampelfarben: kann ich grün, übe ich gelb, kann ich nicht
@@ -1289,7 +1315,7 @@ kbd{display:inline-block; min-width:1.4em; padding:.05rem .35rem; font:inherit; 
 
 /* Einstufung und Favorit im Dialog "Stammdaten": Symbolknöpfe, die gewählten farbig (wie die Kachel in der Übersicht) */
 .rating-line{display:flex; gap:.4rem;}
-.rate-btn{display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border-radius:50%;
+.rate-btn{display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:50%;
   border:1px solid var(--rule); background:var(--card); color:var(--ink-soft); cursor:pointer; padding:0;}
 .rate-btn:hover{border-color:var(--ink-soft);}
 .rate-icon{width:24px; height:24px; fill:currentColor;}

@@ -1331,9 +1331,23 @@ export function toggleNoteProp(note, prop, on, off){
 }
 
 /**
+ * Schaltet die Betonung (Akzent) eines Schlags um: an allen seinen Noten an, wenn noch keine betont ist, sonst an
+ * allen aus.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Beat} beat Schlag
+ * @returns {void}
+ */
+export function toggleAccent(alphaTab, beat){
+  const on = !beat.notes.some(n => n.accentuated);
+  for(const note of beat.notes){
+    note.accentuated = on ? alphaTab.model.AccentuationType.Normal : alphaTab.model.AccentuationType.None;
+  }
+}
+
+/**
  * Schaltet eine Eigenschaft eines Schlags um, z. B. Anschlag oder Anschlagpfeil.
  * @param {Beat} beat Schlag
- * @param {string} prop Eigenschaft von Beat (pickStroke, brushType)
+ * @param {string} prop Eigenschaft von Beat (pickStroke, brushType, fade)
  * @param {number} on Wert für "an"
  * @returns {void}
  */
@@ -2325,7 +2339,7 @@ export function splitBeat(alphaTab, beat, at){
  * @param {string} b zweite Silbe
  * @returns {string}
  */
-function joinSyllables(a, b){
+export function joinSyllables(a, b){
   const left = (a ?? '').trim();
   const right = (b ?? '').trim();
   if(!left || !right) return left || right;
@@ -2516,20 +2530,114 @@ function insertTrack(score, track, at){
 }
 
 /**
- * Verdoppelt eine Spur: Die Kopie kommt direkt dahinter, heißt wie das Original mit Nummer und hat weder Akkorde
- * noch Text (beides steht an genau einer Stelle im Song, siehe notation.js).
+ * Verdoppelt eine Spur: Die Kopie kommt direkt dahinter (oder an die Stelle at), heißt wie das Original mit Nummer
+ * und hat weder Akkorde noch Text (beides steht an genau einer Stelle im Song, siehe notation.js).
  * @param {function(string): Score} parse liest alphaTex ein
  * @param {string} tex alphaTex der Noten (Stand vor der Änderung)
  * @param {Score} score dieselben Noten als Modell, werden geändert
  * @param {number} index zu kopierende Spur
+ * @param {number} [at] Index, den die Kopie bekommt
  * @returns {Track} die Kopie
  */
-export function duplicateTrack(parse, tex, score, index){
+export function duplicateTrack(parse, tex, score, index, at = index + 1){
   const copy = parse(tex).tracks[index];
   stripContent(copy);
   copy.name = copy.shortName = freeTrackName(score, score.tracks[index].name);
-  insertTrack(score, copy, index + 1);
+  insertTrack(score, copy, at);
   return copy;
+}
+
+/**
+ * Leitet aus einer Spur (z. B. Fingerstyle) eine reine Melodiespur ab und setzt sie als letzte Spur ein: Wo in der
+ * Textspur an derselben Stelle eine Silbe steht, bleibt vom Schlag nur der höchste Ton (neu angeschlagen, ohne
+ * Haltebogen davor) mit seiner Dauer, alle anderen Schläge werden Pausen, und aufeinanderfolgende Pausen werden zu
+ * möglichst wenigen zusammengefasst (mergeRests()); weitere Stimmen der Spur werden Pausen. Die neue Spur heißt
+ * "Melodie", hat das Instrument Gesang und bekommt den Text (moveContent()).
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {function(string): Score} parse liest alphaTex ein
+ * @param {string} tex alphaTex der Noten (Stand vor der Änderung)
+ * @param {Score} score dieselben Noten als Modell, werden geändert
+ * @param {number} index Spur, aus der die Melodie kommt
+ * @returns {?{notes: number, bars: number}} Melodietöne und Takte, deren Pausen nicht zusammengefasst werden konnten
+ *   (Triolen, Vorschläge: dort bleiben sie, wie sie sind); null ohne Text
+ */
+export function deriveMelodyTrack(alphaTab, parse, tex, score, index){
+  const text = lyricsTrack(score);
+  if(!text) return null;
+  /** @type {Set<string>} Stellen mit Silbe: Takt und Start des Schlags */
+  const sung = new Set();
+  for(const bar of text.staves[0].bars) for(const voice of bar.voices) for(const beat of voice.beats){
+    if(beat.lyrics?.[0]?.trim()) sung.add(`${bar.index}|${beat.playbackStart}`);
+  }
+  const copy = parse(tex).tracks[index];
+  stripContent(copy);
+  const result = {notes: 0, bars: 0};
+  for(const staff of copy.staves) for(const bar of staff.bars) for(const [v, voice] of bar.voices.entries()){
+    for(const beat of voice.beats){
+      beat.text = null;
+      beat.brushType = alphaTab.model.BrushType.None;
+      beat.pickStroke = alphaTab.model.PickStroke.None;
+      const top = v === 0 && sung.has(`${bar.index}|${beat.playbackStart}`)
+        ? beat.notes.reduce((a, n) => (!a || n.realValue > a.realValue ? n : a), null) : null;
+      for(const note of [...beat.notes]) if(note !== top) beat.removeNote(note);
+      if(top){
+        top.isTieDestination = false;
+        top.tieOrigin = null;
+        result.notes++;
+      }
+    }
+    if(v === 0 && !mergeRests(alphaTab, voice)) result.bars++;
+  }
+  copy.name = copy.shortName = freeTrackName(score, 'Melodie');
+  insertTrack(score, copy, score.tracks.length);
+  setInstrument(alphaTab, copy, instrumentByKey('voice'));
+  moveContent(alphaTab, score, 'lyrics', copy.index, 'insert');
+  return result;
+}
+
+/**
+ * Fasst in einer Stimme aufeinanderfolgende Pausen zu möglichst wenigen Notenwerten zusammen (splitTicks()). Schläge
+ * mit Tönen bleiben, wie sie sind (dieselben Objekte, gleiche Dauer und gleicher Anfang). Triolen und Vorschläge
+ * bleiben ebenfalls, wie sie sind.
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Voice} voice Stimme, wird geändert
+ * @returns {boolean} ob zusammengefasst wurde (false: Triole oder Vorschlag im Takt)
+ */
+function mergeRests(alphaTab, voice){
+  if(voice.beats.some(b => b.hasTuplet || b.graceType)) return false;
+  /** @type {Beat[]} */
+  const beats = [];
+  /** @type {Beat[]} */
+  let run = [];
+  const flush = () => {
+    if(!run.length) return;
+    const ticks = run.reduce((sum, b) => sum + beatTicks(b), 0);
+    for(const {duration, dots} of splitTicks(ticks) ?? []){
+      const rest = new alphaTab.model.Beat();
+      rest.voice = voice;
+      rest.dynamics = run[0].dynamics;
+      rest.duration = duration;
+      rest.dots = dots;
+      beats.push(rest);
+    }
+    run = [];
+  };
+  for(const beat of voice.beats){
+    if(beat.notes.length){
+      flush();
+      beats.push(beat);
+    } else {
+      run.push(beat);
+    }
+  }
+  flush();
+  voice.beats.splice(0, voice.beats.length, ...beats);
+  let start = 0;
+  for(const beat of beats){
+    beat.playbackStart = start;
+    start += beatTicks(beat);
+  }
+  return true;
 }
 
 /**

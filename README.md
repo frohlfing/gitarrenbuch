@@ -281,6 +281,7 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── notation.js            # Noten: Spuren, Spielfolge, GP/alphaTex lesen und schreiben, Bearbeiten, Transponieren
  │    │    ├── textview.js            # Ansicht "Text & Akkorde"
 │    │    ├── transposedialog.js     # Dialog Transponieren: Halbtöne, Capo, Tuning, Vorschau
+ │    │    ├── rhythmdialog.js        # Dialog Rhythmus ableiten: Begleitspur mit Strumming aus einer Spur
  │    │    ├── sheet.js               # Leadsheet: Pattern-Katalog, Generator, Tab-Stellen, Dialog im Bearbeitungsmodus
  │    │    ├── library.js             # Kachelübersicht, Formulare (Song, Import, Cover, Text), Overlay
  │    │    ├── playback.js            # Player (alphaTab), Mixer mit Audiospur, Sync-Editor
@@ -777,7 +778,10 @@ Abschnitt, Text, Akkordname).
 der Reihenfolge der Datei; sie wird im Editor festgelegt (Dialog "Spuren", ↑/↓). Früher sortierte der Player nach
 Rollen (Begleitung oben, Gesang unten); das ist mit den Rollen weggefallen, damit jede Spur dort steht, wo man sie
 hingestellt hat. Der Mixer zeigt die Spuren in derselben Reihenfolge. Den Text
-zeigt nur eine Spur: die Spur mit dem Text, wenn sie angezeigt wird, sonst die angezeigte Spur mit dem meisten Text.
+zeigt nur eine Spur: die Spur mit dem Text, wenn sie angezeigt wird, sonst die unterste angezeigte Spur, je Silbe am
+Schlag an derselben Stelle bzw. am Schlag, der dann klingt (`projectLyrics()`; nur zur Anzeige, gespeichert wird
+nichts). Die Akkorde stehen immer über der obersten angezeigten Spur, auch wenn die Akkordspur ausgeblendet ist
+(`applyChordNames()`).
 In älteren Songs steht derselbe Text oft in mehreren Spuren; der Editor räumt das beim Umstellen auf (siehe
 "Spuren, Capo, Text und Akkorde"). Unter den Tabs steht der Text dank der zweiten Änderung an alphaTab, mit Abstand
 dank der dritten (siehe "Setup", Punkt 8).
@@ -1147,7 +1151,7 @@ noch fehlt, beschreibt `docs/Editor.md`; dort steht auch, was aus Guitar Pro nic
   Einfügen/Löschen, Effekte, Akkord, Griff, Text; vom Takt Abschnitt, Taktart und Tempo), rechts "Liedtext"
   (oben das Textfeld, darunter die Vorschau "Text & Akkorde", die Linie dazwischen lässt sich ziehen), unten Audio
   (Sync-Editor, dazu das Tempo der Audiospur; Höhe ziehbar, Voreinstellung 200 px). Das rechte Panel ist in der Breite ziehbar, beim Abspielen
-  läuft die Silbe in Textfeld und Vorschau mit; Eingabefelder und Auswahllisten in Dialogen sind einheitlich 40 px hoch mit der Statuszeile. "Spuren" (samt Anzeigen/Ausblenden) und
+  läuft die Silbe in Textfeld und Vorschau mit; Eingabefelder, Auswahllisten und Knöpfe in Dialogen sind einheitlich 34 px hoch mit der Statuszeile. "Spuren" (samt Anzeigen/Ausblenden) und
   "Leadsheet" sind Dialoge, die die Knöpfe der Werkzeugleiste öffnen. Panels klappen mit F2 (links), F4 (rechts), F8
   (unten) bzw. dem Pfeil ein.
 - **Dialog "Leadsheet"** (`js/sheet.js`): links

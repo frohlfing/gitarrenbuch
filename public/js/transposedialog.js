@@ -238,8 +238,8 @@ export class TransposeDialog {
         </div>
       </div>
       <div class="struct-actions">
-        <button class="btn" type="button" id="tpCancel">Abbrechen</button>
         <button class="btn btn-primary" type="button" id="tpApply">Anwenden</button>
+        <button class="btn" type="button" id="tpCancel">Abbrechen</button>
       </div>`);
     const root = /** @type {HTMLElement} */ (document.querySelector('.sheet .tp'));
     const refresh = () => {

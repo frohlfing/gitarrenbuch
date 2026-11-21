@@ -80,6 +80,8 @@ Zweite Reihe:
 - Anschlag aufwärts (Strg+U) – Pfeil nach unten
 - Arpeggio abwärts (Strg+Umschalt+D) – Wellenlinie, Pfeil nach oben
 - Arpeggio aufwärts (Strg+Umschalt+U) – Wellenlinie, Pfeil nach unten
+- Betonung – Akzent (>) an allen Noten des Schlags, ein zweiter Klick nimmt ihn weg
+- Ausblenden (Fade-out) – Decrescendo-Gabel; der Schlag klingt leiser werdend aus, z. B. der Schlussakkord
 
 ### Takt
 - Takt – Taktart und Tempo (BPM) nebeneinander, als Werte am Takt des Cursors. Die Taktart hat eine Auswahlliste (4/4, 3/4, 2/4, 6/8,
@@ -171,7 +173,7 @@ Panel "Audio". Dateien mit ihrer Quelle (GP-, ChordPro-, Textdateien, PDFs) steh
 ## Rechtes Panel "Liedtext" (F4), unteres Panel "Audio" (F8), Dialoge
 
 Rechts steht oben das Textfeld, darunter die Vorschau "Text & Akkorde"; die Linie dazwischen lässt sich ziehen (gilt
-danach für alle Songs). Die Breite des rechten Panels lässt sich am linken Rand ziehen (gilt ebenfalls für alle Songs). Beim Abspielen wandert die Silbe im Textfeld und in der Vorschau mit. Unten steht Audio; die Höhe lässt sich am oberen Rand ziehen (Voreinstellung 200 px, gilt für alle Songs), die Wellenform passt sich an. Alle Eingabefelder und Auswahllisten in Dialogen sind 40 px hoch. "Spuren" und "Leadsheet" öffnen als Dialoge (Knöpfe in der
+danach für alle Songs). Die Breite des rechten Panels lässt sich am linken Rand ziehen (gilt ebenfalls für alle Songs). Beim Abspielen wandert die Silbe im Textfeld und in der Vorschau mit. Unten steht Audio; die Höhe lässt sich am oberen Rand ziehen (Voreinstellung 200 px, gilt für alle Songs), die Wellenform passt sich an. Alle Eingabefelder, Auswahllisten und Knöpfe in Dialogen sind 34 px hoch wie in den Panels (die Aktionsknöpfe unten ausgenommen). "Spuren" und "Leadsheet" öffnen als Dialoge (Knöpfe in der
 Werkzeugleiste); aus dem Leadsheet gelegte Dialoge (Vergleichen, Pattern-Katalog …) liegen darüber, Schließen zeigt das
 Leadsheet wieder.
 
@@ -278,7 +280,9 @@ in 6/8 je drei Achtel). Im Formular zeigt eine Vorschau das Raster beim Tippen.
 
 ### Spuren
 Je Spur eine Zeile:
-- Zeigen (Checkbox) – welche Spuren im Notenblatt stehen
+- Zeigen (Checkbox) – welche Spuren im Notenblatt stehen. Im Bearbeitungsmodus stehen Text und Akkorde nur an ihrer
+  eigenen Spur: Ist die Text- bzw. Akkordspur ausgeblendet, sind sie nicht zu sehen. Erst der Player hängt sie zur
+  Anzeige an die unterste bzw. oberste sichtbare Spur (applyLyrics(), applyChordNames() in playback.js)
 - Name – frei, unübersetzt; Auswahlliste mit strumming, picking, percussion, fingerstyle, vocal und allen Namen aus
   der Bibliothek, erweiterbar durch Eintippen. Nur leer geht nicht. 
 - Akkorde, Text (je ein Radiobutton über alle Spuren) – in welcher Spur die Akkorde bzw. der Liedtext stehen. Es ist
@@ -295,6 +299,24 @@ Je Spur eine Zeile:
   die Instrumente der Gruppe (z. B. Flöte: Querflöte, Blockflöte, Panflöte …). Liste: `docs/Instrumente.md`
 - ↑/↓ – Reihenfolge der Spuren; so stehen sie im Notenblatt und im Player (der sortiert nicht um)
 - ⧉ Spur duplizieren – Kopie direkt dahinter ("picking 2"), ohne Akkorde und Text
+- ♪ Melodie ableiten – neue Spur "Melodie" (Instrument Gesang) als letzte Spur, aus dieser Spur, z. B. aus dem Fingerstyle: Wo
+  in der Textspur eine Silbe steht, bleibt der höchste Ton des Schlags mit seiner Dauer, alle anderen Schläge werden
+  Pausen; aufeinanderfolgende Pausen werden zu möglichst wenigen zusammengefasst (in Takten mit Triolen oder
+  Vorschlägen nicht), weitere Stimmen werden Pausen. Der Text zieht in die neue Spur (`deriveMelodyTrack()` und
+  `mergeRests()` in `js/notation.js`)
+- ⇅ Rhythmus ableiten – Dialog (`js/rhythmdialog.js`): alle Rhythmen, die in dieser Spur vorkommen (je Takt aus den
+  Anschlägen, ab auf geraden, auf auf ungeraden Rasterplätzen, gedämpft als x), gleiche zusammengefasst, häufigste
+  zuerst, mit Ort ("ganzer Song", "Verse, Chorus", "Takte in 2/4", "Takte mit C", "letzter Takt jedes Abschnitts
+  Chorus", sonst die Takte). Jeder Rhythmus ist änderbar (Feld oder Klick ins Raster, Raster Achtel/Sechzehntel);
+  Rhythmen sind nummeriert; "Rhythmus 1 übernehmen" bei ähnlichen (ab 75 % gleicher Rasterplätze), "Ähnliche
+  zusammenfassen" für alle (ausgegraut, wenn es nichts zusammenzufassen gibt), der Kreispfeil daneben zeigt nach
+  einer Änderung wieder die Rhythmen, wie sie in der Spur stehen. Der Ort steht als Abschnitte mit Anteil da
+  ("Verse (14 von 32 Takten), Chorus"). Anschläge neben dem Sechzehntelraster (32tel, Triolen) fallen beim Ableiten
+  ungefragt weg, der Rhythmus heißt dann "vereinfacht". Je Rhythmus wechselt ein Knopf das Raster ("in Sechzehnteln",
+  "in Achteln"); liegen Anschläge auf Sechzehnteln dazwischen, heißt er "auf Achtel vereinfachen" und lässt sie weg. Wechselt ein Akkord an einer Stelle ohne Anschlag: rote Warnung, "Übernehmen" gesperrt
+  (Akkorde werden nie verschoben). Übernehmen legt die Spur "Rhythmus" als erste Spur an (die Akkorde stehen oben) (Akustikgitarre, Capo und
+  Tuning der Spur), je Anschlag der Griff des klingenden Akkords; Ein- und Ausblenden der Spur kommen mit (an den
+  Anschlag, der dort klingt); die Akkorde ziehen in die neue Spur. Ohne Katalog
 - × löschen (mit Rückfrage; die letzte Spur bleibt)
 - Spur hinzufügen – Gitarrenspur mit Tuning und Capo des Songs, mit leeren Takten
 - Spur aus GuitarPro-Datei importieren – Datei wählen (gelesen und bereinigt wie beim Import), dann Spur, "Ab Takt der Datei" und "Auf
