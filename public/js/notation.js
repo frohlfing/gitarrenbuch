@@ -178,6 +178,55 @@ export function trackName(track){
 }
 
 /**
+ * Vorgaben des Songs je Spur (Feld trackDefaults in song.json, gesetzt im Dialog "Spuren" des Editors), in der
+ * Reihenfolge der Spuren.
+ * @typedef {Object} TrackDefault
+ * @property {boolean} show in den Noten angezeigt (Auge)
+ * @property {boolean} mute stumm (Lautsprecher)
+ * @property {boolean} [wip] Baustelle: an der Spur wird noch gearbeitet. Sie trägt im Editor und im Player ein Zeichen
+ *   (WIP_MARK), liefert keine Patterns und Tab-Stellen fürs Leadsheet, und die Bibliothek kann nach Songs mit Baustelle
+ *   filtern.
+ */
+
+/** Zeichen einer Baustelle hinter dem Spurnamen. */
+export const WIP_MARK = '🚧';
+
+/** Spuren, die Baustelle sind (markWip()); hängt an den Spuren eines eingelesenen Modells. */
+const WIP_TRACKS = new WeakSet();
+
+/**
+ * Merkt sich an den Spuren eines eingelesenen Modells, welche Baustelle sind (Vorgaben des Songs je Spur). Nach jedem
+ * Einlesen nötig, das Modell kennt die Angabe nicht (sie steht in song.json, nicht in den Noten).
+ * @param {Score} score Noten
+ * @param {?TrackDefault[]} [defaults] Vorgaben je Spur
+ * @returns {void}
+ */
+export function markWip(score, defaults){
+  for(const track of score.tracks){
+    if(defaults?.[track.index]?.wip) WIP_TRACKS.add(track);
+    else WIP_TRACKS.delete(track);
+  }
+}
+
+/**
+ * Ob eine Spur Baustelle ist (markWip()).
+ * @param {?Track} [track] Spur
+ * @returns {boolean}
+ */
+export function isWip(track){
+  return !!track && WIP_TRACKS.has(track);
+}
+
+/**
+ * Name einer Spur zum Anzeigen (trackName()), bei einer Baustelle mit WIP_MARK dahinter.
+ * @param {Track} track Spur
+ * @returns {string}
+ */
+export function markedTrackName(track){
+  return isWip(track) ? `${trackName(track)} ${WIP_MARK}` : trackName(track);
+}
+
+/**
  * Ob ein Notensystem Saiten hat (Gitarre, Bass, Ukulele …): Nur dort gibt es Capo, Tuning, Tabs und Griffe. Gesang,
  * Klavier und Schlagzeug haben keine.
  * @param {?import('../../types/alphatab').model.Staff} [staff] Notensystem

@@ -248,13 +248,13 @@ async function printLeadsheetOf(song){
   const head = {title: song.title, artist: song.artist};
   const alphaTab = await loadAlphaTab();
   if(noteEditor?.score){
-    await printSongLeadsheet(alphaTab, noteEditor.tex, noteEditor.sheet, head);
+    await printSongLeadsheet(alphaTab, noteEditor.tex, noteEditor.sheet, head, noteEditor.player.defaults);
     return;
   }
   // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
   const tex = await loadScoreText(song.slug);
   const sheet = await loadLeadsheet(song.slug);
-  await printSongLeadsheet(alphaTab, tex, sheet, head);
+  await printSongLeadsheet(alphaTab, tex, sheet, head, song.trackDefaults);
 }
 
 /**

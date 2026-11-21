@@ -354,9 +354,10 @@ export const COMMON_CHORDS = ['C', 'D', 'E', 'G', 'A', 'Am', 'Dm', 'Em', 'C7', '
  * @property {string} updated Änderungszeitpunkt (ISO 8601)
  * @property {SongFile[]} files vorhandene Dateien (berechnet die API bei jedem Lesen), z. B. ["score", "cover"]
  * @property {string[]} tracks Namen der Spuren aus der Partitur (berechnet die API bei jedem Lesen), z. B. ["Guitar"]
- * @property {{show: boolean, mute: boolean}[]} [trackDefaults] Vorgaben je Spur (in der Reihenfolge der Spuren), ob sie in
- *   den Noten angezeigt und gehört wird; gesetzt im Dialog "Spuren" des Editors. Was ein Gerät im Mixer einstellt,
- *   hat dort Vorrang. Fehlt, wenn nie gesetzt.
+ * @property {{show: boolean, mute: boolean, wip?: boolean}[]} [trackDefaults] Vorgaben je Spur (in der Reihenfolge der
+ *   Spuren), ob sie in den Noten angezeigt und gehört wird und ob sie Baustelle ist (TrackDefault in notation.js);
+ *   gesetzt im Dialog "Spuren" des Editors. Was ein Gerät im Mixer einstellt, hat beim Anzeigen und Hören Vorrang.
+ *   Fehlt, wenn nie gesetzt.
  */
 
 /** Schlüssel des API-Tokens im localStorage. */

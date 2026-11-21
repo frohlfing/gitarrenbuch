@@ -411,9 +411,11 @@ das bleibt daneben stehen).
 eingestuft wurde (siehe "Übersicht"); fehlen sie in einem Request, bleiben die gespeicherten. 
 
 `trackDefaults` ist eine Liste mit einem Eintrag je Spur (in der Reihenfolge der Spuren): `show` (in den Noten
-angezeigt) und `mute` (stumm). Gesetzt wird sie mit Auge und Lautsprecher im Dialog "Spuren" des Bearbeitungsmodus und
-mit "Speichern". Sie gilt als Vorgabe: Was ein Gerät im Mixer einstellt, wird dort gemerkt (`localStorage`) und hat
-Vorrang. Fehlt sie in einem Request, bleibt die gespeicherte; eine leere Liste löscht sie.
+angezeigt), `mute` (stumm) und `wip: true` bei einer Baustelle (an der Spur wird noch gearbeitet: 🚧 am Spurnamen, keine
+Patterns und Tab-Stellen fürs Leadsheet, Filter "Mit Baustelle" in der Bibliothek; `docs/Editor.md`, Dialog "Spuren").
+Gesetzt wird sie mit Auge, Lautsprecher und Schalter "Baustelle" im Dialog "Spuren" des Bearbeitungsmodus und mit
+"Speichern". Anzeigen und Hören gelten als Vorgabe: Was ein Gerät im Mixer einstellt, wird dort gemerkt
+(`localStorage`) und hat Vorrang. Fehlt sie in einem Request, bleibt die gespeicherte; eine leere Liste löscht sie.
 
 **Instrument einer Spur:** eines von 13 aus einer festen Liste plus Schlagzeug (`INSTRUMENTS` in `js/notation.js`;
 Liste, Regeln und Analyse der GP-Dateien in `docs/Instrumente.md`). Ein Instrument legt nur den Klang fest

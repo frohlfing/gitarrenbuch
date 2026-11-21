@@ -8,7 +8,9 @@ import {
   addUpload, API_URL, apiWrite, audioUrl, coverUrl, deleteCover, escapeHtml, formatTime, importSong, LEVELS, loadScoreText,
   loadSongs, loadYoutubeInfo, playedTimes, searchCovers, setCover, uploadCover,
 } from './base.js';
-import {createScore, describeScoreLoss, loadAlphaTab, parseScore, readGpFile, scoreDuration} from './notation.js';
+import {
+  createScore, describeScoreLoss, loadAlphaTab, parseScore, readGpFile, scoreDuration, WIP_MARK,
+} from './notation.js';
 
 /** @typedef {import('./base.js').Song} Song */
 /** @typedef {import('./notation.js').ScoreLoss} ScoreLoss */
@@ -97,6 +99,7 @@ function placeholderHue(slug){
 function cardHtml(s){
   // Noten hat jeder Song; markiert wird nur, was fehlt.
   const badges = (s.favorite ? '<span class="badge badge-fav" title="Favorit">★</span>' : '')
+    + (hasWip(s) ? `<span class="badge badge-wip" title="Spur mit Baustelle">${WIP_MARK}</span>` : '')
     + (s.files.includes('audio') ? '' : '<span class="badge missing" title="Keine Audiospur">Audio</span>');
   const level = LEVELS.find(l => l.value === s.level);
   const thumb = s.files.includes('cover')
@@ -176,15 +179,27 @@ function hasTrack(s, track){
   return s.tracks.includes(track);
 }
 
-/** Werte im Filter "Auswahl" (pickSel): Favoriten, Einstufung (dahinter der Wert bzw. NO_LEVEL). */
+/**
+ * Werte im Filter "Auswahl" (pickSel): Favoriten, Songs mit Baustelle, Einstufung (dahinter der Wert bzw. NO_LEVEL).
+ */
 const PICK_FAVORITES = ':favoriten';
+const PICK_WIP = ':baustelle';
 const PICK_LEVEL = ':stufe:';
 /** Songs ohne Einstufung. */
 const NO_LEVEL = 'ohne';
 
 /**
- * Baut den Filter "Auswahl" neu auf: Favoriten und die Einstufungen, je mit der Zahl der Songs. Behält die Auswahl
- * bei.
+ * Ob ein Song eine Spur hat, an der noch gearbeitet wird (Schalter "Baustelle" im Dialog "Spuren", trackDefaults).
+ * @param {Song} s Song
+ * @returns {boolean}
+ */
+function hasWip(s){
+  return (s.trackDefaults ?? []).some(d => d?.wip);
+}
+
+/**
+ * Baut den Filter "Auswahl" neu auf: Favoriten, Songs mit Baustelle und die Einstufungen, je mit der Zahl der Songs.
+ * Behält die Auswahl bei.
  * @returns {void}
  */
 function refreshPickFilter(){
@@ -192,6 +207,7 @@ function refreshPickFilter(){
   const count = test => SONGS.filter(test).length;
   pickSel.innerHTML = '<option value="">Alle Songs</option>'
     + `<option value="${PICK_FAVORITES}">★ Favoriten (${count(s => s.favorite)})</option>`
+    + `<option value="${PICK_WIP}">${WIP_MARK} Mit Baustelle (${count(hasWip)})</option>`
     + LEVELS.map(l => `<option value="${PICK_LEVEL}${l.value}">${l.label} (${count(s => s.level === l.value)})</option>`)
       .join('')
     + `<option value="${PICK_LEVEL}${NO_LEVEL}">Ohne Einstufung (${count(s => !s.level)})</option>`;
@@ -228,6 +244,7 @@ function renderList(){
   }
   const pick = pickSel.value;
   if(pick === PICK_FAVORITES) items = items.filter(s => s.favorite);
+  else if(pick === PICK_WIP) items = items.filter(hasWip);
   else if(pick.startsWith(PICK_LEVEL)){
     const level = pick.slice(PICK_LEVEL.length);
     items = items.filter(s => level === NO_LEVEL ? !s.level : s.level === level);

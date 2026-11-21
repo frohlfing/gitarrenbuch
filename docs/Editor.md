@@ -305,9 +305,15 @@ Je Spur eine Zeile:
   wenn etwas wegfällt: ein Akkord, wo in der Zielspur schon ein anderer steht, oder Text in einer dritten Spur (der Text
   kommt aus der Spur mit dem meisten, er steht danach nur noch in einer). Ohne Akkorde bzw. Text merkt sich der Editor
   nur die Wahl; ohne Wahl kommen Akkorde in die erste Spur, Text in "vocal", sonst in die letzte.
-- Instrument – Auswahlliste mit 13 Instrumenten (Schlagzeug nur bei einer Schlagzeugspur, nicht änderbar); es legt Klang
-  und Notenlage zusammen fest (Gitarre und Bass eine Oktave höher notiert, alle anderen wie klingend). Der Tooltip nennt
-  die Instrumente der Gruppe (z. B. Flöte: Querflöte, Blockflöte, Panflöte …). Liste: `docs/Instrumente.md`
+- Baustelle (Schalter) – an der Spur wird noch gearbeitet. Dann steht 🚧 hinter ihrem Namen (links neben den Noten im
+  Editor und im Player, im Mixer), sie liefert keine Patterns und Tab-Stellen fürs Leadsheet (Tab-Stellen auf ihr
+  fehlen auf dem Blatt, in der Spurauswahl der Tab-Stelle mit Hinweis; kein Vorschlag aus ihr; der Pattern-Streifen im
+  Player leitet aus ihr nichts ab), und die Bibliothek filtert unter "Alle Songs" → "🚧 Mit Baustelle" (Kachel mit
+  🚧). Gespeichert wird es mit "Speichern" in den Vorgaben je Spur (`trackDefaults[].wip` in song.json; `markWip()`
+  und `isWip()` in `notation.js`); beim Verschieben, Löschen oder Hinzufügen von Spuren wandert es mit.
+- Instrument – Auswahlliste mit 13 Instrumenten (Schlagzeug nur bei einer Schlagzeugspur, nicht änderbar); es legt den
+  Klang fest, die Notenlage ist für alle Spuren gleich (Tab, eine Oktave höher notiert). Der Tooltip nennt die
+  Instrumente der Gruppe (z. B. Flöte: Querflöte, Blockflöte, Panflöte …). Liste: `docs/Instrumente.md`
 - ↑/↓ – Reihenfolge der Spuren; so stehen sie im Notenblatt und im Player (der sortiert nicht um)
 - ⧉ Spur duplizieren – Kopie direkt dahinter ("picking 2"), ohne Akkorde und Text
 - ♪ Melodie ableiten – neue Spur "Melodie" (Instrument Gesang) als letzte Spur, aus dieser Spur, z. B. aus dem Fingerstyle: Wo

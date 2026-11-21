@@ -334,6 +334,10 @@ const WIDE_LAYOUT = '(min-width: 900px)';
  */
 const STAFF_FLAGS = ['showStandardNotation', 'showTablature', 'showSlash', 'showNumbered'];
 
+/** Tooltip des Schalters "Baustelle" im Dialog "Spuren" (TrackDefault in notation.js). */
+const WIP_TITLE = `An der Spur wird noch gearbeitet: Zeichen ${edit.WIP_MARK} am Spurnamen, keine Patterns und `
+  + 'Tab-Stellen fürs Leadsheet, in der Bibliothek zu filtern';
+
 /** Einstellungen des Stylesheets für die Spurnamen (showTrackNames() in playback.js). */
 const TRACK_NAME_STYLE = ['singleTrackTrackNamePolicy', 'multiTrackTrackNamePolicy', 'firstSystemTrackNameMode',
   'otherSystemsTrackNameMode', 'firstSystemTrackNameOrientation', 'otherSystemsTrackNameOrientation'];
@@ -705,12 +709,12 @@ export class NoteEditor {
   }
 
   /**
-   * Vorgaben je Spur, wie sie jetzt eingestellt sind: angezeigt (Auge) und stumm (Lautsprecher).
-   * @returns {{show: boolean, mute: boolean}[]} in der Reihenfolge der Spuren
+   * Vorgaben je Spur, wie sie jetzt eingestellt sind: angezeigt (Auge), stumm (Lautsprecher) und Baustelle.
+   * @returns {import('./notation.js').TrackDefault[]} in der Reihenfolge der Spuren
    */
   trackDefaults(){
     return this.score.tracks.map(t => ({
-      show: this.trackIndexes.includes(t.index), mute: this.player.trackMix(t.index).mute,
+      show: this.trackIndexes.includes(t.index), mute: this.player.trackMix(t.index).mute, wip: edit.isWip(t),
     }));
   }
 
@@ -1070,7 +1074,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Dialog "Spuren": je Spur Zeigen, Hören, Name, Akkorde und Text, Instrument, Notenlage und Knöpfe (renderTracks()).
+   * Dialog "Spuren": je Spur Zeigen, Hören, Name, Akkorde und Text, Baustelle, Instrument und Knöpfe (renderTracks()).
    * @returns {void}
    */
   openTracksDialog(){
@@ -1125,7 +1129,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       <div class="etrack etrack-head"><span></span><span>Name</span>
         <span title="Spur, in der die Akkorde stehen">Akkorde</span>
         <span title="Spur, in der der Liedtext steht">Text</span>
-        <span title="Klang und Notenlage der Spur">Instrument</span><span></span></div>
+        <span title="An der Spur wird noch gearbeitet">Baustelle</span>
+        <span title="Klang der Spur">Instrument</span><span></span></div>
       ${this.score.tracks.map(track => {
         const i = track.index;
         return `
@@ -1146,6 +1151,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             <input type="radio" name="etrackLyrics" data-content="lyrics" data-track="${i}"
               ${i === lyricsAt ? ' checked' : ''} aria-label="Liedtext in Spur ${i + 1}"
               title="Liedtext in dieser Spur speichern">
+            <input type="checkbox" role="switch" class="switch" data-track-wip="${i}"${edit.isWip(track) ? ' checked' : ''}
+              aria-label="Spur ${i + 1} ist Baustelle" title="${WIP_TITLE}">
             ${instrumentSelect(track)}
             <span class="etrack-buttons">
               <button type="button" class="ebtn" data-cmd="trackUp" data-track="${i}"
@@ -1661,7 +1668,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Ändert die Spuren (verschieben, löschen, hinzufügen) und hält die Auswahl der gezeigten Spuren mit.
+   * Ändert die Spuren (verschieben, löschen, hinzufügen) und hält die Auswahl der gezeigten Spuren mit, ebenso Lautstärke,
+   * Stumm und Baustelle je Spur (Player.remapTracks()); die Vorgaben je Spur gehören dann zum nächsten Speichern.
    * @param {function(Score): *} fn Änderung an den Noten
    * @param {number} index betroffene Spur (beim Hinzufügen: Index der neuen)
    * @param {number} step Verschiebung (-1, +1), 0 beim Löschen bzw. Hinzufügen
@@ -1680,6 +1688,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     else if(after < before) map = i => i === index ? null : i > index ? i - 1 : i;
     else if(after > before) map = i => i >= index ? i + 1 : i;
     this.player.remapTracks(map);
+    this.viewChanged = true;
+    edit.markWip(this.score, this.player.defaults);
+    showTrackNames(this.alphaTab, this.score);
     const indexes = [...shown].map(map).filter(i => i !== null && i < after);
     if(after > before) indexes.push(index);
     this.trackIndexes = this.player.orderTracks(indexes.map(i => this.score.tracks[i])).map(t => t.index);
@@ -2157,6 +2168,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.player.applyStave(this.score);
     this.fileShortNames = new WeakMap(this.score.tracks.map(t => [t, t.shortName]));
     this.fileStyle = TRACK_NAME_STYLE.map(f => this.score.stylesheet[f]);
+    edit.markWip(this.score, this.player.defaults);
     showTrackNames(this.alphaTab, this.score);
     // Gezeigt werden nur Spuren, die es gibt (nach Löschen oder Rückgängig), mindestens eine.
     this.trackIndexes = this.trackIndexes.filter(i => i < this.score.tracks.length);
@@ -2521,6 +2533,26 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    */
   toggleTrackAudible(index){
     this.player.toggleTrackMute(index);
+    this.viewChanged = true;
+    this.updateState();
+    this.renderSongPanels();
+  }
+
+  /**
+   * Kennzeichnet eine Spur als Baustelle oder nimmt die Kennzeichnung weg (Schalter im Dialog "Spuren"). Gilt sofort
+   * (Spurname, Leadsheet), "Speichern" schreibt es in die Vorgaben des Songs.
+   * @param {number} index Index der Spur
+   * @param {boolean} wip Baustelle
+   * @returns {void}
+   */
+  setTrackWip(index, wip){
+    const defaults = this.player.defaults;
+    defaults[index] = {show: this.trackIndexes.includes(index), mute: this.player.trackMix(index).mute,
+      ...defaults[index], wip};
+    edit.markWip(this.score, defaults);
+    showTrackNames(this.alphaTab, this.score);
+    this.player.api.renderScore(this.score, this.trackIndexes);
+    this.player.renderMixerDialog();
     this.viewChanged = true;
     this.updateState();
     this.renderSongPanels();
@@ -3094,6 +3126,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   applyField(input){
     if(input.dataset.goto !== undefined){
       this.gotoBar(input);
+      return;
+    }
+    if(input.dataset.trackWip !== undefined){
+      this.setTrackWip(Number(input.dataset.trackWip), input.checked);
       return;
     }
     if(input.dataset.trackField){

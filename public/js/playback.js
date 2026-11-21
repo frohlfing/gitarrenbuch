@@ -7,9 +7,9 @@ import {
   loadScoreText, markPlayed, useCreditLogos,
 } from './base.js';
 import {
-  applyRecordingTempo, applySongMeta, joinSyllables, loadAlphaTab, lyricsTrack, mergeChords, parseScore,
-  playbackSyncPoints, QUARTER_TICKS, readScoreInfo, recordingTempoAt, recordingTempoRegion, sortSyncPoints,
-  stringedStaves, syncSegmentAt, timeline, trackName,
+  applyRecordingTempo, applySongMeta, isWip, joinSyllables, loadAlphaTab, lyricsTrack, markedTrackName, markWip,
+  mergeChords, parseScore, playbackSyncPoints, QUARTER_TICKS, readScoreInfo, recordingTempoAt, recordingTempoRegion,
+  sortSyncPoints, stringedStaves, syncSegmentAt, timeline,
 } from './notation.js';
 import {deriveBar, patternGridHtml, similarity, slotCount, TECHNIQUES} from './sheet.js';
 import {buildTextModel, playTimeline, renderTextView} from './textview.js';
@@ -547,8 +547,9 @@ function withoutTrailingEmpty(lyrics){
 
 /**
  * Spurnamen links neben den Spuren: bei mehreren angezeigten Spuren in jeder Notenzeile, senkrecht, mit dem Namen
- * aus den Noten (unübersetzt, ohne Namen "Spur 1" usw., trackName()); bei einer Spur keiner. Was die Datei aus
- * Guitar Pro vorgibt (meist ausgeblendet), gilt nicht.
+ * aus den Noten (unübersetzt, ohne Namen "Spur 1" usw., bei einer Baustelle mit Zeichen, markedTrackName()); bei einer
+ * Spur keiner. Was die Datei aus Guitar Pro vorgibt (meist ausgeblendet), gilt nicht. Die Baustellen müssen vorher
+ * gemerkt sein (markWip()).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score geladene Noten
  * @returns {void}
@@ -560,7 +561,7 @@ export function showTrackNames(alphaTab, score){
   sheet.multiTrackTrackNamePolicy = TrackNamePolicy.AllSystems;
   sheet.firstSystemTrackNameMode = sheet.otherSystemsTrackNameMode = TrackNameMode.ShortName;
   sheet.firstSystemTrackNameOrientation = sheet.otherSystemsTrackNameOrientation = TrackNameOrientation.Vertical;
-  for(const track of score.tracks) track.shortName = trackName(track);
+  for(const track of score.tracks) track.shortName = markedTrackName(track);
 }
 
 /**
@@ -744,9 +745,10 @@ export class Player {
    */
   mix = {tracks: {}, audio: {volume: 1, mute: false}};
   /**
-   * Vorgaben des Songs je Spur (Index), ob sie angezeigt und gehört wird (Feld trackDefaults, gesetzt im Reiter
-   * "Spuren" des Editors). Gilt, solange das Gerät im Mixer nichts anderes eingestellt hat.
-   * @type {{show: boolean, mute: boolean}[]}
+   * Vorgaben des Songs je Spur (Index), ob sie angezeigt und gehört wird und ob sie Baustelle ist (Feld trackDefaults,
+   * gesetzt im Dialog "Spuren" des Editors). Anzeigen und Hören gelten, solange das Gerät im Mixer nichts anderes
+   * eingestellt hat. Der Editor ändert die Einträge (Baustelle) und hält sie beim Umbau der Spuren mit (remapTracks()).
+   * @type {import('./notation.js').TrackDefault[]}
    */
   defaults = [];
   /**
@@ -1078,6 +1080,7 @@ export class Player {
     this.timeline = playTimeline(score);
     this.mergedChords = mergeChords(score);
     showSectionNames(score);
+    markWip(score, this.defaults);
     showTrackNames(alphaTab, score);
     this.trackLyrics = new Map(score.tracks.map(track => [track, track.staves
       .flatMap(staff => staff.bars).flatMap(bar => bar.voices).flatMap(voice => voice.beats)
@@ -1433,8 +1436,9 @@ export class Player {
 
   /**
    * Lädt die Patterns des Leadsheets für den Streifen und bestimmt, welches zu welchem Takt gehört: Je Takt wird aus
-   * jeder Spur mit Saiten das Patterns abgeleitet (deriveBar()) und mit den Patterns des Blatts derselben Technik
-   * verglichen; das ähnlichste* gilt ab PATTERN_MATCH. Takte, zu denen keines passt, behalten das zuletzt gezeigte.
+   * jeder Spur mit Saiten, die keine Baustelle ist (isWip()), das Pattern abgeleitet (deriveBar()) und mit den Patterns
+   * des Blatts derselben Technik verglichen; das ähnlichste gilt ab PATTERN_MATCH. Takte, zu denen keines passt,
+   * behalten das zuletzt gezeigte.
    * Scheitert das Laden (kein Leadsheet, kein Netz), bleibt der Streifen ohne Patterns.
    * @param {Score} score geladene Noten
    * @returns {Promise<void>}
@@ -1455,7 +1459,7 @@ export class Player {
         .filter(p => p?.technique === technique);
       this.patternAt[technique] = new Map();
     }
-    const staves = stringedStaves(score);
+    const staves = stringedStaves(score).filter(staff => !isWip(staff.track));
     for(const mb of score.masterBars){
       /** @type {Record<string, {pattern: ?import('./sheet.js').Pattern, score: number}>} */
       const best = {strumming: {pattern: null, score: 0}, picking: {pattern: null, score: 0}};
@@ -2016,7 +2020,7 @@ export class Player {
 
     this.el.mixer.innerHTML = `
       <div class="mix-rows">
-        ${this.orderTracks(score.tracks).map(t => row(`track:${t.index}`, trackName(t), t.index)).join('')}
+        ${this.orderTracks(score.tracks).map(t => row(`track:${t.index}`, markedTrackName(t), t.index)).join('')}
         ${this.mixer ? row('audio', 'Audiospur') : ''}
         ${this.mixer && !this.mixer.synced
           ? '<div class="hint">Die Noten haben keine Sync-Punkte, die Audiospur kann ihnen noch nicht folgen. Setzen '
@@ -2040,7 +2044,8 @@ export class Player {
   }
 
   /**
-   * Zieht Lautstärke und Stumm der Spuren nach, wenn sich im Editor ihre Reihenfolge oder Zahl ändert.
+   * Zieht Lautstärke und Stumm der Spuren und die Vorgaben des Songs je Spur (defaults) nach, wenn sich im Editor ihre
+   * Reihenfolge oder Zahl ändert.
    * @param {function(number): ?number} map alter Index → neuer Index (null: Spur gibt es nicht mehr)
    * @returns {void}
    */
@@ -2051,6 +2056,13 @@ export class Player {
       if(moved !== null) tracks[moved] = entry;
     }
     this.mix.tracks = tracks;
+    // Die Vorgaben des Songs je Spur (Baustelle) wandern mit; neue Spuren haben keine.
+    const defaults = [];
+    this.defaults.forEach((entry, index) => {
+      const moved = map(index);
+      if(moved !== null && entry) defaults[moved] = entry;
+    });
+    this.defaults = defaults;
     this.saveLevels();
     this.renderMixerDialog();
   }

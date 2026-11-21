@@ -11,8 +11,8 @@ import {
 import {closeOverlay, findSong, isOverlayOpen, openOverlay, openStackedOverlay} from './library.js';
 import * as edit from './notation.js';
 import {
-  chordsTrack, compareTuning, deleteBar, hasStrings, keyName, parseScore, shapeKey, splitTicks, stringedStaves,
-  timeline, trackName, TRIPLET_FEELS, WHOLE_TICKS, writeScore,
+  chordsTrack, compareTuning, deleteBar, hasStrings, isWip, keyName, markWip, parseScore, shapeKey, splitTicks,
+  stringedStaves, timeline, trackName, TRIPLET_FEELS, WHOLE_TICKS, WIP_MARK, writeScore,
 } from './notation.js';
 import {buildTextModel, playTimeline, renderTextView, verseFor} from './textview.js';
 
@@ -850,16 +850,29 @@ export function sections(score){
 }
 
 /**
- * Spur einer Tab-Stelle: die mit dem Namen, sonst die Akkordspur, sonst die erste mit Saiten.
+ * Spur einer Tab-Stelle: die mit dem Namen, sonst die Akkordspur, sonst die erste mit Saiten. Baustellen (isWip())
+ * liefern keine Tab-Stellen: Ist die Spur mit dem Namen eine, gibt es keine; als Ersatz kommen sie nicht in Frage.
  * @param {Score} score Noten
  * @param {string} name Name aus den Angaben (tabs[].track)
- * @returns {?Track} null ohne Spur mit Saiten
+ * @returns {?Track} null ohne Spur mit Saiten bzw. bei einer Baustelle
  */
 export function tabTrack(score, name){
   const stringed = t => hasStrings(t.staves[0]);
   const named = score.tracks.find(t => t.name === name && stringed(t));
+  if(named) return isWip(named) ? null : named;
+  const usable = t => stringed(t) && !isWip(t);
   const chords = chordsTrack(score);
-  return named ?? (chords && stringed(chords) ? chords : score.tracks.find(stringed) ?? null);
+  return chords && usable(chords) ? chords : score.tracks.find(usable) ?? null;
+}
+
+/**
+ * Ob eine Tab-Stelle auf einer Baustelle liegt (Spur mit dem Namen ist isWip()); dann steht sie nicht auf dem Blatt.
+ * @param {Score} score Noten
+ * @param {{track: string}} tab Tab-Stelle
+ * @returns {boolean}
+ */
+export function tabOnWip(score, tab){
+  return isWip(score.tracks.find(t => t.name === tab.track));
 }
 
 /**
@@ -1105,8 +1118,9 @@ export function renderInstructions(alphaTab, score, sheet, catalog, library, opt
   }).join('');
   const chords = sheetChords(score, sheet, library).filter(c => c.shown)
     .map(c => chordDiagramSvg(c.name, c.grip)).join('');
-  // Die Tab selbst zeichnet alphaTab nachträglich in den Platzhalter.
+  // Die Tab selbst zeichnet alphaTab nachträglich in den Platzhalter. Tab-Stellen auf einer Baustelle fehlen.
   const tabs = sheet.tabs.map((tab, k) => {
+    if(tabOnWip(score, tab)) return '';
     const track = tabTrack(score, tab.track);
     // Ersetzte Takte teilen die Tab-Stelle (tabPieces()); dann steht nur der Bereich in der Überschrift, die
     // Wiederholungszeichen der Stücke sprechen für sich.
@@ -1621,10 +1635,12 @@ export function describeLayout(over, parts, layout){
  * @param {string} tex Noten als alphaTex
  * @param {*} data Angaben für das Leadsheet (Feld leadsheet in song.json, wird normalisiert)
  * @param {SongHead} head Titel und Interpret (Kopf des Blatts; daraus auch der Titel des Dokuments)
+ * @param {?import('./notation.js').TrackDefault[]} [defaults] Vorgaben je Spur (Baustellen fehlen auf dem Blatt)
  * @returns {Promise<void>} fertig, wenn der Druckdialog geöffnet ist
  */
-export async function printSongLeadsheet(alphaTab, tex, data, head){
+export async function printSongLeadsheet(alphaTab, tex, data, head, defaults = null){
   const score = parseScore(alphaTab, tex);
+  markWip(score, defaults);
   const sheet = normalizeSheet(data);
   const catalog = await loadPatterns().then(p => p.patterns).catch(() => []);
   const library = await loadChordLibrary().catch(() => null);
@@ -2229,11 +2245,12 @@ const WHEN_PLACEHOLDER = 'Wann? z. B. Strophe, Refrain ab dem 2. Mal';
  * Spuren mit Saiten (für Tabs und Patterns).
  * @param {Score} score Noten
  * @param {boolean} [six] nur mit sechs Saiten (Patterns)
+ * @param {boolean} [wip] auch Baustellen (isWip()); ohne, wo Tab-Stellen und Patterns fürs Blatt gesucht werden
  * @returns {import('../../types/alphatab').model.Track[]}
  */
-function stringedTracks(score, six = false){
+function stringedTracks(score, six = false, wip = true){
   return score.tracks.filter(t => hasStrings(t.staves[0]) && (six ? t.staves[0].tuning.length === 6
-    : t.staves[0].tuning.length > 0));
+    : t.staves[0].tuning.length > 0) && (wip || !isWip(t)));
 }
 
 /**
@@ -2405,7 +2422,8 @@ export class LeadsheetTab {
           ${number('tabFrom', tab.from, 'Erster Takt')}<span>–</span>${number('tabTo', tab.to, 'Letzter Takt')}
           <select data-ls="tabTrack" data-ls-index="${k}" aria-label="Spur">
             ${tracks.map(t => `<option value="${escapeHtml(t.name)}"${t.name === tab.track ? ' selected' : ''}>
-              ${escapeHtml(trackName(t))}</option>`).join('')}
+              ${escapeHtml(isWip(t) ? `${trackName(t)} ${WIP_MARK} (Baustelle, nicht auf dem Blatt)`
+                : trackName(t))}</option>`).join('')}
             ${known ? '' : `<option value="${escapeHtml(tab.track)}" selected>${escapeHtml(tab.track || '–')} (fehlt)
               </option>`}
           </select>
@@ -2815,7 +2833,7 @@ export class LeadsheetTab {
     // Spur mit Noten in diesen Takten, zuletzt die Akkordspur.
     const vocal = t => /voc|voice|gesang|stimme|sing/i.test(t.name);
     const playing = t => t.staves[0].bars.slice(from, to + 1).some(b => b.voices.some(v => v.beats.some(x => x.notes.length)));
-    const candidates = stringedTracks(score).filter(t => !vocal(t));
+    const candidates = stringedTracks(score, false, false).filter(t => !vocal(t));
     const chosen = score.tracks[track];
     const pick = candidates.includes(chosen) ? chosen : candidates.find(playing) ?? tabTrack(score, '');
     const name = pick?.name ?? '';
@@ -2835,9 +2853,10 @@ export class LeadsheetTab {
   suggest(){
     const ed = this.editor;
     const score = parseScore(ed.alphaTab, ed.tex);
-    const tracks = stringedTracks(score, true);
+    markWip(score, ed.player.defaults);
+    const tracks = stringedTracks(score, true, false);
     if(!tracks.length){
-      ed.toast('Keine Gitarrenspur mit sechs Saiten.');
+      ed.toast('Keine Gitarrenspur mit sechs Saiten (außer Baustellen).');
       return;
     }
     const preferred = tracks.find(t => /^(strumming|picking)/i.test(t.name.trim())) ?? tracks[0];
