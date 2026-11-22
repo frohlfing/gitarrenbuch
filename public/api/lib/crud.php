@@ -495,13 +495,11 @@ function update_song(string $slug, array $data): array
             unset($song['level']);
         }
     }
-    // Vorgaben je Spur (Dialog "Spuren" im Editor): je Spur show und mute (Anzeigen und Hören), wip nur bei einer
-    // Baustelle, in der Reihenfolge der Spuren. Fehlt das Feld im Request, bleiben die gespeicherten; eine leere Liste
-    // löscht sie.
+    // Vorgaben je Spur für Anzeigen und Hören (Reiter "Spuren" im Editor): je Spur show und mute, in der Reihenfolge der
+    // Spuren. Fehlt das Feld im Request, bleiben die gespeicherten; eine leere Liste löscht sie.
     if (array_key_exists('trackDefaults', $data)) {
         $defaults = array_map(
-            fn($t) => ['show' => (bool) ($t['show'] ?? true), 'mute' => (bool) ($t['mute'] ?? false)]
-                + (empty($t['wip']) ? [] : ['wip' => true]),
+            fn($t) => ['show' => (bool) ($t['show'] ?? true), 'mute' => (bool) ($t['mute'] ?? false)],
             array_values((array) $data['trackDefaults'])
         );
         if ($defaults) {

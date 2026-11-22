@@ -189,12 +189,12 @@ const PICK_LEVEL = ':stufe:';
 const NO_LEVEL = 'ohne';
 
 /**
- * Ob ein Song eine Spur hat, an der noch gearbeitet wird (Schalter "Baustelle" im Dialog "Spuren", trackDefaults).
+ * Ob ein Song eine Spur hat, an der noch gearbeitet wird (Schalter "Baustelle" im Dialog "Spuren", leadsheet.wip).
  * @param {Song} s Song
  * @returns {boolean}
  */
 function hasWip(s){
-  return (s.trackDefaults ?? []).some(d => d?.wip);
+  return Array.isArray(s.leadsheet?.wip) && s.leadsheet.wip.length > 0;
 }
 
 /**

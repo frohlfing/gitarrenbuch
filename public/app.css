@@ -747,14 +747,16 @@ header p.sub{
 .rh{display:flex; flex-direction:column; gap:.6rem; max-height:min(70vh, 720px); overflow:auto; padding-right:.3rem;}
 .rh-row{border:1px solid var(--rule); border-radius:8px; padding:.5rem .7rem;}
 .rh-row.rh-bad{border-color:var(--danger);}
-.rh-head{display:flex; flex-wrap:wrap; gap:.2rem .6rem; align-items:baseline; margin-bottom:.3rem;}
-.rh-head .rh-bars{margin-left:auto;}
+/* Kopf je Rhythmus: links "Rhythmus 2:", rechts die Zahl der Takte; darunter als Hinweis, wo er vorkommt */
+.rh-head{display:flex; gap:.6rem; align-items:baseline; justify-content:space-between;}
+.rh-head .rh-bars{text-align:right;}
+.rh-hint.rh-where{margin:.1rem 0 .4rem;}
 .rh-edit{display:flex; flex-wrap:wrap; gap:.4rem .8rem; align-items:center;}
 .rh-edit .pgrid td[data-cell]{cursor:pointer;}
 .sheet .rh-edit input[type=text]{width:10rem; padding:0 .5rem; font:inherit; font-family:ui-monospace, monospace;
   border:1px solid var(--rule); border-radius:6px; background:var(--card); color:var(--ink);}
 .rh-hint{flex-basis:100%; margin:0; font-size:.8rem; color:var(--ink-soft);}
-.rh-title{font-weight:400;}
+.rh-title{font-weight:600;}
 .rh-take{display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.4rem;}
 .rh-warn{margin:.4rem 0 0; color:var(--danger); font-weight:600;}
 .tp{display:grid; grid-template-columns:max-content minmax(0, max-content); gap:0 1.6rem; align-items:start;}
@@ -763,6 +765,11 @@ header p.sub{
 .tp .hint{font-size:.75rem; color:var(--ink-soft); margin:.3rem 0;}
 .tp .hint.hint-warn{color:var(--danger);}
 .tp-row .form-field{margin-bottom:.6rem;}
+/* Dialog "Rhythmus ableiten": Spur neu anlegen oder überschreiben, über den Knöpfen */
+/* Abstand nach unten wie bei einem Formularfeld (.form-field) vor den Knöpfen */
+.rh-target{display:flex; flex-wrap:wrap; align-items:center; gap:.4rem 1rem; margin:.8rem 0 1rem;}
+.rh-target label{display:inline-flex; align-items:center; gap:.3rem; cursor:pointer; white-space:nowrap;}
+.rh-target input{margin:0;}
 .tp-warn .hint{margin:0 0 .3rem;}
 #tpSuggest:empty{display:none;}
 #tpSuggest .btn{margin-left:.3rem;}

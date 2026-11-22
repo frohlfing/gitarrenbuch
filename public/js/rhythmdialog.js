@@ -15,16 +15,17 @@
  *   dort eine rote Warnung, und "Übernehmen" ist gesperrt: Akkorde werden nie verschoben. Schlägt auch die Quellspur
  *   dort nicht an (Haltebogen, Pause), ist das kein Fehler.
  * - Übernehmen legt die Spur "Rhythmus" als erste Spur an (die Akkorde stehen oben; Akustikgitarre, Capo und Tuning
- *   der Quellspur), schreibt je Takt seinen Rhythmus mit dem Griff des Akkords, der dann klingt (fillBar() in
- *   sheet.js), übernimmt Ein- und Ausblenden der Quellspur (an den Anschlag, der dort klingt) und zieht die Akkorde
- *   in die neue Spur (sie wird die Akkordspur). Ein Schritt für "Rückgängig".
+ *   der Quellspur) oder überschreibt die Quellspur (Radiobuttons darüber; sie behält Stelle, Name und Instrument,
+ *   ihr Liedtext zieht mit), schreibt je Takt seinen Rhythmus mit dem Griff des Akkords, der dann klingt
+ *   (fillBar() in sheet.js), übernimmt Ein- und Ausblenden der Quellspur (an den Anschlag, der dort klingt) und zieht
+ *   die Akkorde in diese Spur (sie wird die Akkordspur). Ein Schritt für "Rückgängig".
  */
 
 import {escapeHtml, loadChordLibraryOrEmpty, svgIcon} from './base.js';
 import {closeOverlay, isOverlayOpen, openOverlay, openStackedOverlay} from './library.js';
 import {
-  duplicateTrack, freeTrackName, instrumentByKey, makeRest, moveContent, parseScore, setInstrument, timeline, trackName,
-  WHOLE_TICKS,
+  deleteTrack, duplicateTrack, freeTrackName, instrumentByKey, instrumentOf, lyricsTrack, makeRest,
+  moveContent, parseScore, setInstrument, timeline, trackName, WHOLE_TICKS,
 } from './notation.js';
 import {
   chordTimeline, deriveBar, editPattern, fillBar, gripFor, patternGridHtml, sectionGroup, sections, similarity,
@@ -135,7 +136,8 @@ function sortRows(rows){
 }
 
 /**
- * Fasst Rhythmen mit gleichem Pattern zusammen (nach einer Änderung im Dialog).
+ * Fasst Rhythmen mit gleichem Pattern zusammen (beim Übernehmen eines anderen Rhythmus; beim Bearbeiten nicht, siehe
+ * RhythmDialog.click()).
  * @param {RhythmRow[]} rows Rhythmen
  * @returns {RhythmRow[]}
  */
@@ -314,19 +316,22 @@ export function rhythmWarnings(score, row, events, attacks){
 }
 
 /**
- * Legt die Spur "Rhythmus" als erste Spur an (die Akkorde stehen oben): Kopie der Quellspur (Capo, Tuning) ohne Inhalt,
- * Akustikgitarre, je Takt sein Rhythmus mit den Griffen der klingenden Akkorde (fillBar()), Takte ohne Rhythmus als
- * Pausen; danach ziehen die Akkorde in die neue Spur.
+ * Schreibt die Rhythmen in eine Spur: Kopie der Quellspur (Capo, Tuning) ohne Inhalt, je Takt sein Rhythmus mit den
+ * Griffen der klingenden Akkorde (fillBar()), Takte ohne Rhythmus als Pausen; danach ziehen die Akkorde in diese Spur.
+ * Ohne Ziel kommt sie als neue Spur "Rhythmus" (Akustikgitarre) an die erste Stelle (die Akkorde stehen oben). Mit Ziel
+ * ersetzt sie die Zielspur: gleiche Stelle, gleicher Name (daran hängen Baustelle und Tab-Stellen), gleiches
+ * Instrument; trug die Zielspur den Liedtext, zieht er mit um.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {string} tex alphaTex der Noten (Stand vor der Änderung)
  * @param {Score} score dieselben Noten als Modell, werden geändert
  * @param {number} index Quellspur
  * @param {RhythmRow[]} rows Rhythmen
  * @param {Object<string, string[]>} library Akkordkatalog (Griffe, wo die Noten keinen haben)
- * @returns {{track: import('../../types/alphatab').model.Track, gripless: string[]}} neue Spur und Akkorde ohne
- *   Griff (dort Pausen)
+ * @param {?number} [target] Spur, die überschrieben wird (auch die Quellspur selbst); null für eine neue
+ * @returns {{track: import('../../types/alphatab').model.Track, gripless: string[]}} Spur mit dem Rhythmus und Akkorde
+ *   ohne Griff (dort Pausen)
  */
-export function applyRhythm(alphaTab, tex, score, index, rows, library){
+export function applyRhythm(alphaTab, tex, score, index, rows, library, target = null){
   const events = chordTimeline(score);
   /** @type {Map<number, Pattern>} */
   const perBar = new Map(rows.flatMap(row => [...row.bars].map(i => [i, row.pattern])));
@@ -335,13 +340,14 @@ export function applyRhythm(alphaTab, tex, score, index, rows, library){
    * Legt eine Kopie der Quellspur an der Stelle at an und schreibt die Rhythmen hinein.
    * @param {number} at Index der neuen Spur
    * @param {string} name gewünschter Name
+   * @param {import('./notation.js').Instrument} instrument Instrument
    * @returns {import('../../types/alphatab').model.Track}
    */
-  const rhythmTrack = (at, name) => {
+  const rhythmTrack = (at, name, instrument) => {
     // duplicateTrack() liest die Quellspur aus dem alphaTex vor der Änderung, dort hat sie noch ihren Index.
     const track = duplicateTrack(t => parseScore(alphaTab, t), tex, score, index, at);
     track.name = track.shortName = freeTrackName(score, name, track);
-    setInstrument(alphaTab, track, instrumentByKey('guitar'));
+    setInstrument(alphaTab, track, instrument);
     /** @type {?import('../../types/alphatab').model.Beat} letzter Schlag des vorigen Takts (klingt in den nächsten) */
     let ringing = null;
     for(const bar of track.staves[0].bars){
@@ -366,7 +372,10 @@ export function applyRhythm(alphaTab, tex, score, index, rows, library){
   // Ein- und Ausblenden der Quellspur (z. B. am Schlussakkord): Takt, Stelle im Takt und Art.
   const fades = score.tracks[index].staves[0].bars.flatMap(bar => (bar.voices[0] ? timeline(bar.voices[0]) : [])
     .filter(e => e.beat.fade).map(e => ({bar: bar.index, at: e.start, fade: e.beat.fade})));
-  const track = rhythmTrack(0, 'Rhythmus');
+  const old = target === null ? null : score.tracks[target];
+  // Die neue Spur kommt vor die alte (an ihre Stelle), die alte fällt am Ende weg.
+  const track = old ? rhythmTrack(target, old.name, instrumentOf(old))
+    : rhythmTrack(0, 'Rhythmus', instrumentByKey('guitar'));
   // Übernommen an den Anschlag der neuen Spur, der dort klingt (auch aus einem Takt davor, wenn der Ton der Quellspur
   // übergebunden ist und die neue Spur dort pausiert).
   const struck = track.staves[0].bars.flatMap(bar => (bar.voices[0] ? timeline(bar.voices[0]) : [])
@@ -376,6 +385,11 @@ export function applyRhythm(alphaTab, tex, score, index, rows, library){
     if(target) target.beat.fade = fade;
   }
   moveContent(alphaTab, score, 'chords', track.index, 'insert');
+  if(old){
+    if(lyricsTrack(score) === old) moveContent(alphaTab, score, 'lyrics', track.index, 'insert');
+    deleteTrack(score, old.index);
+    track.name = track.shortName = old.name;
+  }
   return {track, gripless: [...gripless]};
 }
 
@@ -428,6 +442,12 @@ export class RhythmDialog {
           gewinnt.</p>
       </div>
       <div class="rh" id="rhBox"></div>
+      <div class="rh-target" role="radiogroup" aria-label="Wohin der Rhythmus kommt">
+        <label><input type="radio" name="rhTarget" value="new" checked> Spur neu anlegen</label>
+        <label title="${escapeHtml(`„${trackName(this.score.tracks[this.index])}“ bekommt den Rhythmus `
+          + '(Stelle, Name und Instrument bleiben)')}"><input type="radio" name="rhTarget" value="overwrite">
+          Spur überschreiben</label>
+      </div>
       <div class="struct-actions">
         <button class="btn btn-primary" type="button" id="rhApply">Übernehmen</button>
         <button class="btn" type="button" id="rhCancel">Abbrechen</button>
@@ -467,10 +487,11 @@ export class RhythmDialog {
       const n = row.bars.size;
       const canHalve = row.pattern.grid === 16 && [...row.pattern.strokes].every((t, i) => i % 2 === 0 || t === '.');
       return `<div class="rh-row${warnings.length ? ' rh-bad' : ''}">
-        <div class="rh-head"><span class="rh-title">Rhythmus ${k + 1}: ${
-          escapeHtml(withSimplified(describeBars(this.score, row.bars, this.events), row.simplified))}</span>
+        <div class="rh-head"><span class="rh-title">Rhythmus ${k + 1}:</span>
           <span class="efield-hint rh-bars">${n} ${n === 1 ? 'Takt' : 'Takte'}${
             row.derived ? '' : ', in der Spur ohne Anschläge'}</span></div>
+        <p class="rh-hint rh-where">${
+          escapeHtml(withSimplified(describeBars(this.score, row.bars, this.events), row.simplified))}</p>
         <div class="rh-edit">
           ${patternGridHtml(row.pattern, true)}
           <input type="text" data-rh-strokes="${k}" value="${escapeHtml(row.pattern.strokes)}" spellcheck="false"
@@ -514,7 +535,9 @@ export class RhythmDialog {
   }
 
   /**
-   * Klick ins Raster (Zeichen wechseln, Betonung), auf das Raster oder auf "Rhythmus aus … übernehmen".
+   * Klick ins Raster (Zeichen wechseln, Betonung), auf das Raster oder auf "Rhythmus aus … übernehmen". Nur das
+   * Übernehmen fasst gleiche Rhythmen zusammen (das ist sein Zweck); wird ein Rhythmus beim Bearbeiten zufällig gleich
+   * einem anderen, bleiben beide stehen.
    * @param {HTMLElement} target angeklicktes Element
    * @returns {void}
    */
@@ -539,7 +562,6 @@ export class RhythmDialog {
       pattern.strokes = pattern.grid === 8 ? tokens.map(t => `${t}.`).join('')
         : tokens.filter((_, i) => i % 2 === 0).map(strum).join('');
       pattern.grid = pattern.grid === 8 ? 16 : 8;
-      this.rows = mergeRows(this.rows);
       this.changed = true;
       this.render();
       return;
@@ -549,7 +571,6 @@ export class RhythmDialog {
     if(!cell || !table) return;
     const pattern = this.rows[Number(table.dataset.rhRow)].pattern;
     pattern.strokes = editPattern(pattern, cell.dataset.cell, Number(cell.dataset.slot));
-    this.rows = mergeRows(this.rows);
     this.changed = true;
     this.render();
   }
@@ -569,26 +590,33 @@ export class RhythmDialog {
       this.editor.toast(`${slots} Zeichen nötig: d ab, u auf, x gedämpft, . nichts (groß = betont).`);
     } else {
       pattern.strokes = value;
-      this.rows = mergeRows(this.rows);
       this.changed = true;
     }
     this.render();
   }
 
   /**
-   * Legt die Spur an (ein Schritt für "Rückgängig") und schließt den Dialog.
+   * Legt die Spur an bzw. überschreibt die Quellspur (Radiobuttons über "Übernehmen"; ein Schritt für "Rückgängig")
+   * und schließt den Dialog.
    * @returns {Promise<void>}
    */
   async apply(){
     const ed = this.editor;
+    const overwrite = /** @type {?HTMLInputElement} */ (document.querySelector('input[name="rhTarget"]:checked'))
+      ?.value === 'overwrite';
+    const target = overwrite ? this.index : null;
     const library = await loadChordLibraryOrEmpty();
     /** @type {?{track: import('../../types/alphatab').model.Track, gripless: string[]}} */
     let result = null;
     closeOverlay();
+    // Neu: eine Spur mehr an Stelle 0. Überschrieben: gleich viele, die Spur behält ihre Stelle.
     ed.changeTracks(score => {
-      result = applyRhythm(ed.alphaTab, ed.tex, score, this.index, this.rows, library);
-    }, 0, 0);
-    if(result) ed.toast(`Spur „${trackName(ed.score.tracks[0])}“ als erste Spur angelegt, sie trägt jetzt die Akkorde.`
+      result = applyRhythm(ed.alphaTab, ed.tex, score, this.index, this.rows, library, target);
+    }, target ?? 0, 0);
+    if(!result) return;
+    const name = trackName(ed.score.tracks[target ?? 0]);
+    ed.toast((target === null ? `Spur „${name}“ als erste Spur angelegt` : `Spur „${name}“ überschrieben`)
+      + ', sie trägt jetzt die Akkorde.'
       + (result.gripless.length ? ` Ohne Griff (Pausen): ${result.gripless.join(', ')}.` : ''));
   }
 }

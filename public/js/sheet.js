@@ -650,6 +650,10 @@ export function suggestPatterns(score, trackIndex, catalog){
  * @property {SheetLink[]} links Links
  * @property {string} instructions Hinweise zur Spielweise (Markdown)
  * @property {SheetLayout} layout wie das Blatt gesetzt wird
+ * @property {string[]} wip Baustellen: Namen der Spuren, an denen noch gearbeitet wird (Schalter im Dialog "Spuren").
+ *   Sie tragen im Editor und im Player ein Zeichen (WIP_MARK), liefern keine Patterns und Tab-Stellen fürs Blatt, und
+ *   die Bibliothek kann nach Songs mit Baustelle filtern (markWip() in notation.js). Wie die Tab-Stellen hängen sie am
+ *   Namen und wandern beim Umbenennen mit (captureTabs(), remapTabs()).
  */
 
 /**
@@ -709,18 +713,23 @@ export function normalizeSheet(data){
     const value = data?.layout?.[key];
     if(key === 'font' ? FONT_SIZES.includes(value) : typeof value === typeof preset) layout[key] = value;
   }
-  return {patterns, tabs, cuts, chords, links, instructions, layout};
+  const wip = Array.isArray(data?.wip) ? [...new Set(data.wip.filter(n => typeof n === 'string' && n))] : [];
+  return {patterns, tabs, cuts, chords, links, instructions, layout, wip};
 }
 
 /**
- * Tab-Stellen und ersetzte Takte als Objekte des Modells (captureTabs()).
- * @typedef {{tabs: {tab: SheetTab, bars: MasterBar[], track: ?Track}[], cuts: {cut: SheetCut, bars: MasterBar[]}[]}} SheetCapture
+ * Tab-Stellen, ersetzte Takte und Baustellen als Objekte des Modells (captureTabs()).
+ * @typedef {Object} SheetCapture
+ * @property {{tab: SheetTab, bars: MasterBar[], track: ?Track}[]} tabs Tab-Stellen
+ * @property {{cut: SheetCut, bars: MasterBar[]}[]} cuts ersetzte Takte
+ * @property {Track[]} wip Spuren, die Baustelle sind
  */
 
 /**
  * Hält die Tab-Stellen fest, bevor sich Takte oder Spuren ändern: Takte und Spur als Objekte des Modells. Die bleiben
  * bei Änderungen am Modell dieselben (eingefügte sind neue, gelöschte fehlen danach), so findet remapTabs() die
- * neuen Indizes und Namen. Die ersetzten Takte (SheetCut) hängen genauso am Index und wandern mit.
+ * neuen Indizes und Namen. Die ersetzten Takte (SheetCut) hängen genauso am Index und wandern mit, die Baustellen
+ * (Sheet.wip) am Namen der Spur.
  * @param {Sheet} sheet Angaben
  * @param {Score} score Noten vor der Änderung
  * @returns {SheetCapture} Stand vor der Änderung
@@ -730,6 +739,7 @@ export function captureTabs(sheet, score){
     tabs: sheet.tabs.map(tab => ({tab, bars: score.masterBars.slice(tab.from, tab.to + 1),
       track: score.tracks.find(t => t.name === tab.track) ?? null})),
     cuts: sheet.cuts.map(cut => ({cut, bars: score.masterBars.slice(cut.from, cut.to + 1)})),
+    wip: score.tracks.filter(t => sheet.wip.includes(t.name)),
   };
 }
 
@@ -737,6 +747,8 @@ export function captureTabs(sheet, score){
  * Zieht die Tab-Stellen nach einer Änderung am Modell nach (siehe captureTabs()): Anfang und Ende sind der erste
  * bzw. letzte Takt des Bereichs, der noch da ist; ist keiner mehr da, fällt die Stelle weg. Die Spur behält ihren
  * Platz in der Angabe auch umbenannt; gelöscht bleibt ihr Name stehen (der Generator nimmt dann die Akkordspur).
+ * Baustellen folgen ihrer Spur ebenso unter neuem Namen; mit der Spur gelöscht fällt auch die Baustelle weg, außer eine
+ * andere Spur trägt danach ihren Namen (die ersetzte).
  * @param {Sheet} sheet Angaben, werden geändert
  * @param {Score} score Noten nach der Änderung (dasselbe Modell)
  * @param {SheetCapture} captured Stand davor
@@ -754,6 +766,8 @@ export function remapTabs(sheet, score, captured){
     const kept = bars.map(mb => index.get(mb)).filter(i => i !== undefined);
     return kept.length ? [{...cut, from: Math.min(...kept), to: Math.max(...kept)}] : [];
   });
+  // Umbenannt trägt die Spur den neuen Namen; ersetzt (Rhythmus ableiten auf eine vorhandene Spur) trägt die neue ihn.
+  sheet.wip = [...new Set(captured.wip.map(t => t.name).filter(name => score.tracks.some(t => t.name === name)))];
 }
 
 /**
@@ -1635,13 +1649,12 @@ export function describeLayout(over, parts, layout){
  * @param {string} tex Noten als alphaTex
  * @param {*} data Angaben für das Leadsheet (Feld leadsheet in song.json, wird normalisiert)
  * @param {SongHead} head Titel und Interpret (Kopf des Blatts; daraus auch der Titel des Dokuments)
- * @param {?import('./notation.js').TrackDefault[]} [defaults] Vorgaben je Spur (Baustellen fehlen auf dem Blatt)
  * @returns {Promise<void>} fertig, wenn der Druckdialog geöffnet ist
  */
-export async function printSongLeadsheet(alphaTab, tex, data, head, defaults = null){
+export async function printSongLeadsheet(alphaTab, tex, data, head){
   const score = parseScore(alphaTab, tex);
-  markWip(score, defaults);
   const sheet = normalizeSheet(data);
+  markWip(score, sheet.wip);
   const catalog = await loadPatterns().then(p => p.patterns).catch(() => []);
   const library = await loadChordLibrary().catch(() => null);
   // Unsichtbar, aber mit Breite: Die Seite rechnet in cqw, gemessen wird beim Setzen.
@@ -2853,7 +2866,7 @@ export class LeadsheetTab {
   suggest(){
     const ed = this.editor;
     const score = parseScore(ed.alphaTab, ed.tex);
-    markWip(score, ed.player.defaults);
+    markWip(score, ed.sheet.wip);
     const tracks = stringedTracks(score, true, false);
     if(!tracks.length){
       ed.toast('Keine Gitarrenspur mit sechs Saiten (außer Baustellen).');

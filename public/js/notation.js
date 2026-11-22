@@ -183,9 +183,6 @@ export function trackName(track){
  * @typedef {Object} TrackDefault
  * @property {boolean} show in den Noten angezeigt (Auge)
  * @property {boolean} mute stumm (Lautsprecher)
- * @property {boolean} [wip] Baustelle: an der Spur wird noch gearbeitet. Sie trägt im Editor und im Player ein Zeichen
- *   (WIP_MARK), liefert keine Patterns und Tab-Stellen fürs Leadsheet, und die Bibliothek kann nach Songs mit Baustelle
- *   filtern.
  */
 
 /** Zeichen einer Baustelle hinter dem Spurnamen. */
@@ -195,15 +192,15 @@ export const WIP_MARK = '🚧';
 const WIP_TRACKS = new WeakSet();
 
 /**
- * Merkt sich an den Spuren eines eingelesenen Modells, welche Baustelle sind (Vorgaben des Songs je Spur). Nach jedem
- * Einlesen nötig, das Modell kennt die Angabe nicht (sie steht in song.json, nicht in den Noten).
+ * Merkt sich an den Spuren eines eingelesenen Modells, welche Baustelle sind: die mit einem der Namen aus den Angaben
+ * für das Leadsheet (Sheet.wip in sheet.js). Nach jedem Einlesen nötig, die Noten kennen die Angabe nicht.
  * @param {Score} score Noten
- * @param {?TrackDefault[]} [defaults] Vorgaben je Spur
+ * @param {?string[]} [names] Namen der Spuren, die Baustelle sind
  * @returns {void}
  */
-export function markWip(score, defaults){
+export function markWip(score, names){
   for(const track of score.tracks){
-    if(defaults?.[track.index]?.wip) WIP_TRACKS.add(track);
+    if(names?.includes(track.name)) WIP_TRACKS.add(track);
     else WIP_TRACKS.delete(track);
   }
 }

@@ -12,7 +12,8 @@
  *     "links": [{"label": "Original", "url": "https://…", "qr": true}],
  *     "instructions": "Markdown",
  *     "layout": {"twoPages": true, "columns": false, "font": 12, "compactTabs": false, "smallChords": false,
- *                "tabCounts": false, "mergeSections": true}
+ *                "tabCounts": false, "mergeSections": true},
+ *     "wip": ["picking"]
  *   }
  *
  * patterns: die Patterns des Songs (Verweis auf den Katalog data/patterns.json) mit Freitext, wann sie gespielt
@@ -26,6 +27,8 @@
  * einer GP-Datei wird es mit deren Anweisungen vorbelegt (api/import.php). layout: wie das Blatt gesetzt wird
  * (Kontrollkästchen im Reiter "Leadsheet": zwei Seiten, Text zweispaltig, Schrift in pt, Tabs zusammenfassen,
  * Griffbilder klein, Zählzeiten unter den Tabs, gleiche Abschnitte nur einmal); gespeichert nur, wenn es von LEADSHEET_LAYOUT abweicht.
+ * wip: Baustellen, die Namen der Spuren, an denen noch gearbeitet wird (Schalter im Dialog "Spuren" des Editors; wie
+ * bei tabs zieht der Editor den Namen beim Umbenennen nach); nur gespeichert, wenn es welche gibt.
  *
  * Ein eigener Endpunkt statt PUT api/songs.php: Der Editor speichert die Angaben zusammen mit den Noten, das Formular
  * "Stammdaten" getrennt davon; so überschreibt keiner die Änderungen des anderen.
@@ -174,6 +177,18 @@ function validate_leadsheet(array $data): array
         ];
     }
 
+    $wip = $data['wip'] ?? [];
+    if (!is_array($wip) || !array_is_list($wip) || count($wip) > LEADSHEET_MAX_ITEMS) {
+        json_error(400, 'wip muss eine Liste mit höchstens ' . LEADSHEET_MAX_ITEMS . ' Spurnamen sein');
+    }
+    $cleanWip = [];
+    foreach ($wip as $k => $name) {
+        $name = leadsheet_text($name, 'Baustelle ' . ($k + 1));
+        if ($name !== '' && !in_array($name, $cleanWip, true)) {
+            $cleanWip[] = $name;
+        }
+    }
+
     return [
         'patterns' => $cleanPatterns,
         'tabs' => $cleanTabs,
@@ -182,6 +197,7 @@ function validate_leadsheet(array $data): array
         'links' => $cleanLinks,
         'instructions' => leadsheet_text($data['instructions'] ?? '', 'instructions', LEADSHEET_TEXT_MAX),
         'layout' => leadsheet_layout($data['layout'] ?? null),
+        'wip' => $cleanWip,
     ];
 }
 
@@ -250,6 +266,7 @@ try {
                 'instructions' => is_string($data['instructions'] ?? null) ? $data['instructions'] : '',
                 'layout' => array_merge(LEADSHEET_LAYOUT,
                     array_intersect_key(is_array($data['layout'] ?? null) ? $data['layout'] : [], LEADSHEET_LAYOUT)),
+                'wip' => is_array($data['wip'] ?? null) ? array_values($data['wip']) : [],
             ];
             json_response(200, $result);
 
@@ -267,8 +284,12 @@ try {
             if (!$data['cuts']) {
                 unset($data['cuts']);
             }
+            // Ebenso die Baustellen.
+            if (!$data['wip']) {
+                unset($data['wip']);
+            }
             if (!$data['patterns'] && !$data['tabs'] && !isset($data['cuts']) && !$data['chords'] && !$data['links'] && $data['instructions'] === ''
-                && !isset($data['layout'])) {
+                && !isset($data['layout']) && !isset($data['wip'])) {
                 unset($song['leadsheet']);
             } else {
                 $song['leadsheet'] = $data;

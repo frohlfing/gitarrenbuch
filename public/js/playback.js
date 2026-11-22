@@ -745,9 +745,9 @@ export class Player {
    */
   mix = {tracks: {}, audio: {volume: 1, mute: false}};
   /**
-   * Vorgaben des Songs je Spur (Index), ob sie angezeigt und gehört wird und ob sie Baustelle ist (Feld trackDefaults,
-   * gesetzt im Dialog "Spuren" des Editors). Anzeigen und Hören gelten, solange das Gerät im Mixer nichts anderes
-   * eingestellt hat. Der Editor ändert die Einträge (Baustelle) und hält sie beim Umbau der Spuren mit (remapTracks()).
+   * Vorgaben des Songs je Spur (Index), ob sie angezeigt und gehört wird (Feld trackDefaults, gesetzt im Dialog "Spuren"
+   * des Editors). Gilt, solange das Gerät im Mixer nichts anderes eingestellt hat. Beim Umbau der Spuren im Editor
+   * wandern die Einträge mit (remapTracks()).
    * @type {import('./notation.js').TrackDefault[]}
    */
   defaults = [];
@@ -1080,7 +1080,7 @@ export class Player {
     this.timeline = playTimeline(score);
     this.mergedChords = mergeChords(score);
     showSectionNames(score);
-    markWip(score, this.defaults);
+    markWip(score, song.leadsheet?.wip);
     showTrackNames(alphaTab, score);
     this.trackLyrics = new Map(score.tracks.map(track => [track, track.staves
       .flatMap(staff => staff.bars).flatMap(bar => bar.voices).flatMap(voice => voice.beats)
@@ -2056,7 +2056,7 @@ export class Player {
       if(moved !== null) tracks[moved] = entry;
     }
     this.mix.tracks = tracks;
-    // Die Vorgaben des Songs je Spur (Baustelle) wandern mit; neue Spuren haben keine.
+    // Die Vorgaben des Songs je Spur wandern mit; neue Spuren haben keine.
     const defaults = [];
     this.defaults.forEach((entry, index) => {
       const moved = map(index);

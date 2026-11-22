@@ -309,8 +309,10 @@ Je Spur eine Zeile:
   Editor und im Player, im Mixer), sie liefert keine Patterns und Tab-Stellen fürs Leadsheet (Tab-Stellen auf ihr
   fehlen auf dem Blatt, in der Spurauswahl der Tab-Stelle mit Hinweis; kein Vorschlag aus ihr; der Pattern-Streifen im
   Player leitet aus ihr nichts ab), und die Bibliothek filtert unter "Alle Songs" → "🚧 Mit Baustelle" (Kachel mit
-  🚧). Gespeichert wird es mit "Speichern" in den Vorgaben je Spur (`trackDefaults[].wip` in song.json; `markWip()`
-  und `isWip()` in `notation.js`); beim Verschieben, Löschen oder Hinzufügen von Spuren wandert es mit.
+  🚧). Die Baustelle hängt am Namen der Spur: Sie steht in den Angaben für das Leadsheet (`wip` in `sheet.js` und
+  `api/leadsheet.php`; `markWip()` und `isWip()` in `notation.js`), wandert beim Umbenennen und Verschieben mit
+  (`captureTabs()`, `remapTabs()`), fällt mit der Spur weg, ist ein Schritt für Rückgängig und kommt beim Speichern mit
+  in den Verlauf.
 - Instrument – Auswahlliste mit 13 Instrumenten (Schlagzeug nur bei einer Schlagzeugspur, nicht änderbar); es legt den
   Klang fest, die Notenlage ist für alle Spuren gleich (Tab, eine Oktave höher notiert). Der Tooltip nennt die
   Instrumente der Gruppe (z. B. Flöte: Querflöte, Blockflöte, Panflöte …). Liste: `docs/Instrumente.md`
@@ -328,6 +330,8 @@ Je Spur eine Zeile:
   Sechzehntelraster (32tel, Triolen) fallen beim Ableiten ungefragt weg, der Rhythmus heißt dann "vereinfacht".
   - Jeder Rhythmus ist änderbar: Feld oder Klick ins Raster; ein Knopf wechselt das Raster ("in Sechzehnteln", "in
     Achteln"), liegen Anschläge auf Sechzehnteln dazwischen, heißt er "auf Achtel vereinfachen" und lässt sie weg.
+    Wird er dabei gleich einem anderen, bleiben beide stehen (zusammengefasst wird nur beim Öffnen, mit dem Kreispfeil
+    und ausdrücklich: "Rhythmus N übernehmen", "Ähnliche zusammenfassen").
   - "Rhythmus 1 übernehmen" bei ähnlichen (ab 75 % gleicher Rasterplätze) und "Ähnliche zusammenfassen" für alle, beides
     nur, wo dabei kein Anschlag eines Akkordwechsels wegfällt (ausgegraut, wenn es nichts zusammenzufassen gibt); der
     Kreispfeil daneben zeigt nach einer Änderung wieder die Rhythmen, wie sie in der Spur stehen.
@@ -335,9 +339,12 @@ Je Spur eine Zeile:
     gesperrt (Akkorde werden nie verschoben). Schlägt auch die Spur dort nicht an (Haltebogen, Pause), ist es kein
     Fehler.
   - Übernehmen legt die Spur "Rhythmus" als erste Spur an (die Akkorde stehen oben; Akustikgitarre, Capo und Tuning
-    der Spur), je Anschlag der Griff des klingenden Akkords; beginnt ein Takt ohne Anschlag, klingt der letzte Anschlag
-    davor übergebunden weiter (keine Pause); Ein- und Ausblenden der Spur kommen mit (an den Anschlag,
-    der dort klingt); die Akkorde ziehen in die neue Spur. Ohne Katalog
+    der Spur) oder überschreibt die Spur, aus der er abgeleitet ist (Radiobuttons über "Übernehmen": "Spur neu
+    anlegen", Vorgabe, oder "Spur überschreiben"). Die überschriebene behält Stelle, Name (damit Baustelle und Tab-Stellen),
+    Instrument und Mixer-Einstellung; trug sie den Liedtext, zieht er mit. Je Anschlag der Griff des klingenden
+    Akkords; beginnt ein Takt ohne Anschlag, klingt der letzte Anschlag davor übergebunden weiter (keine Pause); Ein-
+    und Ausblenden der Quellspur kommen mit (an den Anschlag, der dort klingt); die Akkorde ziehen in diese Spur. Ein
+    Schritt für Rückgängig. Ohne Katalog
 - × löschen (mit Rückfrage; die letzte Spur bleibt)
 - Spur hinzufügen – Gitarrenspur mit Tuning und Capo des Songs, mit leeren Takten
 - Spur aus GuitarPro-Datei importieren – Datei wählen (gelesen und bereinigt wie beim Import), dann Spur, "Ab Takt der Datei" und "Auf

@@ -709,12 +709,12 @@ export class NoteEditor {
   }
 
   /**
-   * Vorgaben je Spur, wie sie jetzt eingestellt sind: angezeigt (Auge), stumm (Lautsprecher) und Baustelle.
+   * Vorgaben je Spur, wie sie jetzt eingestellt sind: angezeigt (Auge) und stumm (Lautsprecher).
    * @returns {import('./notation.js').TrackDefault[]} in der Reihenfolge der Spuren
    */
   trackDefaults(){
     return this.score.tracks.map(t => ({
-      show: this.trackIndexes.includes(t.index), mute: this.player.trackMix(t.index).mute, wip: edit.isWip(t),
+      show: this.trackIndexes.includes(t.index), mute: this.player.trackMix(t.index).mute,
     }));
   }
 
@@ -1668,8 +1668,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Ändert die Spuren (verschieben, löschen, hinzufügen) und hält die Auswahl der gezeigten Spuren mit, ebenso Lautstärke,
-   * Stumm und Baustelle je Spur (Player.remapTracks()); die Vorgaben je Spur gehören dann zum nächsten Speichern.
+   * Ändert die Spuren (verschieben, löschen, hinzufügen) und hält die Auswahl der gezeigten Spuren mit, ebenso
+   * Lautstärke, Stumm und die Vorgaben je Spur (Player.remapTracks()); die gehören dann zum nächsten Speichern, sie
+   * hängen am Index. (Baustellen und Tab-Stellen hängen am Namen, die zieht change() nach.)
    * @param {function(Score): *} fn Änderung an den Noten
    * @param {number} index betroffene Spur (beim Hinzufügen: Index der neuen)
    * @param {number} step Verschiebung (-1, +1), 0 beim Löschen bzw. Hinzufügen
@@ -1688,9 +1689,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     else if(after < before) map = i => i === index ? null : i > index ? i - 1 : i;
     else if(after > before) map = i => i >= index ? i + 1 : i;
     this.player.remapTracks(map);
-    this.viewChanged = true;
-    edit.markWip(this.score, this.player.defaults);
-    showTrackNames(this.alphaTab, this.score);
+    // Die Vorgaben je Spur hängen am Index: nur wenn der sich verschiebt, gehören sie zum nächsten Speichern.
+    if(step || after !== before) this.viewChanged = true;
     const indexes = [...shown].map(map).filter(i => i !== null && i < after);
     if(after > before) indexes.push(index);
     this.trackIndexes = this.player.orderTracks(indexes.map(i => this.score.tracks[i])).map(t => t.index);
@@ -2168,7 +2168,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     this.player.applyStave(this.score);
     this.fileShortNames = new WeakMap(this.score.tracks.map(t => [t, t.shortName]));
     this.fileStyle = TRACK_NAME_STYLE.map(f => this.score.stylesheet[f]);
-    edit.markWip(this.score, this.player.defaults);
+    edit.markWip(this.score, this.sheet.wip);
     showTrackNames(this.alphaTab, this.score);
     // Gezeigt werden nur Spuren, die es gibt (nach Löschen oder Rückgängig), mindestens eine.
     this.trackIndexes = this.trackIndexes.filter(i => i < this.score.tracks.length);
@@ -2539,22 +2539,22 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Kennzeichnet eine Spur als Baustelle oder nimmt die Kennzeichnung weg (Schalter im Dialog "Spuren"). Gilt sofort
-   * (Spurname, Leadsheet), "Speichern" schreibt es in die Vorgaben des Songs.
+   * Kennzeichnet eine Spur als Baustelle oder nimmt die Kennzeichnung weg (Schalter im Dialog "Spuren"): ein Name mehr
+   * oder weniger in den Angaben für das Leadsheet (Sheet.wip in sheet.js), ein Schritt für "Rückgängig". Gilt sofort
+   * (Spurname, Leadsheet), "Speichern" sichert es mit dem Leadsheet (auch im Verlauf).
    * @param {number} index Index der Spur
    * @param {boolean} wip Baustelle
    * @returns {void}
    */
   setTrackWip(index, wip){
-    const defaults = this.player.defaults;
-    defaults[index] = {show: this.trackIndexes.includes(index), mute: this.player.trackMix(index).mute,
-      ...defaults[index], wip};
-    edit.markWip(this.score, defaults);
+    const name = this.score.tracks[index].name;
+    this.changeSheet(sheet => {
+      sheet.wip = wip ? [...new Set([...sheet.wip, name])] : sheet.wip.filter(n => n !== name);
+    });
+    edit.markWip(this.score, this.sheet.wip);
     showTrackNames(this.alphaTab, this.score);
     this.player.api.renderScore(this.score, this.trackIndexes);
     this.player.renderMixerDialog();
-    this.viewChanged = true;
-    this.updateState();
     this.renderSongPanels();
   }
 
@@ -3241,9 +3241,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         <span class="history-note">${escapeHtml(v.note)}</span>` : ''}</li>`;
     }).join('');
     openOverlay(`<h2>Verlauf</h2>
-      <p class="history-hint">Jedes Speichern hebt den vorigen Stand der Noten und des Leadsheets auf.
-        Geladen wird in den Editor, wie ein Schritt: Mit Rückgängig (Strg+Z) kommt der jetzige Stand zurück.
-        Gespeichert wird erst mit Speichern, dann wandert auch der jetzige Stand in den Verlauf.</p>
+      <p class="history-hint">Das Laden ist ein Bearbeitungsschritt. Mit Rückgängig (Strg+Z) kommt der jetzige Stand zurück.</p>
       ${rows ? `<ul class="history-list">${rows}</ul>` : '<p class="empty">Es gibt noch keine früheren Stände.</p>'}`);
     for(const button of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.history-list [data-version]'))){
       button.addEventListener('click', () => {
