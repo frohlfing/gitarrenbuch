@@ -232,6 +232,26 @@ export function rowBreaks(score, max){
 }
 
 /**
+ * Teilt Zeilen, die nicht passen, in der Mitte (4 → 2 + 2, 5 → 3 + 2): eine Zeile, in der alphaTab selbst umbrechen
+ * musste.
+ * @param {Set<number>} breaks gesetzte Umbrüche (Indizes der Takte, mit denen eine Zeile beginnt)
+ * @param {number[]} starts Takte, mit denen die gezeichneten Zeilen beginnen
+ * @param {number} total Anzahl der Takte
+ * @returns {number[]} zusätzliche Umbrüche
+ */
+export function halveRows(breaks, starts, total){
+  const sorted = [0, ...[...breaks].sort((a, b) => a - b)];
+  const halves = new Set();
+  for(const start of starts){
+    if(breaks.has(start) || !start) continue;
+    const from = sorted.filter(i => i < start).pop();
+    const to = sorted.find(i => i > start) ?? total;
+    halves.add(from + Math.max(1, Math.ceil((to - from) / 2)));
+  }
+  return [...halves].filter(i => !breaks.has(i));
+}
+
+/**
  * Setzt die Zeilenumbrüche aller Spuren (alphaTab bricht nur um, wo alle gezeigten Spuren einen haben). In alphaTex
  * stehen sie nicht, sie gelten nur für die Ansicht.
  * @param {Score} score Noten, werden geändert

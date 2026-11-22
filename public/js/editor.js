@@ -2629,7 +2629,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     save.classList.toggle('ebtn-dirty', this.dirty);
     save.disabled = !this.dirty;
     /** @type {HTMLInputElement} */ (toolbar.querySelector('[data-goto]')).max = String(this.score.masterBars.length);
-    this.fillField(toolbar, '[data-per-row]', this.sheet.barsPerRow || '');
+    // Auch mit Fokus: Rückgängig ändert die Zahl.
+    const perRow = /** @type {HTMLInputElement} */ (toolbar.querySelector('[data-per-row]'));
+    perRow.value = String(this.sheet.barsPerRow || '');
     const fields = this.part('edit-left');
     const value = (name, v) => {
       const input = /** @type {HTMLInputElement} */ (fields.querySelector(`[data-field="${name}"]`));

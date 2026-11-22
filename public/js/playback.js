@@ -9,7 +9,7 @@ import {
 import {
   applyRecordingTempo, applySongMeta, isWip, joinSyllables, loadAlphaTab, lyricsTrack, markedTrackName, markWip,
   mergeChords, parseScore, playbackSyncPoints, QUARTER_TICKS, readScoreInfo, recordingTempoAt, recordingTempoRegion,
-  rowBreaks, setRowBreaks, sortSyncPoints, stringedStaves, syncSegmentAt, timeline,
+  halveRows, rowBreaks, setRowBreaks, sortSyncPoints, stringedStaves, syncSegmentAt, timeline,
 } from './notation.js';
 import {deriveBar, patternGridHtml, similarity, slotCount, TECHNIQUES} from './sheet.js';
 import {buildTextModel, playTimeline, renderTextView} from './textview.js';
@@ -757,8 +757,13 @@ export class Player {
    * @type {Set<number>}
    */
   breaks = new Set();
-  /** Ob die Takte pro Zeile nicht passen und deshalb nur an den Abschnitten umbrochen wird (checkBarsPerRow()). */
-  barsFallback = false;
+  /**
+   * Umbrüche in Zeilen, die nicht passten (checkBarsPerRow()); gelten, bis sich Platz oder Takte ändern.
+   * @type {Set<number>}
+   */
+  splits = new Set();
+  /** Takte und Abschnitts-Umbrüche, für die splits gelten (applyBarsLayout()). */
+  splitsFor = '';
   /** Breite der Noten (px), um eine Änderung zu erkennen. */
   barsWidth = 0;
   /**
@@ -1386,17 +1391,22 @@ export class Player {
     count = Number.isInteger(count) && count > 0 ? count : 0;
     if(count === this.barsPerRow) return;
     this.barsPerRow = count;
-    this.barsFallback = false;
+    this.splits.clear();
     if(render) this.relayoutBars();
   }
 
   /**
-   * Setzt die Zeilenumbrüche für das nächste Zeichnen: an jedem Abschnitt und, ohne Rückfall, alle barsPerRow Takte.
+   * Setzt die Zeilenumbrüche für das nächste Zeichnen: an jedem Abschnitt, alle barsPerRow Takte und in der Mitte von
+   * Zeilen, die nicht passten.
    * @param {Score} score Noten, die gezeichnet werden (werden geändert)
    * @returns {void}
    */
   applyBarsLayout(score){
-    this.breaks = rowBreaks(score, this.barsFallback ? 0 : this.barsPerRow);
+    const breaks = rowBreaks(score, this.barsPerRow);
+    const key = score.masterBars.length + ':' + [...breaks].join(' ');
+    if(key !== this.splitsFor) this.splits.clear();
+    this.splitsFor = key;
+    this.breaks = new Set([...breaks, ...this.splits]);
     setRowBreaks(score, this.breaks);
   }
 
@@ -1412,26 +1422,28 @@ export class Player {
   }
 
   /**
-   * Nach dem Zeichnen: Musste alphaTab vor einem gesetzten Umbruch umbrechen, passen die Takte pro Zeile nicht; dann
-   * wird nur an den Abschnitten umbrochen, bis sich der Platz ändert (retryBarsPerRow()).
+   * Nach dem Zeichnen: Musste alphaTab in einer Zeile selbst umbrechen, wird diese in der Mitte geteilt (halveRows()),
+   * bis sich der Platz ändert (retryBarsPerRow()).
    * @returns {void}
    */
   checkBarsPerRow(){
     const api = this.api;
-    if(!api?.boundsLookup || this.barsPerRow <= 0 || this.barsFallback) return;
-    if(api.boundsLookup.staffSystems.slice(1).every(system => this.breaks.has(system.bars[0].index))) return;
-    this.barsFallback = true;
+    if(!api?.boundsLookup || this.barsPerRow <= 0) return;
+    const starts = api.boundsLookup.staffSystems.map(system => system.bars[0].index);
+    const halves = halveRows(this.breaks, starts, api.score.masterBars.length);
+    if(!halves.length) return;
+    halves.forEach(i => this.splits.add(i));
     // Nicht mitten im Ereignis neu zeichnen.
     setTimeout(() => this.relayoutBars());
   }
 
   /**
-   * Versucht die Takte pro Zeile nach einem Rückfall wieder (andere Breite, Größe oder Spuren).
-   * @returns {boolean} ob es einen Rückfall gab
+   * Versucht die Takte pro Zeile ohne geteilte Zeilen wieder (andere Breite, Größe oder Spuren).
+   * @returns {boolean} ob es geteilte Zeilen gab
    */
   retryBarsPerRow(){
-    if(!this.api || !this.barsFallback) return false;
-    this.barsFallback = false;
+    if(!this.api || !this.splits.size) return false;
+    this.splits.clear();
     this.relayoutBars();
     return true;
   }
