@@ -747,9 +747,12 @@ header p.sub{
 .rh{display:flex; flex-direction:column; gap:.6rem; max-height:min(70vh, 720px); overflow:auto; padding-right:.3rem;}
 .rh-row{border:1px solid var(--rule); border-radius:8px; padding:.5rem .7rem;}
 .rh-row.rh-bad{border-color:var(--danger);}
-/* Kopf je Rhythmus: links "Rhythmus 2:", rechts die Zahl der Takte; darunter als Hinweis, wo er vorkommt */
-.rh-head{display:flex; gap:.6rem; align-items:baseline; justify-content:space-between;}
-.rh-head .rh-bars{text-align:right;}
+/* Kopf je Rhythmus: links "Rhythmus 2:" und "behalten", rechts die Zahl der Takte; darunter als Hinweis, wo er
+   vorkommt */
+.rh-head{display:flex; gap:.6rem 1rem; align-items:baseline;}
+.rh-head .rh-bars{margin-left:auto; text-align:right;}
+.rh-keep{display:inline-flex; align-items:center; gap:.3rem; font-size:.85rem; cursor:pointer;}
+.rh-keep input{margin:0;}
 .rh-hint.rh-where{margin:.1rem 0 .4rem;}
 .rh-edit{display:flex; flex-wrap:wrap; gap:.4rem .8rem; align-items:center;}
 .rh-edit .pgrid td[data-cell]{cursor:pointer;}

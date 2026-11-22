@@ -110,7 +110,7 @@ const FINGER_VALUES = {p: 0, q: 0, i: 1, m: 2, a: 3};
 const STRUM_MIN_NOTES = 3;
 
 /**
- * Anschlagrichtung in alphaTab (PickStroke bzw. BrushType: Up = 1, Down = 2 bei beiden). Als Zahlen, weil
+ * Anschlagrichtung in alphaTab (PickStroke: Up = 1, Down = 2). Als Zahlen, weil
  * deriveBar() ohne das alphaTab-Modul auskommt.
  */
 const UP = 1;
@@ -288,8 +288,8 @@ export function similarity(a, b){
 }
 
 /**
- * Leitet aus einem Takt das Pattern ab: Rasterplatz je Anschlag, Richtung aus dem Anschlagzeichen (sd/su bzw.
- * Brush), ohne Zeichen nach der Lage (gerade Plätze ab, ungerade auf); betonte Noten ergeben Großbuchstaben.
+ * Leitet aus einem Takt das Pattern ab: Rasterplatz je Anschlag, Richtung aus dem Anschlagzeichen (sd/su; ein Brush
+ * zählt nicht), ohne Zeichen nach der Lage (gerade Plätze ab, ungerade auf); betonte Noten ergeben Großbuchstaben.
  * Gezupft: Finger nach der festen Regel aus der Saite (Basssaiten 4–6 Daumen, die tiefste im Takt p, andere q;
  * g-Saite i, b-Saite m, e-Saite a), Pausen auf einem Rasterplatz als x.
  * @param {Bar} bar Takt (aus frisch eingelesenen Noten)
@@ -320,9 +320,10 @@ export function deriveBar(bar, technique){
     if(slot >= slots) continue;
     const accent = beat.notes.some(n => n.accentuated);
     if(technique === 'strumming'){
-      const down = beat.pickStroke === DOWN || beat.brushType === DOWN;
-      const up = beat.pickStroke === UP || beat.brushType === UP;
-      const sign = beat.notes.every(n => n.isDead) ? 'x' : down ? 'd' : up ? 'u' : slot % 2 ? 'u' : 'd';
+      // Richtung nur aus dem Anschlagzeichen (sd/su): Ein Brush (Arpeggio) sagt, wie der Akkord aufgefächert klingt,
+      // nicht, wohin die Schlaghand geht (Guitar-Pro-Transkriptionen haben z. B. Brush ab auf einem "und").
+      const sign = beat.notes.every(n => n.isDead) ? 'x' : beat.pickStroke === DOWN ? 'd' : beat.pickStroke === UP ? 'u'
+        : slot % 2 ? 'u' : 'd';
       tokens[slot] = accent ? sign.toUpperCase() : sign;
     } else {
       // Finger nach der festen Regel: Basssaiten (4–6) Daumen, tiefste im Takt p, andere q; g i, b m, e a.
@@ -650,10 +651,8 @@ export function suggestPatterns(score, trackIndex, catalog){
  * @property {SheetLink[]} links Links
  * @property {string} instructions Hinweise zur Spielweise (Markdown)
  * @property {SheetLayout} layout wie das Blatt gesetzt wird
- * @property {string[]} wip Baustellen: Namen der Spuren, an denen noch gearbeitet wird (Schalter im Dialog "Spuren").
- *   Sie tragen im Editor und im Player ein Zeichen (WIP_MARK), liefern keine Patterns und Tab-Stellen fürs Blatt, und
- *   die Bibliothek kann nach Songs mit Baustelle filtern (markWip() in notation.js). Wie die Tab-Stellen hängen sie am
- *   Namen und wandern beim Umbenennen mit (captureTabs(), remapTabs()).
+ * @property {number} barsPerRow Takte pro Zeile in den Noten, gezählt ab jedem Abschnitt (rowBreaks()); 0 ohne
+ * @property {string[]} wip Baustellen: Namen der Spuren, an denen noch gearbeitet wird
  */
 
 /**
@@ -714,7 +713,8 @@ export function normalizeSheet(data){
     if(key === 'font' ? FONT_SIZES.includes(value) : typeof value === typeof preset) layout[key] = value;
   }
   const wip = Array.isArray(data?.wip) ? [...new Set(data.wip.filter(n => typeof n === 'string' && n))] : [];
-  return {patterns, tabs, cuts, chords, links, instructions, layout, wip};
+  const barsPerRow = Number.isInteger(data?.barsPerRow) && data.barsPerRow > 0 ? data.barsPerRow : 0;
+  return {patterns, tabs, cuts, chords, links, instructions, layout, wip, barsPerRow};
 }
 
 /**
@@ -728,8 +728,7 @@ export function normalizeSheet(data){
 /**
  * Hält die Tab-Stellen fest, bevor sich Takte oder Spuren ändern: Takte und Spur als Objekte des Modells. Die bleiben
  * bei Änderungen am Modell dieselben (eingefügte sind neue, gelöschte fehlen danach), so findet remapTabs() die
- * neuen Indizes und Namen. Die ersetzten Takte (SheetCut) hängen genauso am Index und wandern mit, die Baustellen
- * (Sheet.wip) am Namen der Spur.
+ * neuen Indizes und Namen. Ersetzte Takte hängen genauso am Index, Baustellen am Namen der Spur.
  * @param {Sheet} sheet Angaben
  * @param {Score} score Noten vor der Änderung
  * @returns {SheetCapture} Stand vor der Änderung
@@ -747,8 +746,7 @@ export function captureTabs(sheet, score){
  * Zieht die Tab-Stellen nach einer Änderung am Modell nach (siehe captureTabs()): Anfang und Ende sind der erste
  * bzw. letzte Takt des Bereichs, der noch da ist; ist keiner mehr da, fällt die Stelle weg. Die Spur behält ihren
  * Platz in der Angabe auch umbenannt; gelöscht bleibt ihr Name stehen (der Generator nimmt dann die Akkordspur).
- * Baustellen folgen ihrer Spur ebenso unter neuem Namen; mit der Spur gelöscht fällt auch die Baustelle weg, außer eine
- * andere Spur trägt danach ihren Namen (die ersetzte).
+ * Baustellen folgen ihrer Spur; mit ihr gelöscht fallen sie weg, außer eine andere Spur trägt danach ihren Namen.
  * @param {Sheet} sheet Angaben, werden geändert
  * @param {Score} score Noten nach der Änderung (dasselbe Modell)
  * @param {SheetCapture} captured Stand davor
@@ -766,7 +764,6 @@ export function remapTabs(sheet, score, captured){
     const kept = bars.map(mb => index.get(mb)).filter(i => i !== undefined);
     return kept.length ? [{...cut, from: Math.min(...kept), to: Math.max(...kept)}] : [];
   });
-  // Umbenannt trägt die Spur den neuen Namen; ersetzt (Rhythmus ableiten auf eine vorhandene Spur) trägt die neue ihn.
   sheet.wip = [...new Set(captured.wip.map(t => t.name).filter(name => score.tracks.some(t => t.name === name)))];
 }
 
@@ -864,8 +861,7 @@ export function sections(score){
 }
 
 /**
- * Spur einer Tab-Stelle: die mit dem Namen, sonst die Akkordspur, sonst die erste mit Saiten. Baustellen (isWip())
- * liefern keine Tab-Stellen: Ist die Spur mit dem Namen eine, gibt es keine; als Ersatz kommen sie nicht in Frage.
+ * Spur einer Tab-Stelle: die mit dem Namen, sonst die Akkordspur, sonst die erste mit Saiten; nie eine Baustelle.
  * @param {Score} score Noten
  * @param {string} name Name aus den Angaben (tabs[].track)
  * @returns {?Track} null ohne Spur mit Saiten bzw. bei einer Baustelle
@@ -880,7 +876,7 @@ export function tabTrack(score, name){
 }
 
 /**
- * Ob eine Tab-Stelle auf einer Baustelle liegt (Spur mit dem Namen ist isWip()); dann steht sie nicht auf dem Blatt.
+ * Ob eine Tab-Stelle auf einer Baustelle liegt (dann steht sie nicht auf dem Blatt).
  * @param {Score} score Noten
  * @param {{track: string}} tab Tab-Stelle
  * @returns {boolean}
@@ -1132,7 +1128,7 @@ export function renderInstructions(alphaTab, score, sheet, catalog, library, opt
   }).join('');
   const chords = sheetChords(score, sheet, library).filter(c => c.shown)
     .map(c => chordDiagramSvg(c.name, c.grip)).join('');
-  // Die Tab selbst zeichnet alphaTab nachträglich in den Platzhalter. Tab-Stellen auf einer Baustelle fehlen.
+  // Die Tab selbst zeichnet alphaTab nachträglich in den Platzhalter.
   const tabs = sheet.tabs.map((tab, k) => {
     if(tabOnWip(score, tab)) return '';
     const track = tabTrack(score, tab.track);
@@ -2258,7 +2254,7 @@ const WHEN_PLACEHOLDER = 'Wann? z. B. Strophe, Refrain ab dem 2. Mal';
  * Spuren mit Saiten (für Tabs und Patterns).
  * @param {Score} score Noten
  * @param {boolean} [six] nur mit sechs Saiten (Patterns)
- * @param {boolean} [wip] auch Baustellen (isWip()); ohne, wo Tab-Stellen und Patterns fürs Blatt gesucht werden
+ * @param {boolean} [wip] auch Baustellen
  * @returns {import('../../types/alphatab').model.Track[]}
  */
 function stringedTracks(score, six = false, wip = true){

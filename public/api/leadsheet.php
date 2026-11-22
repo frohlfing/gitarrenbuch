@@ -13,7 +13,8 @@
  *     "instructions": "Markdown",
  *     "layout": {"twoPages": true, "columns": false, "font": 12, "compactTabs": false, "smallChords": false,
  *                "tabCounts": false, "mergeSections": true},
- *     "wip": ["picking"]
+ *     "wip": ["picking"],
+ *     "barsPerRow": 4
  *   }
  *
  * patterns: die Patterns des Songs (Verweis auf den Katalog data/patterns.json) mit Freitext, wann sie gespielt
@@ -29,6 +30,8 @@
  * Griffbilder klein, Zählzeiten unter den Tabs, gleiche Abschnitte nur einmal); gespeichert nur, wenn es von LEADSHEET_LAYOUT abweicht.
  * wip: Baustellen, die Namen der Spuren, an denen noch gearbeitet wird (Schalter im Dialog "Spuren" des Editors; wie
  * bei tabs zieht der Editor den Namen beim Umbenennen nach); nur gespeichert, wenn es welche gibt.
+ * barsPerRow: Takte pro Zeile in den Noten, gezählt ab jedem Abschnitt (Feld in der Leiste des Editors); nur
+ * gespeichert, wenn gesetzt.
  *
  * Ein eigener Endpunkt statt PUT api/songs.php: Der Editor speichert die Angaben zusammen mit den Noten, das Formular
  * "Stammdaten" getrennt davon; so überschreibt keiner die Änderungen des anderen.
@@ -62,6 +65,13 @@ const LEADSHEET_MAX_ITEMS = 50;
  * @var int
  */
 const LEADSHEET_MAX_BAR = 4999;
+
+/**
+ * Höchstzahl der Takte pro Zeile (wie BARS_PER_ROW_MAX in js/editor.js).
+ *
+ * @var int
+ */
+const LEADSHEET_BARS_PER_ROW_MAX = 12;
 
 /**
  * Kürzt einen Freitext und prüft seine Länge.
@@ -189,6 +199,11 @@ function validate_leadsheet(array $data): array
         }
     }
 
+    $barsPerRow = $data['barsPerRow'] ?? 0;
+    if (!is_int($barsPerRow) || $barsPerRow < 0 || $barsPerRow > LEADSHEET_BARS_PER_ROW_MAX) {
+        json_error(400, 'barsPerRow muss eine ganze Zahl von 0 bis ' . LEADSHEET_BARS_PER_ROW_MAX . ' sein');
+    }
+
     return [
         'patterns' => $cleanPatterns,
         'tabs' => $cleanTabs,
@@ -198,6 +213,7 @@ function validate_leadsheet(array $data): array
         'instructions' => leadsheet_text($data['instructions'] ?? '', 'instructions', LEADSHEET_TEXT_MAX),
         'layout' => leadsheet_layout($data['layout'] ?? null),
         'wip' => $cleanWip,
+        'barsPerRow' => $barsPerRow,
     ];
 }
 
@@ -267,6 +283,7 @@ try {
                 'layout' => array_merge(LEADSHEET_LAYOUT,
                     array_intersect_key(is_array($data['layout'] ?? null) ? $data['layout'] : [], LEADSHEET_LAYOUT)),
                 'wip' => is_array($data['wip'] ?? null) ? array_values($data['wip']) : [],
+                'barsPerRow' => is_int($data['barsPerRow'] ?? null) ? $data['barsPerRow'] : 0,
             ];
             json_response(200, $result);
 
@@ -284,12 +301,16 @@ try {
             if (!$data['cuts']) {
                 unset($data['cuts']);
             }
-            // Ebenso die Baustellen.
+            // Ebenso die Baustellen und die Takte pro Zeile.
             if (!$data['wip']) {
                 unset($data['wip']);
             }
+            if (!$data['barsPerRow']) {
+                unset($data['barsPerRow']);
+            }
             if (!$data['patterns'] && !$data['tabs'] && !isset($data['cuts']) && !$data['chords'] && !$data['links'] && $data['instructions'] === ''
-                && !isset($data['layout']) && !isset($data['wip'])) {
+                && !isset($data['layout']) && !isset($data['wip'])
+                && !isset($data['barsPerRow'])) {
                 unset($song['leadsheet']);
             } else {
                 $song['leadsheet'] = $data;

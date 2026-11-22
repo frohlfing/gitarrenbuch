@@ -198,9 +198,7 @@ function fixTripletFeel(alphaTab, score){
 }
 
 /**
- * Spuren ohne Saiten (Gesang, Orgel …): Jede Spur ist Gitarren-Tab, ihr Tonraum ist der des Griffbretts. Solche Spuren
- * werden Tab mit Standard-Tuning und wandern dabei um ganze Oktaven ins Griffbrett (toGuitarTab()); klingt die Spur
- * dadurch anders als im Original, steht es als Datenverlust im Protokoll.
+ * Spuren ohne Saiten (Gesang, Orgel …) werden Gitarren-Tab (toGuitarTab()); um Oktaven verschoben ist Datenverlust.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
@@ -247,8 +245,7 @@ function fixTuningOctaves(alphaTab, score){
 
 /**
  * Instrument und Notenlage: Jede Spur bekommt das Instrument nach den Regeln in docs/Instrumente.md (instrumentOf())
- * mit seinem Klang, und jedes Notensystem die Notenlage für Tab (notationPitch(), gleich welches Instrument). Beides ist
- * kein Datenverlust: Noten, Tabs und Akkorde bleiben, nur Wiedergabe und Darstellung ändern sich.
+ * und die Notenlage für Tab (notationPitch()). Beides ist kein Datenverlust.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen

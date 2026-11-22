@@ -8,6 +8,8 @@
  *   mit Anteil, z. B. "Verse (12/48 Takte), Chorus").
  * - Die Rhythmen sind durchnummeriert. "Ähnliche zusammenfassen" übernimmt für jeden Rhythmus den häufigeren, dem er
  *   ähnlich ist (SIMILAR); der Knopf daneben (Kreispfeil) stellt nach einer Änderung die abgeleiteten wieder her.
+ * - "Auf behaltene verteilen" gibt jeden Takt der übrigen Rhythmen dem ähnlichsten behaltenen (Häkchen), der dort
+ *   passt (spreadToKept()).
  * - Jeder Rhythmus lässt sich ändern (Feld oder Klick ins Raster: nichts → ab → auf → gedämpft; Klick auf die
  *   Zählzeit betont). Ist ein anderer Rhythmus ähnlich (SIMILAR) und fällt mit ihm
  *   kein Anschlag eines Akkordwechsels weg, bietet ein Knopf an, ihn zu übernehmen.
@@ -15,9 +17,8 @@
  *   dort eine rote Warnung, und "Übernehmen" ist gesperrt: Akkorde werden nie verschoben. Schlägt auch die Quellspur
  *   dort nicht an (Haltebogen, Pause), ist das kein Fehler.
  * - Übernehmen legt die Spur "Rhythmus" als erste Spur an (die Akkorde stehen oben; Akustikgitarre, Capo und Tuning
- *   der Quellspur) oder überschreibt die Quellspur (Radiobuttons darüber; sie behält Stelle, Name und Instrument,
- *   ihr Liedtext zieht mit), schreibt je Takt seinen Rhythmus mit dem Griff des Akkords, der dann klingt
- *   (fillBar() in sheet.js), übernimmt Ein- und Ausblenden der Quellspur (an den Anschlag, der dort klingt) und zieht
+ *   der Quellspur) oder überschreibt die Quellspur, schreibt je Takt seinen Rhythmus mit dem Griff des Akkords, der
+ *   dann klingt (fillBar() in sheet.js), übernimmt Ein- und Ausblenden der Quellspur (an den Anschlag, der dort klingt) und zieht
  *   die Akkorde in diese Spur (sie wird die Akkordspur). Ein Schritt für "Rückgängig".
  */
 
@@ -49,6 +50,7 @@ const TAKE_MAX = 2;
  * @property {boolean} derived false: In der Quellspur hat keiner dieser Takte Anschläge
  * @property {boolean} simplified In einigen Takten lagen Anschläge neben dem Sechzehntelraster (32tel, Triolen); sie
  *   sind weggelassen (simplifiedBar())
+ * @property {boolean} [keep] behalten (spreadToKept())
  */
 
 /**
@@ -71,7 +73,8 @@ const SIXTEENTH_TICKS = WHOLE_TICKS / 16;
 /**
  * Rhythmus eines Takts, wenn deriveBar() keinen findet, weil Anschläge neben dem Sechzehntelraster liegen (32tel,
  * Triolen, Verzierungen): Nur die Anschläge auf Sechzehnteln zählen, die anderen fallen ungefragt weg. Richtung wie in
- * deriveBar(): aus dem Anschlagzeichen, sonst gerade Plätze ab, ungerade auf; nur gedämpfte Töne ergeben x.
+ * deriveBar(): aus dem Anschlagzeichen (sd/su, kein Brush), sonst gerade Plätze ab, ungerade auf; nur gedämpfte Töne
+ * ergeben x.
  * @param {import('../../types/alphatab').model.Bar} bar Takt
  * @param {string} timeSignature Taktart
  * @returns {?{grid: number, tokens: string[]}} null ohne Anschlag auf dem Raster
@@ -87,10 +90,9 @@ function simplifiedBar(bar, timeSignature){
   for(const {beat, start} of hits){
     const slot = start / (WHOLE_TICKS / grid);
     if(slot >= tokens.length) continue;
-    // Anschlagrichtung in alphaTab: Up = 1, Down = 2 (PickStroke wie BrushType)
-    const down = beat.pickStroke === 2 || beat.brushType === 2;
-    const up = beat.pickStroke === 1 || beat.brushType === 1;
-    const sign = beat.notes.every(n => n.isDead) ? 'x' : down ? 'd' : up ? 'u' : slot % 2 ? 'u' : 'd';
+    // Anschlagrichtung in alphaTab: PickStroke Up = 1, Down = 2; ein Brush zählt nicht (wie in deriveBar()).
+    const sign = beat.notes.every(n => n.isDead) ? 'x' : beat.pickStroke === 2 ? 'd' : beat.pickStroke === 1 ? 'u'
+      : slot % 2 ? 'u' : 'd';
     tokens[slot] = beat.notes.some(n => n.accentuated) ? sign.toUpperCase() : sign;
   }
   return {grid, tokens};
@@ -136,8 +138,7 @@ function sortRows(rows){
 }
 
 /**
- * Fasst Rhythmen mit gleichem Pattern zusammen (beim Übernehmen eines anderen Rhythmus; beim Bearbeiten nicht, siehe
- * RhythmDialog.click()).
+ * Fasst Rhythmen mit gleichem Pattern zusammen (beim Übernehmen eines anderen Rhythmus).
  * @param {RhythmRow[]} rows Rhythmen
  * @returns {RhythmRow[]}
  */
@@ -151,9 +152,10 @@ function mergeRows(rows){
       for(const bar of row.bars) known.bars.add(bar);
       known.derived ||= row.derived;
       known.simplified ||= row.simplified;
+      known.keep ||= row.keep;
     } else {
       merged.set(key, {bars: new Set(row.bars), pattern: {...row.pattern}, derived: row.derived,
-        simplified: row.simplified});
+        simplified: row.simplified, keep: row.keep});
     }
   }
   return sortRows([...merged.values()]);
@@ -175,11 +177,76 @@ export function mergeSimilar(rows, fits = () => true){
     if(target){
       for(const bar of row.bars) target.bars.add(bar);
       target.simplified ||= row.simplified;
+      target.keep ||= row.keep;
     } else {
-      kept.push({bars: new Set(row.bars), pattern: {...row.pattern}, derived: row.derived, simplified: row.simplified});
+      kept.push({bars: new Set(row.bars), pattern: {...row.pattern}, derived: row.derived, simplified: row.simplified,
+        keep: row.keep});
     }
   }
   return sortRows(kept);
+}
+
+/**
+ * Verteilt die Takte der übrigen Rhythmen auf die behaltenen: jeder an den ähnlichsten mit gleicher Taktart, der dort
+ * passt (fits), sonst bleibt er. Ebenso Takte eines behaltenen, in denen er selbst nicht passt. Takte ohne Anschläge
+ * bleiben.
+ * @param {RhythmRow[]} rows Rhythmen, häufigste zuerst
+ * @param {function(Pattern, Set<number>): boolean} fits ob ein Rhythmus in diesen Takten passt
+ * @returns {RhythmRow[]}
+ */
+export function spreadToKept(rows, fits){
+  const copy = row => ({...row, bars: new Set(row.bars), pattern: {...row.pattern}});
+  const kept = rows.filter(r => r.keep).map(copy);
+  /**
+   * Bester behaltener Rhythmus für einen Takt.
+   * @param {number} bar Takt
+   * @param {Pattern} pattern Rhythmus, den der Takt bisher hat (zum Vergleich)
+   * @param {?RhythmRow} [except] dieser nicht (der eigene)
+   * @returns {?RhythmRow} null, wenn keiner passt
+   */
+  const bestFor = (bar, pattern, except = null) => {
+    const one = new Set([bar]);
+    let best = null;
+    let bestValue = -1;
+    for(const k of kept){
+      if(k === except || k.pattern.timeSignature !== pattern.timeSignature || !fits(k.pattern, one)) continue;
+      const value = similarity(k.pattern, pattern);
+      if(value > bestValue){
+        best = k;
+        bestValue = value;
+      }
+    }
+    return best;
+  };
+  /** @type {RhythmRow[]} */
+  const rest = [];
+  for(const row of kept){
+    for(const bar of [...row.bars]){
+      if(fits(row.pattern, new Set([bar]))) continue;
+      const best = bestFor(bar, row.pattern, row);
+      if(!best) continue;
+      row.bars.delete(bar);
+      best.bars.add(bar);
+    }
+  }
+  for(const row of rows.filter(r => !r.keep)){
+    if(!row.derived){
+      rest.push(copy(row));
+      continue;
+    }
+    const left = new Set();
+    for(const bar of row.bars){
+      const best = bestFor(bar, row.pattern);
+      if(best){
+        best.bars.add(bar);
+        best.simplified ||= row.simplified;
+      } else {
+        left.add(bar);
+      }
+    }
+    if(left.size) rest.push({...copy(row), bars: left});
+  }
+  return sortRows([...kept.filter(r => r.bars.size), ...rest]);
 }
 
 /**
@@ -318,9 +385,8 @@ export function rhythmWarnings(score, row, events, attacks){
 /**
  * Schreibt die Rhythmen in eine Spur: Kopie der Quellspur (Capo, Tuning) ohne Inhalt, je Takt sein Rhythmus mit den
  * Griffen der klingenden Akkorde (fillBar()), Takte ohne Rhythmus als Pausen; danach ziehen die Akkorde in diese Spur.
- * Ohne Ziel kommt sie als neue Spur "Rhythmus" (Akustikgitarre) an die erste Stelle (die Akkorde stehen oben). Mit Ziel
- * ersetzt sie die Zielspur: gleiche Stelle, gleicher Name (daran hängen Baustelle und Tab-Stellen), gleiches
- * Instrument; trug die Zielspur den Liedtext, zieht er mit um.
+ * Ohne Ziel kommt sie als neue Spur "Rhythmus" an die erste Stelle, mit Ziel ersetzt sie die Zielspur (Stelle, Name,
+ * Instrument und Liedtext bleiben).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {string} tex alphaTex der Noten (Stand vor der Änderung)
  * @param {Score} score dieselben Noten als Modell, werden geändert
@@ -434,6 +500,7 @@ export class RhythmDialog {
     const html = `<h2>Rhythmus ableiten aus „${escapeHtml(trackName(this.score.tracks[this.index]))}“</h2>
       <div class="rh-tools">
         <button type="button" class="ebtn ebtn-text" id="rhMerge">Ähnliche zusammenfassen</button>
+        <button type="button" class="ebtn ebtn-text" id="rhSpread">Auf behaltene verteilen</button>
         <button type="button" class="ebtn" id="rhReset" disabled title="Rhythmen anzeigen, wie sie in der Spur stehen"
           aria-label="Rhythmen anzeigen, wie sie in der Spur stehen">${svgIcon('reload')}</button>
         <span class="efield-hint rh-count" id="rhCount"></span>
@@ -444,9 +511,7 @@ export class RhythmDialog {
       <div class="rh" id="rhBox"></div>
       <div class="rh-target" role="radiogroup" aria-label="Wohin der Rhythmus kommt">
         <label><input type="radio" name="rhTarget" value="new" checked> Spur neu anlegen</label>
-        <label title="${escapeHtml(`„${trackName(this.score.tracks[this.index])}“ bekommt den Rhythmus `
-          + '(Stelle, Name und Instrument bleiben)')}"><input type="radio" name="rhTarget" value="overwrite">
-          Spur überschreiben</label>
+        <label><input type="radio" name="rhTarget" value="overwrite"> Spur überschreiben</label>
       </div>
       <div class="struct-actions">
         <button class="btn btn-primary" type="button" id="rhApply">Übernehmen</button>
@@ -460,6 +525,11 @@ export class RhythmDialog {
     document.getElementById('rhCancel').addEventListener('click', closeOverlay);
     document.getElementById('rhMerge').addEventListener('click', () => {
       this.rows = mergeSimilar(this.rows, this.fits);
+      this.changed = true;
+      this.render();
+    });
+    document.getElementById('rhSpread').addEventListener('click', () => {
+      this.rows = spreadToKept(this.rows, this.fits);
       this.changed = true;
       this.render();
     });
@@ -488,6 +558,8 @@ export class RhythmDialog {
       const canHalve = row.pattern.grid === 16 && [...row.pattern.strokes].every((t, i) => i % 2 === 0 || t === '.');
       return `<div class="rh-row${warnings.length ? ' rh-bad' : ''}">
         <div class="rh-head"><span class="rh-title">Rhythmus ${k + 1}:</span>
+          <label class="rh-keep" title="Beim Verteilen behalten"><input type="checkbox"
+            data-rh-keep="${k}"${row.keep ? ' checked' : ''}> behalten</label>
           <span class="efield-hint rh-bars">${n} ${n === 1 ? 'Takt' : 'Takte'}${
             row.derived ? '' : ', in der Spur ohne Anschläge'}</span></div>
         <p class="rh-hint rh-where">${
@@ -513,6 +585,8 @@ export class RhythmDialog {
     document.getElementById('rhCount').textContent = `${n} ${n === 1 ? 'Rhythmus' : 'Rhythmen'}`;
     /** @type {HTMLButtonElement} */ (document.getElementById('rhMerge')).disabled =
       mergeSimilar(this.rows, this.fits).length === n;
+    /** @type {HTMLButtonElement} */ (document.getElementById('rhSpread')).disabled =
+      !this.rows.some(r => r.keep) || !this.rows.some(r => !r.keep && r.derived);
     /** @type {HTMLButtonElement} */ (document.getElementById('rhReset')).disabled = !this.changed;
     const apply = /** @type {HTMLButtonElement} */ (document.getElementById('rhApply'));
     apply.disabled = blocked || !this.rows.length;
@@ -535,9 +609,8 @@ export class RhythmDialog {
   }
 
   /**
-   * Klick ins Raster (Zeichen wechseln, Betonung), auf das Raster oder auf "Rhythmus aus … übernehmen". Nur das
-   * Übernehmen fasst gleiche Rhythmen zusammen (das ist sein Zweck); wird ein Rhythmus beim Bearbeiten zufällig gleich
-   * einem anderen, bleiben beide stehen.
+   * Klick ins Raster (Zeichen wechseln, Betonung), auf das Raster oder auf "Rhythmus aus … übernehmen". Beim Bearbeiten
+   * wird nicht zusammengefasst.
    * @param {HTMLElement} target angeklicktes Element
    * @returns {void}
    */
@@ -576,12 +649,17 @@ export class RhythmDialog {
   }
 
   /**
-   * Getipptes Feld übernehmen: nur d, u, x (groß = betont) und Punkt, so viele wie Rasterplätze; sonst bleibt der
-   * vorige Rhythmus.
+   * Geändertes Feld übernehmen: "behalten" oder der getippte Rhythmus (nur d, u, x, groß = betont, und Punkt, so viele
+   * wie Rasterplätze; sonst bleibt der vorige).
    * @param {HTMLInputElement} input Feld
    * @returns {void}
    */
   typed(input){
+    if(input.dataset.rhKeep !== undefined){
+      this.rows[Number(input.dataset.rhKeep)].keep = input.checked;
+      this.render();
+      return;
+    }
     if(input.dataset.rhStrokes === undefined) return;
     const pattern = this.rows[Number(input.dataset.rhStrokes)].pattern;
     const value = input.value.replace(/\s+/g, '');
@@ -596,8 +674,7 @@ export class RhythmDialog {
   }
 
   /**
-   * Legt die Spur an bzw. überschreibt die Quellspur (Radiobuttons über "Übernehmen"; ein Schritt für "Rückgängig")
-   * und schließt den Dialog.
+   * Legt die Spur an bzw. überschreibt die Quellspur (ein Schritt für "Rückgängig") und schließt den Dialog.
    * @returns {Promise<void>}
    */
   async apply(){
@@ -609,7 +686,6 @@ export class RhythmDialog {
     /** @type {?{track: import('../../types/alphatab').model.Track, gripless: string[]}} */
     let result = null;
     closeOverlay();
-    // Neu: eine Spur mehr an Stelle 0. Überschrieben: gleich viele, die Spur behält ihre Stelle.
     ed.changeTracks(score => {
       result = applyRhythm(ed.alphaTab, ed.tex, score, this.index, this.rows, library, target);
     }, target ?? 0, 0);

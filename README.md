@@ -415,6 +415,12 @@ angezeigt) und `mute` (stumm). Gesetzt wird sie mit Auge und Lautsprecher im Dia
 mit "Speichern". Sie gilt als Vorgabe: Was ein Gerät im Mixer einstellt, wird dort gemerkt (`localStorage`) und hat
 Vorrang. Fehlt sie in einem Request, bleibt die gespeicherte; eine leere Liste löscht sie.
 
+**Zeilen der Noten:** Jeder Abschnitt beginnt eine neue Zeile. `leadsheet.barsPerRow` (1 bis 12,
+`api/leadsheet.php`) setzt zusätzlich alle so viele Takte einen Umbruch, gezählt ab jedem Abschnitt (`rowBreaks()` in
+`notation.js`, als `track.lineBreaks` von alphaTab, nicht in alphaTex). Reicht der Platz nicht, gelten nur die Umbrüche
+an den Abschnitten (`Player.checkBarsPerRow()`). Gesetzt wird die Zahl im Feld "Takte pro Zeile" des
+Bearbeitungsmodus, mit Speichern, Rückgängig und Verlauf (`docs/Editor.md`).
+
 **Baustelle:** Spuren, an denen noch gearbeitet wird (Schalter im Dialog "Spuren"), stehen mit ihrem Namen in
 `leadsheet.wip` (`api/leadsheet.php`), nicht in `trackDefaults`: Wie die Tab-Stellen hängen sie am Namen, wandern beim
 Umbenennen mit, gehören zu Rückgängig/Wiederholen und kommen mit in den Verlauf. Wirkung: 🚧 am Spurnamen (Editor,
@@ -937,8 +943,9 @@ in "Chords" `onLoopTick()` mit den Zeiten der Textstellen). Ein weiterer Klick b
 hebt sie auf; ohne Auswahl wiederholt sich der ganze Song. Die **Geschwindigkeit** ist ein Knopf mit dem Material-Symbol 
 "directions_run" (Läufer); unter 100 % steht der Wert daneben ("50 %"). Ein Klick öffnet darüber die Liste: 25 %, dann 
 50 bis 100 % in Zehnerschritten (ein gespeicherter anderer Wert springt auf den nächsten in der Liste); ein Klick 
-daneben schließt sie. Beim Abspielen folgt die Ansicht dem Cursor. Der Bildschirm bleibt an, solange ein Song offen ist 
-(für das Smartphone am Notenständer; Text und Akkorde liest man auch ohne Abspielen). Gescrollt wird mit eigenem Handler 
+daneben schließt sie. Beim Abspielen folgt die Ansicht dem Cursor. Der Bildschirm bleibt an, solange abgespielt wird 
+(Screen Wake Lock: `requestWakeLock()` beim Start, `releaseWakeLock()` bei Pause, Stopp und Ende in `onStateChanged()`; 
+sonst käme der PC nie in den Standby, und der Monitor bliebe an, solange ein Song offen ist). Gescrollt wird mit eigenem Handler 
 (`scrollToSystem()` in `js/playback.js`): beim Wechsel in eine neue Notenzeile, die Zeile knapp unter der festen 
 Kopfzeile; in der ersten Zeile ganz nach oben, damit Hinweise und Griffbilder zu sehen sind (alphaTab scrollte auch dort 
 hin, schon beim Laden). Die Seite springt immer, auch beim Abspielen, statt gleitend zu scrollen. Die aktuelle Zeile 

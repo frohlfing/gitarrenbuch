@@ -188,12 +188,11 @@ export function trackName(track){
 /** Zeichen einer Baustelle hinter dem Spurnamen. */
 export const WIP_MARK = '🚧';
 
-/** Spuren, die Baustelle sind (markWip()); hängt an den Spuren eines eingelesenen Modells. */
+/** Spuren, die Baustelle sind (markWip()). */
 const WIP_TRACKS = new WeakSet();
 
 /**
- * Merkt sich an den Spuren eines eingelesenen Modells, welche Baustelle sind: die mit einem der Namen aus den Angaben
- * für das Leadsheet (Sheet.wip in sheet.js). Nach jedem Einlesen nötig, die Noten kennen die Angabe nicht.
+ * Merkt sich, welche Spuren Baustelle sind (Namen aus Sheet.wip); nach jedem Einlesen nötig.
  * @param {Score} score Noten
  * @param {?string[]} [names] Namen der Spuren, die Baustelle sind
  * @returns {void}
@@ -212,6 +211,35 @@ export function markWip(score, names){
  */
 export function isWip(track){
   return !!track && WIP_TRACKS.has(track);
+}
+
+/**
+ * Takte, mit denen eine neue Zeile der Noten beginnt: jeder Abschnitt, mit Takten pro Zeile auch alle max Takte ab dem
+ * Abschnittsanfang.
+ * @param {Score} score Noten
+ * @param {number} max Takte pro Zeile; 0 nur an den Abschnitten
+ * @returns {Set<number>} Indizes der Takte
+ */
+export function rowBreaks(score, max){
+  /** @type {Set<number>} */
+  const breaks = new Set();
+  let start = 0;
+  for(const mb of score.masterBars){
+    if(mb.section) start = mb.index;
+    if(mb.index && (mb.index === start || max > 0 && (mb.index - start) % max === 0)) breaks.add(mb.index);
+  }
+  return breaks;
+}
+
+/**
+ * Setzt die Zeilenumbrüche aller Spuren (alphaTab bricht nur um, wo alle gezeigten Spuren einen haben). In alphaTex
+ * stehen sie nicht, sie gelten nur für die Ansicht.
+ * @param {Score} score Noten, werden geändert
+ * @param {Set<number>} breaks Indizes der Takte, mit denen eine Zeile beginnt (rowBreaks())
+ * @returns {void}
+ */
+export function setRowBreaks(score, breaks){
+  for(const track of score.tracks) track.lineBreaks = new Set(breaks);
 }
 
 /**
@@ -705,20 +733,15 @@ export function scoreDuration(alphaTab, score){
   return alphaTab.midi.MidiFileGenerator.generateSyncPoints(score, true).at(-1)?.synthTime ?? 0;
 }
 
-/**
- * Lautstärke jeder Spur (playbackInfo.volume von alphaTab, 0–16, in alphaTex `volume`). Wie laut etwas klingt, regelt
- * allein der Mixer; bei gleicher Einstellung klingen alle Songs und Spuren gleich laut (normalizeLevels()).
- */
+/** Lautstärke jeder Spur (playbackInfo.volume, 0–16); wie laut etwas klingt, regelt der Mixer. */
 export const TRACK_VOLUME = 12;
 
-/** Panorama jeder Spur (playbackInfo.balance von alphaTab, 0–16, in alphaTex `balance`): Mitte. */
+/** Panorama jeder Spur (playbackInfo.balance, 0–16): Mitte. */
 export const TRACK_BALANCE = 8;
 
 /**
- * Gleiche Lautstärke für alle: jede Spur TRACK_VOLUME und TRACK_BALANCE, jeder Schlag die Dynamik forte (die Vorgabe von
- * alphaTab für neue Schläge, in alphaTex `dy f`); Lautstärke- und Panorama-Automationen fallen weg. Akzente und Ghost
- * Notes bleiben, sie gehören zur Spielweise. Dynamikzeichen werden ohnehin nicht gezeigt (HIDDEN_SCORE_ELEMENTS in
- * playback.js, HIDDEN_ELEMENTS in sheet.js).
+ * Gleiche Lautstärke für alle: jede Spur TRACK_VOLUME und TRACK_BALANCE, jeder Schlag forte, ohne Lautstärke- und
+ * Panorama-Automationen. Akzente und Ghost Notes bleiben.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {void}
@@ -1003,7 +1026,8 @@ export function applyRecordingTempo(alphaTab, midi, points){
  * nur Tabs daran ab, ganze Takte bleiben leer) und keine Anzeige-Angaben je Spur (Noten, Tabs, Schrägstriche wählt
  * der Player); als Name des Tunings nur das Tuning selbst (GP-Dateien haben dort oft Notizen wie "Key: C (orig.
  * D)"); kein Systemtrenner (die schrägen Doppelstriche zwischen den Notenzeilen); doppelte Taktstriche nur vor
- * Abschnitten (applySectionBars()); nur einfache Betonungen (eine starke wird zur einfachen). Alles andere bleibt wie in der
+ * Abschnitten (applySectionBars()); nur einfache Betonungen (eine starke wird zur einfachen); keine Zeilenaufteilung aus
+ * Guitar Pro (die Zeilen setzt der Player, rowBreaks()). Alles andere bleibt wie in der
  * Datei: Tonart und Vorzeichen, Spurnamen, Capo je Spur. Was von der Konvention abweicht (ein Capo, Akkorde und Text
  * in einer Spur …), löst danach resolveConflicts() in conflicts.js.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
@@ -1015,6 +1039,11 @@ function cleanImportedScore(alphaTab, score, library){
   normalizeChords(alphaTab, score, library);
   applySectionBars(alphaTab, score);
   if(score.stylesheet) score.stylesheet.useSystemSignSeparator = false;
+  for(const layout of [score, ...score.tracks]){
+    // 3 ist die Vorgabe von alphaTab, sie kommt nicht in die Datei.
+    layout.defaultSystemsLayout = 3;
+    layout.systemsLayout = [];
+  }
   for(const track of score.tracks) for(const staff of track.staves){
     staff.showStandardNotation = true;
     staff.showTablature = staff.isStringed;
@@ -3038,9 +3067,8 @@ export function instrumentOf(track){
 }
 
 /**
- * Lage der Noten im Notensystem (displayTranspositionPitch von alphaTab, in alphaTex `\displaytranspose`): Jede Spur
- * ist Gitarren-Tab, ihr Tonraum ist der des Griffbretts. Deshalb wird jede Spur wie Gitarre notiert, eine Oktave höher
- * als sie klingt, gleich welches Instrument sie spielt; dieselben Bünde stehen in allen Spuren gleich hoch.
+ * Notenlage jeder Spur (displayTranspositionPitch): wie Gitarre eine Oktave höher als klingend, gleich welches
+ * Instrument, denn jede Spur ist Gitarren-Tab.
  */
 export const TAB_NOTATION = -12;
 
@@ -3067,15 +3095,12 @@ export function setInstrument(alphaTab, track, instrument){
   for(const staff of track.staves) if(!staff.isPercussion) staff.displayTranspositionPitch = notationPitch(staff);
 }
 
-/** Bünde über der höchsten leeren Saite, bis zu denen eine Spur ohne Saiten beim Umwandeln liegen soll (toGuitarTab()). */
+/** Bünde über der hohen leeren Saite, bis zu denen toGuitarTab() die Töne legt. */
 const TAB_RANGE_FRETS = 12;
 
 /**
- * Macht aus einem Notensystem ohne Saiten (Gesang, Orgel aus Guitar Pro) Gitarren-Tab: Standard-Tuning, kein Capo,
- * Notenlage TAB_NOTATION. Der ganze Satz wandert um so viele Oktaven, dass möglichst viele Töne zwischen der tiefen
- * leeren Saite und dem TAB_RANGE_FRETS. Bund der hohen liegen (bei Gleichstand die kleinste Verschiebung); dann werden
- * die Töne wie beim Transponieren auf Saiten verteilt (stringedStaff()), einzelne Töne, die noch immer nicht zu greifen
- * sind, um eine weitere Oktave.
+ * Macht aus einem Notensystem ohne Saiten (Gesang, Orgel) Gitarren-Tab in Standard-Tuning: Der Satz wandert um ganze
+ * Oktaven ins Griffbrett (bis TAB_RANGE_FRETS), dann werden die Töne verteilt wie beim Transponieren (stringedStaff()).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Staff} staff Notensystem ohne Saiten, wird geändert
  * @returns {{shift: number, octaves: number, skipped: number}} Verschiebung des Satzes in Halbtönen, einzeln oktavierte

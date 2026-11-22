@@ -9,7 +9,7 @@ import {
 import {
   applyRecordingTempo, applySongMeta, isWip, joinSyllables, loadAlphaTab, lyricsTrack, markedTrackName, markWip,
   mergeChords, parseScore, playbackSyncPoints, QUARTER_TICKS, readScoreInfo, recordingTempoAt, recordingTempoRegion,
-  sortSyncPoints, stringedStaves, syncSegmentAt, timeline,
+  rowBreaks, setRowBreaks, sortSyncPoints, stringedStaves, syncSegmentAt, timeline,
 } from './notation.js';
 import {deriveBar, patternGridHtml, similarity, slotCount, TECHNIQUES} from './sheet.js';
 import {buildTextModel, playTimeline, renderTextView} from './textview.js';
@@ -93,10 +93,8 @@ function median(values){
 }
 
 /**
- * Fasst häufige Aufrufe auf einen je Bildschirmbild zusammen: alphaTab meldet die Abspielposition mehrere hundert Mal
- * pro Sekunde. Die Arbeit der Anzeige (DOM, Canvas) läge sonst so oft auf dem Hauptthread, über den sich der Synth seine
- * Audiopuffer holt; ist er zu lange belegt, stottert der Synth (die Audiospur nicht, sie läuft im eigenen Knoten).
- * Ausgeführt wird mit den Argumenten des letzten Aufrufs.
+ * Fasst häufige Aufrufe auf einen je Bildschirmbild zusammen (mit den Argumenten des letzten). alphaTab meldet die
+ * Position mehrere hundert Mal pro Sekunde; so viel Arbeit auf dem Hauptthread ließ den Synth stottern.
  * @template {any[]} A
  * @param {function(...A): void} fn Anzeige
  * @returns {function(...A): void} gibt sofort zurück; fn läuft im nächsten Bild
@@ -716,10 +714,12 @@ export class Player {
    */
   alphaTab = null;
   /**
-   * Sperre gegen das Abschalten des Bildschirms, solange der Song offen ist.
+   * Sperre gegen das Abschalten des Bildschirms, solange der Song abgespielt wird.
    * @type {?WakeLockSentinel}
    */
   wakeLock = null;
+  /** Ob die Sperre gerade angefordert wird (requestWakeLock()). */
+  wakeLockPending = false;
   /** Player-Einstellungen (siehe loadPrefs()). */
   prefs = loadPrefs();
   /** Slug des geladenen Lieds. */
@@ -746,11 +746,26 @@ export class Player {
   mix = {tracks: {}, audio: {volume: 1, mute: false}};
   /**
    * Vorgaben des Songs je Spur (Index), ob sie angezeigt und gehört wird (Feld trackDefaults, gesetzt im Dialog "Spuren"
-   * des Editors). Gilt, solange das Gerät im Mixer nichts anderes eingestellt hat. Beim Umbau der Spuren im Editor
-   * wandern die Einträge mit (remapTracks()).
+   * des Editors). Gilt, solange das Gerät im Mixer nichts anderes eingestellt hat.
    * @type {import('./notation.js').TrackDefault[]}
    */
   defaults = [];
+  /** Takte pro Zeile (Sheet.barsPerRow), 0 ohne. */
+  barsPerRow = 0;
+  /**
+   * Takte, mit denen beim letzten Zeichnen eine Zeile beginnen sollte (rowBreaks()).
+   * @type {Set<number>}
+   */
+  breaks = new Set();
+  /** Ob die Takte pro Zeile nicht passen und deshalb nur an den Abschnitten umbrochen wird (checkBarsPerRow()). */
+  barsFallback = false;
+  /** Breite der Noten (px), um eine Änderung zu erkennen. */
+  barsWidth = 0;
+  /**
+   * Beobachter der Breite der Noten.
+   * @type {?ResizeObserver}
+   */
+  barsObserver = null;
   /**
    * Länge der Audiospur in Sekunden, sobald sie geladen ist; null ohne (oder mit unlesbarer) audio.mp3.
    * @type {Promise<?number>}
@@ -899,12 +914,10 @@ export class Player {
     const saved = this.prefs.speed;
     this.prefs.speed = SPEEDS.reduce((best, s) => Math.abs(s - saved) < Math.abs(best - saved) ? s : best);
     this.showSpeed();
-    /** Holt die Wake-Lock-Sperre zurück, wenn die Seite beim Abspielen wieder sichtbar wird. */
-    // Der Bildschirm bleibt an, solange ein Song offen ist, nicht nur beim Abspielen: Am Notenständer liest man Text
-    // und Akkorde auch ohne Wiedergabe. Der Browser gibt die Sperre frei, wenn die Seite/ in den Hintergrund geht;
-    // beim Zurückkommen wird sie neu angefordert.
-    this.onVisibility = () => { if(document.visibilityState === 'visible') void this.requestWakeLock(); };
-    void this.requestWakeLock();
+    // Der Bildschirm bleibt nur beim Abspielen an (onStateChanged()). Im Hintergrund gibt der Browser die Sperre frei.
+    this.onVisibility = () => {
+      if(document.visibilityState === 'visible' && this.isPlaying) void this.requestWakeLock();
+    };
     document.addEventListener('visibilitychange', this.onVisibility);
   }
 
@@ -925,6 +938,7 @@ export class Player {
     this.slug = song.slug;
     this.hasAudio = song.files.includes('audio');
     this.defaults = song.trackDefaults ?? [];
+    this.barsPerRow = song.leadsheet?.barsPerRow ?? 0;
     this.mix = this.loadMix();
     // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
     const alphaTab = await loadAlphaTab();
@@ -939,6 +953,8 @@ export class Player {
       display: {
         scale: this.prefs.scale,
         layoutMode: alphaTab.LayoutMode.Page,
+        // Auch die letzte Zeile auf die volle Breite.
+        justifyLastSystem: true,
         // Abstand zwischen den Notenzeilen: siehe SYSTEM_GAP und SYSTEM_GAP_SINGLE (Vorgabe von alphaTab 10).
         // Abstand zwischen den Spuren einer Zeile (Vorgabe 5): Texte über einer Spur ("Rhythm Guitar 1") klebten
         // sonst an den Tabs der Spur darüber.
@@ -986,6 +1002,15 @@ export class Player {
       clearTimeout(this.renderStatusTimer);
       this.setStatus('');
     });
+    // Takte pro Zeile: nach jedem Zeichnen prüfen, ob sie Platz haben; ändert sich die Breite, neu versuchen.
+    api.postRenderFinished.on(() => this.checkBarsPerRow());
+    this.barsObserver = new ResizeObserver(entries => {
+      const width = Math.round(entries[0].contentRect.width);
+      if(width === this.barsWidth) return;
+      this.barsWidth = width;
+      this.retryBarsPerRow();
+    });
+    this.barsObserver.observe(this.el.at);
     api.soundFontLoad.on(e => this.setStatus(`Klänge werden geladen &hellip; ${Math.round(e.loaded / e.total * 100)} %`));
     api.playerReady.on(() => {
       this.applyLevels();
@@ -1090,6 +1115,7 @@ export class Player {
     this.applyLyrics(visible);
     this.applyChordNames(visible);
     this.applySystemGap(visible);
+    this.applyBarsLayout(score);
     api.updateSettings();
     api.renderScore(score, visible.map(t => t.index));
     this.currentChord = null;
@@ -1343,10 +1369,71 @@ export class Player {
     const api = this.api;
     if(rescale && api){
       api.settings.display.scale = scale;
+      this.retryBarsPerRow();
       api.updateSettings();
       api.render();
     }
     this.applyView();
+  }
+
+  /**
+   * Setzt die Takte pro Zeile und zeichnet neu, wenn gewünscht.
+   * @param {number} count Takte pro Zeile; 0 ohne
+   * @param {boolean} [render] neu zeichnen (der Editor zeichnet nach dem Einlesen ohnehin)
+   * @returns {void}
+   */
+  setBarsPerRow(count, render = true){
+    count = Number.isInteger(count) && count > 0 ? count : 0;
+    if(count === this.barsPerRow) return;
+    this.barsPerRow = count;
+    this.barsFallback = false;
+    if(render) this.relayoutBars();
+  }
+
+  /**
+   * Setzt die Zeilenumbrüche für das nächste Zeichnen: an jedem Abschnitt und, ohne Rückfall, alle barsPerRow Takte.
+   * @param {Score} score Noten, die gezeichnet werden (werden geändert)
+   * @returns {void}
+   */
+  applyBarsLayout(score){
+    this.breaks = rowBreaks(score, this.barsFallback ? 0 : this.barsPerRow);
+    setRowBreaks(score, this.breaks);
+  }
+
+  /**
+   * Zeichnet die angezeigten Spuren mit den aktuellen Zeilenumbrüchen neu (applyBarsLayout()).
+   * @returns {void}
+   */
+  relayoutBars(){
+    const api = this.api;
+    if(!api?.score) return;
+    this.applyBarsLayout(api.score);
+    api.renderTracks(api.tracks);
+  }
+
+  /**
+   * Nach dem Zeichnen: Musste alphaTab vor einem gesetzten Umbruch umbrechen, passen die Takte pro Zeile nicht; dann
+   * wird nur an den Abschnitten umbrochen, bis sich der Platz ändert (retryBarsPerRow()).
+   * @returns {void}
+   */
+  checkBarsPerRow(){
+    const api = this.api;
+    if(!api?.boundsLookup || this.barsPerRow <= 0 || this.barsFallback) return;
+    if(api.boundsLookup.staffSystems.slice(1).every(system => this.breaks.has(system.bars[0].index))) return;
+    this.barsFallback = true;
+    // Nicht mitten im Ereignis neu zeichnen.
+    setTimeout(() => this.relayoutBars());
+  }
+
+  /**
+   * Versucht die Takte pro Zeile nach einem Rückfall wieder (andere Breite, Größe oder Spuren).
+   * @returns {boolean} ob es einen Rückfall gab
+   */
+  retryBarsPerRow(){
+    if(!this.api || !this.barsFallback) return false;
+    this.barsFallback = false;
+    this.relayoutBars();
+    return true;
   }
 
   /**
@@ -1755,6 +1842,8 @@ export class Player {
     const api = this.api;
     if(!api?.score || !indexes.length) return;
     localStorage.setItem(TRACKS_KEY_PREFIX + this.slug, JSON.stringify(indexes));
+    // Mit anderen Spuren ändert sich der Platz je Takt.
+    this.retryBarsPerRow();
     if(this.editor){
       // Im Bearbeitungsmodus zeigt der Editor seine Noten unverändert (ohne Text und Akkorde umzuhängen).
       this.editor.showTracks(indexes);
@@ -1904,6 +1993,8 @@ export class Player {
       // Manche Browser geben die Sperre erst nach einer Nutzeraktion; der Start ist eine.
       void this.requestWakeLock();
       markPlayed(this.slug);
+    } else {
+        this.releaseWakeLock();
     }
     if(!playing && this.midiStale) this.refreshMidi();
   }
@@ -1921,13 +2012,23 @@ export class Player {
   }
 
   /**
-   * Bildschirm anlassen (Handy am Notenständer).
+   * Bildschirm anlassen, solange abgespielt wird (Handy am Notenständer).
    * @returns {Promise<void>}
    */
   async requestWakeLock(){
     try {
-      this.wakeLock ??= await navigator.wakeLock?.request('screen') ?? null;
-      this.wakeLock?.addEventListener('release', () => { this.wakeLock = null; });
+      // Nie zwei Sperren gleichzeitig, eine davon bliebe sonst bestehen.
+      if(!this.wakeLock && !this.wakeLockPending){
+        this.wakeLockPending = true;
+        try {
+          const lock = await navigator.wakeLock?.request('screen') ?? null;
+          lock?.addEventListener('release', () => { if(this.wakeLock === lock) this.wakeLock = null; });
+          this.wakeLock = lock;
+        } finally {
+          this.wakeLockPending = false;
+        }
+      }
+      if(!this.isPlaying) this.releaseWakeLock();
     } catch(err){ /* nicht unterstützt oder verweigert */ }
   }
 
@@ -2044,8 +2145,7 @@ export class Player {
   }
 
   /**
-   * Zieht Lautstärke und Stumm der Spuren und die Vorgaben des Songs je Spur (defaults) nach, wenn sich im Editor ihre
-   * Reihenfolge oder Zahl ändert.
+   * Zieht Lautstärke, Stumm und Vorgaben je Spur nach, wenn sich im Editor Reihenfolge oder Zahl der Spuren ändert.
    * @param {function(number): ?number} map alter Index → neuer Index (null: Spur gibt es nicht mehr)
    * @returns {void}
    */
@@ -2056,7 +2156,6 @@ export class Player {
       if(moved !== null) tracks[moved] = entry;
     }
     this.mix.tracks = tracks;
-    // Die Vorgaben des Songs je Spur wandern mit; neue Spuren haben keine.
     const defaults = [];
     this.defaults.forEach((entry, index) => {
       const moved = map(index);
@@ -2103,6 +2202,8 @@ export class Player {
     this.mixer = null;
     this.stopHidingAttribution?.();
     this.stopHidingAttribution = null;
+    this.barsObserver?.disconnect();
+    this.barsObserver = null;
     this.api?.destroy();
     this.api = null;
     this.root.innerHTML = '';

@@ -32,8 +32,9 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 ### Bearbeitung
 - Speichern (Strg+S) – blau, solange etwas ungespeichert ist (Noten und die Angaben aus dem Dialog "Leadsheet"). Legt
   das Speichern einen Stand in den Verlauf, fragt erst ein Dialog nach einer Änderungsnotiz (Feld optional, Enter
-  speichert; steht im Verlauf). Dasselbe Feld hat der Dialog "Änderungen speichern?" beim Beenden. Eine angefangene
-  Notiz merkt sich der Browser je Song (auch nach Abbrechen, Verwerfen oder ✕) bis zum nächsten Speichern
+  speichert; steht im Verlauf). Dasselbe Feld hat der Dialog "Änderungen speichern?" beim Beenden. Die letzte Notiz
+  merkt sich der Browser je Song (auch nach Speichern, Abbrechen, Verwerfen oder ✕) und schlägt sie beim nächsten Mal
+  vor; wer das Feld leert, bekommt keinen Vorschlag mehr (`lastNote()` in `editor.js`)
 - Rückgängig (Strg+Z)
 - Wiederholen (Strg+Y)
 
@@ -45,6 +46,11 @@ Die Ansicht wählt man im Menü "Ansicht" der Leiste unten: Im Bearbeitungsmodus
 
 Das Panel ist so breit, dass acht Knöpfe nebeneinander passen. Reihenfolge von oben: Note, Einfügen/löschen,
 Tonhöhe, Anschlag, Takt, Abschnitt, Akkord, Text über dem Schlag, Liedtext-Silbe.
+
+Die Eingabefelder (Taktart, Tempo, Abschnitt, Text über dem Schlag, Liedtext-Silbe) übernehmen ihren Wert mit Enter
+und verlassen das Feld, danach gehören die Tasten wieder den Noten (`leaveFieldOnEnter()` in `editor.js`). Ein Klick
+in die Noten verlässt ein Feld ebenfalls; ein getippter, noch nicht bestätigter Wert gilt dann noch für den alten
+Schlag.
 
 ### Note
 Erste Reihe:
@@ -156,6 +162,13 @@ Zweite Reihe:
   - Akkorde – entfernt Akkorde, die nur den klingenden wiederholen (gleicher Name wie der davor, in allen Spuren), und
     setzt an jeden Abschnittsanfang ohne Akkord den klingenden (in die Akkordspur); dort bleiben auch Wiederholungen
     stehen (`chordCleanup()` in `notation.js`)
+- Takte pro Zeile – Feld links neben "Bereinigen", leer mit Platzhalter "auto": Zahl (1 bis 12) und Enter setzen alle
+  so viele Takte einen Zeilenumbruch, gezählt ab jedem Abschnitt; jeder Abschnitt beginnt ohnehin eine neue Zeile
+  (`rowBreaks()` in `notation.js`, `Player.applyBarsLayout()`). Ein Auftakt vor dem ersten Abschnitt steht so in einer
+  Zeile allein. Reicht der Platz nicht (alphaTab bricht vor einem gesetzten Umbruch um), gelten still nur die Umbrüche
+  an den Abschnitten, bis sich Breite, Größe oder Spuren ändern (`Player.checkBarsPerRow()`). Die Zahl steht als
+  `barsPerRow` in den Angaben für das Leadsheet und gehört zu Speichern, Rückgängig und Verlauf. Auch die letzte Zeile
+  steht auf voller Breite (`justifyLastSystem`)
 - Gehe zu (Alt+G) – Feld rechts vor "?", leer mit Platzhalter "Takt": Zahl und Enter setzt den Cursor auf den ersten Schlag
   dieses Takts (Spur bleibt), danach ist das Feld wieder leer und die Tasten gehören wieder den Noten
 - Transponieren (Icon ganz links in der Leiste) – Dialog mit Halbtönen (−12 bis +12), Capo und Tuning, Vorschau vorher/nachher
@@ -324,14 +337,20 @@ Je Spur eine Zeile:
   Vorschlägen nicht), weitere Stimmen werden Pausen. Der Text zieht in die neue Spur (`deriveMelodyTrack()` und
   `mergeRests()` in `js/notation.js`)
 - Rhythmus ableiten (Slash-Note) – Dialog (`js/rhythmdialog.js`): alle Rhythmen, die in dieser Spur vorkommen (je Takt
-  aus den Anschlägen; ab auf geraden, auf auf ungeraden Rasterplätzen, gedämpft als x), gleiche zusammengefasst,
+  aus den Anschlägen; Richtung aus dem Anschlagzeichen sd/su, sonst ab auf geraden, auf auf ungeraden Rasterplätzen,
+  gedämpft als x; ein Brush zählt nicht, er beschreibt den aufgefächerten Klang, nicht die Schlaghand), gleiche zusammengefasst,
   nummeriert, häufigste zuerst, mit Ort ("ganzer Song", "Verse, Chorus", "Takte in 2/4", "Takte mit C", "letzter Takt
   jedes Abschnitts Chorus", sonst die Abschnitte mit Anteil: "Verse (14 von 32 Takten), Chorus"). Anschläge neben dem
   Sechzehntelraster (32tel, Triolen) fallen beim Ableiten ungefragt weg, der Rhythmus heißt dann "vereinfacht".
   - Jeder Rhythmus ist änderbar: Feld oder Klick ins Raster; ein Knopf wechselt das Raster ("in Sechzehnteln", "in
     Achteln"), liegen Anschläge auf Sechzehnteln dazwischen, heißt er "auf Achtel vereinfachen" und lässt sie weg.
     Wird er dabei gleich einem anderen, bleiben beide stehen (zusammengefasst wird nur beim Öffnen, mit dem Kreispfeil
-    und ausdrücklich: "Rhythmus N übernehmen", "Ähnliche zusammenfassen").
+    und ausdrücklich: "Rhythmus N übernehmen", "Ähnliche zusammenfassen", "Auf behaltene verteilen").
+  - "behalten" (Häkchen je Rhythmus) und "Auf behaltene verteilen": Jeder Takt der übrigen Rhythmen geht an den
+    ähnlichsten behaltenen, bei dem kein Akkordwechsel seinen Anschlag verliert, ohne 75-%-Schwelle; ebenso Takte
+    eines behaltenen, in denen er selbst nicht passt. Passt keiner, bleibt der Takt; Takte ohne Anschläge bleiben auch
+    (`spreadToKept()`). So lassen sich die Patterns eines Leadsheets vorgeben: Zeilen darauf ändern, behalten,
+    verteilen (No Woman No Cry: 62 → 5 Patterns, dazu Pausen-Takte und ein 2/4-Takt).
   - "Rhythmus 1 übernehmen" bei ähnlichen (ab 75 % gleicher Rasterplätze) und "Ähnliche zusammenfassen" für alle, beides
     nur, wo dabei kein Anschlag eines Akkordwechsels wegfällt (ausgegraut, wenn es nichts zusammenzufassen gibt); der
     Kreispfeil daneben zeigt nach einer Änderung wieder die Rhythmen, wie sie in der Spur stehen.

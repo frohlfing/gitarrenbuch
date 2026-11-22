@@ -58,6 +58,7 @@ const SONG_INFO_FIELDS = [
  */
 const SONG_LEVELS = ['can', 'practice', 'cannot'];
 
+
 /**
  * Höchstlänge der Hinweise zur Spielweise auf dem Leadsheet (leadsheet.instructions, siehe api/leadsheet.php).
  *

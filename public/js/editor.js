@@ -334,9 +334,8 @@ const WIDE_LAYOUT = '(min-width: 900px)';
  */
 const STAFF_FLAGS = ['showStandardNotation', 'showTablature', 'showSlash', 'showNumbered'];
 
-/** Tooltip des Schalters "Baustelle" im Dialog "Spuren" (TrackDefault in notation.js). */
-const WIP_TITLE = `An der Spur wird noch gearbeitet: Zeichen ${edit.WIP_MARK} am Spurnamen, keine Patterns und `
-  + 'Tab-Stellen fürs Leadsheet, in der Bibliothek zu filtern';
+/** Höchstzahl der Takte pro Zeile (Feld in der Leiste, wie LEADSHEET_BARS_PER_ROW_MAX in api/leadsheet.php). */
+const BARS_PER_ROW_MAX = 12;
 
 /** Einstellungen des Stylesheets für die Spurnamen (showTrackNames() in playback.js). */
 const TRACK_NAME_STYLE = ['singleTrackTrackNamePolicy', 'multiTrackTrackNamePolicy', 'firstSystemTrackNameMode',
@@ -440,25 +439,25 @@ function instrumentSelect(track){
 /** Höchstlänge der Notiz beim Speichern (wie NOTE_MAX in api/lib/file_store.php). */
 const NOTE_MAX = 200;
 
-/** Schlüssel im Browser für die angefangenen Änderungsnotizen: {slug: Notiz}. */
+/** Schlüssel im Browser für die letzten Änderungsnotizen: {slug: Notiz}. */
 const NOTES_KEY = 'gitarrenbuch_editor_notes';
 
 /**
- * Feld für die Änderungsnotiz (Dialoge "Speichern" und "Änderungen speichern?"), mit der angefangenen Notiz des Songs.
+ * Feld für die Änderungsnotiz (Dialoge "Speichern" und "Änderungen speichern?"), vorbelegt mit der letzten Notiz.
  * @param {string} slug Slug des Songs
  * @returns {string} HTML
  */
 function noteFieldHtml(slug){
   return `<div class="form-field"><input type="text" id="saveNote" maxlength="${NOTE_MAX}" autocomplete="off"
-    placeholder="Änderungsnotiz" aria-label="Änderungsnotiz" value="${escapeHtml(draftNote(slug))}"></div>`;
+    placeholder="Änderungsnotiz" aria-label="Änderungsnotiz" value="${escapeHtml(lastNote(slug))}"></div>`;
 }
 
 /**
- * Angefangene Änderungsnotiz eines Songs (bleibt über Abbrechen, Verwerfen und Schließen hinweg bis zum Speichern).
+ * Zuletzt getippte Änderungsnotiz eines Songs (bleibt nach Speichern, Abbrechen und Verwerfen).
  * @param {string} slug Slug des Songs
  * @returns {string} leer ohne Notiz
  */
-function draftNote(slug){
+function lastNote(slug){
   try {
     return String(JSON.parse(localStorage.getItem(NOTES_KEY) ?? '{}')?.[slug] ?? '');
   } catch(err){
@@ -467,12 +466,12 @@ function draftNote(slug){
 }
 
 /**
- * Merkt sich die angefangene Änderungsnotiz eines Songs; leer vergisst sie.
+ * Merkt sich die letzte Änderungsnotiz eines Songs; leer vergisst sie.
  * @param {string} slug Slug des Songs
  * @param {string} note Notiz
  * @returns {void}
  */
-function keepDraftNote(slug, note){
+function keepLastNote(slug, note){
   try {
     const notes = JSON.parse(localStorage.getItem(NOTES_KEY) ?? '{}') ?? {};
     if(note) notes[slug] = note;
@@ -492,14 +491,14 @@ function noteValue(){
 }
 
 /**
- * Bindet das Feld noteFieldHtml() an: Jede Eingabe wird gemerkt (keepDraftNote()), Enter speichert (wie der Knopf).
+ * Bindet das Feld noteFieldHtml() an: Jede Eingabe wird gemerkt (keepLastNote()), Enter speichert (wie der Knopf).
  * @param {string} slug Slug des Songs
  * @param {function(): void} save Speichern
  * @returns {void}
  */
 function bindNoteField(slug, save){
   const input = document.getElementById('saveNote');
-  input?.addEventListener('input', () => keepDraftNote(slug, noteValue()));
+  input?.addEventListener('input', () => keepLastNote(slug, noteValue()));
   input?.addEventListener('keydown', e => {
     if(e.key !== 'Enter') return;
     e.preventDefault();
@@ -733,6 +732,7 @@ export class NoteEditor {
    */
   setSheet(json){
     this.sheet = normalizeSheet(JSON.parse(json));
+    this.player.setBarsPerRow(this.sheet.barsPerRow, false);
   }
 
   /**
@@ -750,6 +750,7 @@ export class NoteEditor {
     this.undoStack.push(this.snapshot(before));
     if(this.undoStack.length > UNDO_MAX) this.undoStack.shift();
     this.redoStack = [];
+    this.player.setBarsPerRow(this.sheet.barsPerRow);
     this.updateState();
     this.leadsheetTab.render();
   }
@@ -821,6 +822,9 @@ export class NoteEditor {
     this.onFieldChange = e => this.applyField(/** @type {HTMLInputElement} */ (e.target));
     this.part('edit-left').addEventListener('change', this.onFieldChange);
     this.part('edit-toolbar').addEventListener('change', this.onFieldChange);
+    this.onFieldEnter = e => this.leaveFieldOnEnter(e);
+    this.part('edit-left').addEventListener('keydown', this.onFieldEnter);
+    this.part('edit-toolbar').addEventListener('keydown', this.onFieldEnter);
     // Liedtext: beim Schreiben (kurz nach dem letzten Tastendruck) in die Noten, ein Schritt für "Rückgängig" je
     // Bearbeitung des Felds.
     const lyrics = /** @type {HTMLTextAreaElement} */ (this.part('edit-right').querySelector('[data-lyrics]'));
@@ -904,7 +908,7 @@ export class NoteEditor {
       <div class="egroup egroup-song">
         <label class="etool-field"><span>Tonart</span>${select(KEY_NAMES, 'data-song="key" title="Tonart des ganzen Songs"')}</label>
         <span class="etool-keyhint" data-key-hint hidden>!</span>
-        ${todoButton(svgIcon('transpose'), 'Transponieren: Halbtöne, Capo und Tuning ändern, mit Vorschau', '', 'transpose')}
+        ${todoButton(svgIcon('transpose'), 'Transponieren: Halbtöne, Capo und Tuning ändern', '', 'transpose')}
         <div class="etool-menu">
           <button type="button" class="ebtn" data-action="cleanMenu" aria-haspopup="true" aria-expanded="false"
             title="Bereinigen" aria-label="Bereinigen">${svgIcon('clean')}</button>
@@ -913,6 +917,10 @@ export class NoteEditor {
               title="Überflüssige Akkorde entfernen; fehlende am Abschnittsanfang setzen">Akkorde bereingigen</button>
           </div>
         </div>
+        <label class="etool-field" title="Takte pro Zeile, gezählt ab jedem Abschnitt">
+          <span>Takte pro Zeile</span>
+          <input type="number" min="1" max="${BARS_PER_ROW_MAX}" placeholder="auto" data-per-row
+            aria-label="Takte pro Zeile"></label>
         <span class="etool-info" data-song-info></span>
       </div>
       <div class="egroup edit-end">
@@ -1152,7 +1160,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
               ${i === lyricsAt ? ' checked' : ''} aria-label="Liedtext in Spur ${i + 1}"
               title="Liedtext in dieser Spur speichern">
             <input type="checkbox" role="switch" class="switch" data-track-wip="${i}"${edit.isWip(track) ? ' checked' : ''}
-              aria-label="Spur ${i + 1} ist Baustelle" title="${WIP_TITLE}">
+              aria-label="Spur ${i + 1} ist Baustelle" title="An der Spur wird noch gearbeitet">
             ${instrumentSelect(track)}
             <span class="etrack-buttons">
               <button type="button" class="ebtn" data-cmd="trackUp" data-track="${i}"
@@ -1689,7 +1697,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     else if(after < before) map = i => i === index ? null : i > index ? i - 1 : i;
     else if(after > before) map = i => i >= index ? i + 1 : i;
     this.player.remapTracks(map);
-    // Die Vorgaben je Spur hängen am Index: nur wenn der sich verschiebt, gehören sie zum nächsten Speichern.
+    // Die Vorgaben je Spur hängen am Index.
     if(step || after !== before) this.viewChanged = true;
     const indexes = [...shown].map(map).filter(i => i !== null && i < after);
     if(after > before) indexes.push(index);
@@ -2135,9 +2143,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Setzt den Cursor auf den Schlag, der an einer Abspielposition klingt (Klick in die Wellenform der Audiospur), in
-   * der Spur am Cursor; hat sie dort keinen Schlag, in irgendeiner sichtbaren Spur. Beim Abspielen bleibt der Cursor:
-   * Er markiert die Bearbeitung, nicht die Abspielposition.
+   * Setzt den Cursor auf den Schlag an einer Abspielposition (Klick in die Wellenform), nicht beim Abspielen.
    * @param {number} tick MIDI-Tick in Abspielreihenfolge
    * @returns {void}
    */
@@ -2147,7 +2153,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     const found = ticks.findBeat(new Set([this.pos.track]), tick)?.beat
       ?? ticks.findBeat(new Set(this.trackIndexes), tick)?.beat;
     if(!found) return;
-    // Der Cursor zählt in der ersten Stimme: deren Schlag, der zur selben Zeit klingt.
+    // Der Cursor zählt in der ersten Stimme.
     const bar = found.voice.bar;
     const beat = found.voice.index === 0 ? found : bar.voices[0]?.beats.findLast(b => b.playbackStart <= found.playbackStart);
     if(!beat) return;
@@ -2175,6 +2181,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     if(!this.trackIndexes.length) this.trackIndexes = [0];
     if(!this.trackIndexes.includes(this.pos.track)) this.pos = {...this.pos, track: this.trackIndexes[0]};
     this.pos = edit.clampPosition(this.score, this.pos);
+    // Zeilenumbrüche der Ansicht.
+    this.player.setBarsPerRow(this.sheet.barsPerRow, false);
+    this.player.applyBarsLayout(this.score);
     api.renderScore(this.score, this.trackIndexes);
     // Die Audiospur folgt den Sync-Punkten der bearbeiteten Noten (auch nach Rückgängig).
     this.player.mixer?.setScore(this.score);
@@ -2539,9 +2548,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
-   * Kennzeichnet eine Spur als Baustelle oder nimmt die Kennzeichnung weg (Schalter im Dialog "Spuren"): ein Name mehr
-   * oder weniger in den Angaben für das Leadsheet (Sheet.wip in sheet.js), ein Schritt für "Rückgängig". Gilt sofort
-   * (Spurname, Leadsheet), "Speichern" sichert es mit dem Leadsheet (auch im Verlauf).
+   * Kennzeichnet eine Spur als Baustelle oder nimmt es zurück (Schalter im Dialog "Spuren", Sheet.wip).
    * @param {number} index Index der Spur
    * @param {boolean} wip Baustelle
    * @returns {void}
@@ -2622,6 +2629,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     save.classList.toggle('ebtn-dirty', this.dirty);
     save.disabled = !this.dirty;
     /** @type {HTMLInputElement} */ (toolbar.querySelector('[data-goto]')).max = String(this.score.masterBars.length);
+    this.fillField(toolbar, '[data-per-row]', this.sheet.barsPerRow || '');
     const fields = this.part('edit-left');
     const value = (name, v) => {
       const input = /** @type {HTMLInputElement} */ (fields.querySelector(`[data-field="${name}"]`));
@@ -2656,7 +2664,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       return;
     }
     const sheet = this.sheetJson();
-    const keeps = this.keepsHistory();
     try {
       let song = null;
       const scoreSaved = tex !== this.savedTex;
@@ -2682,8 +2689,6 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
       this.saved = true;
       this.onSaved(song);
       this.updateState();
-      // Die Notiz steht jetzt im Verlauf; ohne neuen Stand (nur Ansicht) bleibt sie für das nächste Speichern.
-      if(keeps) keepDraftNote(this.player.slug, '');
       this.toast('Gespeichert');
     } catch(err){
       this.toast('Nicht gespeichert: ' + err.message);
@@ -2854,6 +2859,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     // Wieder die Ansicht des Players (nach dem Speichern lädt der Aufrufer den Song ohnehin neu).
     if(this.display && this.player.api && !this.saved){
       this.player.applyStave(this.display.score);
+      // Mit den gespeicherten Takten pro Zeile.
+      this.player.setBarsPerRow(JSON.parse(this.savedSheet || '{}').barsPerRow ?? 0, false);
+      this.player.applyBarsLayout(this.display.score);
       this.player.api.renderScore(this.display.score, this.display.tracks);
     }
     this.score = null;
@@ -2874,9 +2882,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
    */
   handlePointer(e){
     if(e.button !== 0 || !this.score) return;
-    // Ein Klick in die Noten beendet das Schreiben im Liedtext, sonst folgt dieser dem Cursor nicht.
-    const lyrics = this.part('edit-right').querySelector('[data-lyrics]');
-    if(document.activeElement === lyrics) /** @type {HTMLElement} */ (lyrics).blur();
+    // Ein Klick in die Noten verlässt ein Feld, sonst zeigt es den neuen Schlag nicht an (updateState()).
+    // Ein getippter Wert gilt dabei noch für den alten Schlag.
+    const active = document.activeElement;
+    if(active instanceof HTMLElement && active.matches('input, textarea, select')) active.blur();
     const rect = this.player.el.at.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -3104,6 +3113,33 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   }
 
   /**
+   * Enter in einem Eingabefeld des linken Panels oder der Leiste verlässt das Feld, nachdem der Browser den Wert
+   * übernommen hat; danach gehören die Tasten wieder den Noten.
+   * @param {KeyboardEvent} e Tastendruck im linken Panel bzw. in der Leiste
+   * @returns {void}
+   */
+  leaveFieldOnEnter(e){
+    const field = /** @type {HTMLElement} */ (e.target);
+    if(e.key !== 'Enter' || e.isComposing || !field.matches('input[type=text], input[type=number]')) return;
+    setTimeout(() => {
+      if(document.activeElement !== field) return;
+      field.blur();
+      this.updateState();
+    });
+  }
+
+  /**
+   * Setzt die Takte pro Zeile (Feld in der Leiste, Sheet.barsPerRow), als ein Schritt für "Rückgängig".
+   * @param {number} count Takte pro Zeile; 0 ohne
+   * @returns {void}
+   */
+  setBarsPerRow(count){
+    count = Number.isInteger(count) && count > 0 ? count : 0;
+    this.changeSheet(sheet => { sheet.barsPerRow = count; });
+    this.fillField(this.part('edit-toolbar'), '[data-per-row]', count || '');
+  }
+
+  /**
    * Feld "Gehe zu" in der Leiste: Cursor auf den ersten Schlag dieses Takts (in der Spur am Cursor); danach ist das Feld
    * wieder leer und die Tasten gehören wieder den Noten.
    * @param {HTMLInputElement} input Feld (Taktnummer ab 1)
@@ -3126,6 +3162,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
   applyField(input){
     if(input.dataset.goto !== undefined){
       this.gotoBar(input);
+      return;
+    }
+    if(input.dataset.perRow !== undefined){
+      this.setBarsPerRow(Math.min(Math.round(Number(input.value)), BARS_PER_ROW_MAX));
       return;
     }
     if(input.dataset.trackWip !== undefined){
