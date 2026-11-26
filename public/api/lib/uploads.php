@@ -92,9 +92,9 @@ function record_upload(string $slug, string $file, ?string $source = null, ?stri
     $old = $index[$file] ?? [];
     $path = upload_dir($slug) . "/$file";
     $index[$file] = [
-        'source' => $source !== null ? trim($source) : (string) ($old['source'] ?? ''),
-        'description' => $description !== null ? trim($description) : (string) ($old['description'] ?? ''),
-        'added' => (string) ($old['added'] ?? date('c', (int) filemtime($path))),
+        'source' => $source !== null ? trim($source) : (string)($old['source'] ?? ''),
+        'description' => $description !== null ? trim($description) : (string)($old['description'] ?? ''),
+        'added' => (string)($old['added'] ?? date('c', (int)filemtime($path))),
     ];
     write_upload_index($slug, $index);
 }
@@ -116,10 +116,10 @@ function list_uploads(string $slug): array
         }
         $uploads[] = [
             'file' => $name,
-            'size' => (int) filesize($path),
-            'source' => (string) ($index[$name]['source'] ?? ''),
-            'description' => (string) ($index[$name]['description'] ?? ''),
-            'added' => (string) ($index[$name]['added'] ?? date('c', (int) filemtime($path))),
+            'size' => (int)filesize($path),
+            'source' => (string)($index[$name]['source'] ?? ''),
+            'description' => (string)($index[$name]['description'] ?? ''),
+            'added' => (string)($index[$name]['added'] ?? date('c', (int)filemtime($path))),
         ];
     }
     usort($uploads, fn(array $a, array $b) => [$a['added'], $a['file']] <=> [$b['added'], $b['file']]);
@@ -188,7 +188,7 @@ function store_upload(string $slug, string $localPath, string $originalName, str
         throw new FileValidationException('Dateityp .' . ($ext ?: '?') . ' wird nicht angenommen (erlaubt: .'
             . implode(', .', UPLOAD_EXTENSIONS) . ')');
     }
-    $size = (int) filesize($localPath);
+    $size = (int)filesize($localPath);
     if ($size === 0 || $size > MAX_UPLOAD_BYTES) {
         throw new FileValidationException(
             'Datei leer oder größer als ' . intdiv(MAX_UPLOAD_BYTES, 1024 * 1024) . ' MB'
@@ -235,13 +235,13 @@ function download_to_file(string $url, string $target): string
 {
     for ($hop = 0; $hop <= UPLOAD_MAX_REDIRECTS; $hop++) {
         $parts = parse_url($url);
-        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
-        $host = (string) ($parts['host'] ?? '');
+        $scheme = strtolower((string)($parts['scheme'] ?? ''));
+        $host = (string)($parts['host'] ?? '');
         if (!in_array($scheme, ['http', 'https'], true) || $host === '' || isset($parts['user'])) {
             /** @noinspection HttpUrlsUsage */
             throw new FileValidationException('Der Link muss mit http:// oder https:// beginnen');
         }
-        $port = (int) ($parts['port'] ?? ($scheme === 'https' ? 443 : 80));
+        $port = (int)($parts['port'] ?? ($scheme === 'https' ? 443 : 80));
         $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : (gethostbynamel($host) ?: []);
         if (!$ips || array_filter($ips, fn(string $ip) => !is_public_ip($ip))) {
             throw new FileValidationException('Der Link verweist auf keine öffentliche Adresse');
@@ -268,15 +268,15 @@ function download_to_file(string $url, string $target): string
             CURLOPT_WRITEFUNCTION => function ($ch, string $data) use ($out, &$written): int {
                 $written += strlen($data);
                 // Ein Rückgabewert unter der Länge bricht den Download ab.
-                return $written > MAX_UPLOAD_BYTES ? 0 : (int) fwrite($out, $data);
+                return $written > MAX_UPLOAD_BYTES ? 0 : (int)fwrite($out, $data);
             },
         ]);
         $ok = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $status = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
         fclose($out);
 
         if ($status >= 300 && $status < 400 && isset($headers['location'])) {
-            $url = (string) (parse_url($headers['location'], PHP_URL_SCHEME) !== null
+            $url = (string)(parse_url($headers['location'], PHP_URL_SCHEME) !== null
                 ? $headers['location']
                 : $scheme . '://' . $host . ($headers['location'][0] === '/' ? '' : '/') . $headers['location']);
             $headers = [];
@@ -293,7 +293,7 @@ function download_to_file(string $url, string $target): string
         if (preg_match('/filename\*?=(?:UTF-8\'\')?"?([^";]+)"?/i', $headers['content-disposition'] ?? '', $m)) {
             return rawurldecode($m[1]);
         }
-        return rawurldecode(basename((string) parse_url($url, PHP_URL_PATH)));
+        return rawurldecode(basename((string)parse_url($url, PHP_URL_PATH)));
     }
     throw new FileValidationException('Zu viele Weiterleitungen');
 }

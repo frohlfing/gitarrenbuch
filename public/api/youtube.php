@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error(405, 'Nur GET erlaubt');
 }
 
-$id = youtube_id((string) ($_GET['url'] ?? ''));
+$id = youtube_id((string)($_GET['url'] ?? ''));
 if ($id === null) {
     json_error(400, 'Keine YouTube-URL');
 }

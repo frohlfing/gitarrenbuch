@@ -1,7 +1,6 @@
 /**
- * Konfliktlöser: bringt Noten ohne Rückfrage in die Form des Gitarrenbuchs (Regeln und Reihenfolge in
- * docs/Konflikte.md, "Konfliktlöser: die Regeln"). Beim Import einer Guitar-Pro-Datei (readGpFile() in notation.js).
- * Ohne DOM.
+ * Konfliktlöser: bringt Noten ohne Rückfrage in die Form des Gitarrenbuchs.  Regeln und Reihenfolge in
+ * `docs/Konflikte.md`, "Konfliktlöser: die Regeln".
  */
 
 import {gripOf, normalizeChords} from './base.js';
@@ -9,9 +8,27 @@ import {simplifyChord} from './chordfile.js';
 import {findGrips, gripToneProblem, nameGrip} from './chordgrips.js';
 import {parseChord} from './chordtheory.js';
 import {
-  chordsTrack, hasLyrics, hasStrings, instrumentOf, lyricsTrack, moveContent, moveToCapo, normalizeTuningOctave,
-  notationPitch, parseScore, sameTuning, setInstrument, setTuning, splitTicks, stringedStaves, timeline, toGuitarTab,
-  trackName, tuningStaves, unrollRepeats, writeScore,
+    chordsTrack,
+    hasLyrics,
+    hasStrings,
+    instrumentOf,
+    lyricsTrack,
+    moveContent,
+    moveToCapo,
+    normalizeTuningOctave,
+    notationPitch,
+    parseScore,
+    sameTuning,
+    setInstrument,
+    setTuning,
+    splitTicks,
+    stringedStaves,
+    timeline,
+    toGuitarTab,
+    trackName,
+    tuningStaves,
+    unrollRepeats,
+    writeScore,
 } from './notation.js';
 import {lyricsLines} from './textview.js';
 
@@ -67,90 +84,90 @@ const lossy = text => ({text, critical: true});
  * @param {import('./base.js').ChordLibrary} library Akkordkatalog
  * @returns {ResolveResult}
  */
-export function resolveConflicts(alphaTab, tex, library){
-  const parse = t => parseScore(alphaTab, t);
-  /** @type {Change[]} */
-  const changes = [];
-  // 1. Wiederholungen und Sprünge ausschreiben.
-  const unrolled = unrollRepeats(alphaTab, parse, tex);
-  let score = unrolled ? parse(writeScore(alphaTab, unrolled.score)) : parse(tex);
-  if(unrolled){
-    changes.push(done(unrolled.before === unrolled.after
-      ? `Wiederholungs- bzw. Sprungzeichen entfernt (${unrolled.after} Takte wie vorher).`
-      : `Wiederholungen und Sprünge ausgeschrieben: ${unrolled.before} → ${unrolled.after} Takte.`));
-  }
-  // 2. Takte mit falscher Länge (danach neu einlesen, damit die Zeiten der Schläge stimmen).
-  const lengths = fixBarLengths(alphaTab, score);
-  if(lengths.length){
-    changes.push(...lengths);
-    score = parse(writeScore(alphaTab, score));
-  }
-  // 3. bis 12.
-  changes.push(...fixTripletFeel(alphaTab, score));
-  changes.push(...fixPitchedTracks(alphaTab, score));
-  changes.push(...fixTuningOctaves(alphaTab, score));
-  changes.push(...fixInstruments(alphaTab, score));
-  changes.push(...fixCapo(score));
-  changes.push(...fixTuning(alphaTab, score));
-  changes.push(...fixChordTracks(alphaTab, score));
-  const lyrics = fixLyricsTracks(score, changes);
-  changes.push(...fixChordNames(score, library));
-  changes.push(...fixGrips(score));
-  // 13. Griffbilder: eigene bleiben, fehlende kommen aus dem Katalog.
-  normalizeChords(alphaTab, score, library, true);
-  // Nichts geändert: die Noten wie gegeben (das Neuschreiben allein ändert nichts).
-  if(!changes.length && !lyrics.length) return {tex, changes, lyrics};
-  return {tex: writeScore(alphaTab, score), changes, lyrics};
+export function resolveConflicts(alphaTab, tex, library) {
+    const parse = t => parseScore(alphaTab, t);
+    /** @type {Change[]} */
+    const changes = [];
+    // 1. Wiederholungen und Sprünge ausschreiben.
+    const unrolled = unrollRepeats(alphaTab, parse, tex);
+    let score = unrolled ? parse(writeScore(alphaTab, unrolled.score)) : parse(tex);
+    if (unrolled) {
+        changes.push(done(unrolled.before === unrolled.after
+            ? `Wiederholungs- bzw. Sprungzeichen entfernt (${unrolled.after} Takte wie vorher).`
+            : `Wiederholungen und Sprünge ausgeschrieben: ${unrolled.before} → ${unrolled.after} Takte.`));
+    }
+    // 2. Takte mit falscher Länge (danach neu einlesen, damit die Zeiten der Schläge stimmen).
+    const lengths = fixBarLengths(alphaTab, score);
+    if (lengths.length) {
+        changes.push(...lengths);
+        score = parse(writeScore(alphaTab, score));
+    }
+    // 3. bis 12.
+    changes.push(...fixTripletFeel(alphaTab, score));
+    changes.push(...fixPitchedTracks(alphaTab, score));
+    changes.push(...fixTuningOctaves(alphaTab, score));
+    changes.push(...fixInstruments(alphaTab, score));
+    changes.push(...fixCapo(score));
+    changes.push(...fixTuning(alphaTab, score));
+    changes.push(...fixChordTracks(alphaTab, score));
+    const lyrics = fixLyricsTracks(score, changes);
+    changes.push(...fixChordNames(score, library));
+    changes.push(...fixGrips(score));
+    // 13. Griffbilder: eigene bleiben, fehlende kommen aus dem Katalog.
+    normalizeChords(alphaTab, score, library, true);
+    // Nichts geändert: die Noten wie gegeben (das Neuschreiben allein ändert nichts).
+    if (!changes.length && !lyrics.length) return {tex, changes, lyrics};
+    return {tex: writeScore(alphaTab, score), changes, lyrics};
 }
 
 /**
  * Füllt zu kurze Takte am Ende mit Pausen auf und kürzt zu lange: von hinten den letzten Schlag verkürzen, wenn das mit
  * einem Notenwert geht, sonst Schläge löschen (eine entstandene Lücke füllen Pausen). Je Stimme; leere Stimmen und ein
- * Auftakt zählen nicht (wie barLengthProblems() in notation.js).
+ * Auftakt zählen nicht (dessen Länge ergibt sich aus dem Inhalt, Pausen gehörten an den Anfang).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixBarLengths(alphaTab, score){
-  const changes = [];
-  for(const track of score.tracks) for(const staff of track.staves) for(const bar of staff.bars){
-    const mb = bar.masterBar;
-    if(mb.isAnacrusis) continue;
-    const length = mb.calculateDuration();
-    for(const voice of bar.voices){
-      if(!voice.beats.length || voice.isEmpty) continue;
-      const filled = timeline(voice).at(-1).end;
-      if(Math.abs(filled - length) < 1) continue;
-      const where = `${trackName(track)}, Takt ${bar.index + 1}`;
-      if(filled < length){
-        addRests(alphaTab, voice, length - filled);
-        changes.push(done(`${where}: zu kurz, mit Pausen aufgefüllt.`));
-        continue;
-      }
-      let excess = filled - length;
-      let shortened = 0;
-      let deleted = 0;
-      while(excess > 0 && voice.beats.length){
-        const last = timeline(voice).at(-1);
-        const ticks = last.end - last.start;
-        const parts = ticks > excess && !last.beat.hasTuplet ? splitTicks(ticks - excess) : null;
-        if(parts?.length === 1){
-          last.beat.duration = parts[0].duration;
-          last.beat.dots = parts[0].dots;
-          excess = 0;
-          shortened++;
-        } else {
-          voice.beats.pop();
-          excess -= ticks;
-          deleted++;
+function fixBarLengths(alphaTab, score) {
+    const changes = [];
+    for (const track of score.tracks) for (const staff of track.staves) for (const bar of staff.bars) {
+        const mb = bar.masterBar;
+        if (mb.isAnacrusis) continue;
+        const length = mb.calculateDuration();
+        for (const voice of bar.voices) {
+            if (!voice.beats.length || voice.isEmpty) continue;
+            const filled = timeline(voice).at(-1).end;
+            if (Math.abs(filled - length) < 1) continue;
+            const where = `${trackName(track)}, Takt ${bar.index + 1}`;
+            if (filled < length) {
+                addRests(alphaTab, voice, length - filled);
+                changes.push(done(`${where}: zu kurz, mit Pausen aufgefüllt.`));
+                continue;
+            }
+            let excess = filled - length;
+            let shortened = 0;
+            let deleted = 0;
+            while (excess > 0 && voice.beats.length) {
+                const last = timeline(voice).at(-1);
+                const ticks = last.end - last.start;
+                const parts = ticks > excess && !last.beat.hasTuplet ? splitTicks(ticks - excess) : null;
+                if (parts?.length === 1) {
+                    last.beat.duration = parts[0].duration;
+                    last.beat.dots = parts[0].dots;
+                    excess = 0;
+                    shortened++;
+                } else {
+                    voice.beats.pop();
+                    excess -= ticks;
+                    deleted++;
+                }
+            }
+            if (excess < 0) addRests(alphaTab, voice, -excess);
+            changes.push(lossy(`${where}: zu lang, ${[shortened ? 'letzter Schlag verkürzt' : '',
+                deleted ? `${deleted} ${deleted === 1 ? 'Schlag' : 'Schläge'} gelöscht` : ''].filter(Boolean).join(', ')}.`));
         }
-      }
-      if(excess < 0) addRests(alphaTab, voice, -excess);
-      changes.push(lossy(`${where}: zu lang, ${[shortened ? 'letzter Schlag verkürzt' : '',
-        deleted ? `${deleted} ${deleted === 1 ? 'Schlag' : 'Schläge'} gelöscht` : ''].filter(Boolean).join(', ')}.`));
     }
-  }
-  return changes;
+    return changes;
 }
 
 /**
@@ -160,13 +177,13 @@ function fixBarLengths(alphaTab, score){
  * @param {number} ticks Länge
  * @returns {void}
  */
-function addRests(alphaTab, voice, ticks){
-  for(const {duration, dots} of splitTicks(ticks) ?? []){
-    const rest = new alphaTab.model.Beat();
-    rest.duration = duration;
-    rest.dots = dots;
-    voice.addBeat(rest);
-  }
+function addRests(alphaTab, voice, ticks) {
+    for (const {duration, dots} of splitTicks(ticks) ?? []) {
+        const rest = new alphaTab.model.Beat();
+        rest.duration = duration;
+        rest.dots = dots;
+        voice.addBeat(rest);
+    }
 }
 
 /**
@@ -175,26 +192,26 @@ function addRests(alphaTab, voice, ticks){
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixTripletFeel(alphaTab, score){
-  const Feel = alphaTab.model.TripletFeel;
-  const toShuffle = [Feel.Dotted8th, Feel.Scottish8th];
-  const toNone = [Feel.Triplet16th, Feel.Dotted16th, Feel.Scottish16th];
-  let shuffle = 0;
-  let none = 0;
-  for(const mb of score.masterBars){
-    if(toShuffle.includes(mb.tripletFeel)){
-      mb.tripletFeel = Feel.Triplet8th;
-      shuffle++;
-    } else if(toNone.includes(mb.tripletFeel)){
-      mb.tripletFeel = Feel.NoTripletFeel;
-      none++;
+function fixTripletFeel(alphaTab, score) {
+    const Feel = alphaTab.model.TripletFeel;
+    const toShuffle = [Feel.Dotted8th, Feel.Scottish8th];
+    const toNone = [Feel.Triplet16th, Feel.Dotted16th, Feel.Scottish16th];
+    let shuffle = 0;
+    let none = 0;
+    for (const mb of score.masterBars) {
+        if (toShuffle.includes(mb.tripletFeel)) {
+            mb.tripletFeel = Feel.Triplet8th;
+            shuffle++;
+        } else if (toNone.includes(mb.tripletFeel)) {
+            mb.tripletFeel = Feel.NoTripletFeel;
+            none++;
+        }
     }
-  }
-  // Beides ändert, wie der Song gespielt wird.
-  return [
-    shuffle ? lossy(`Triolen-Feeling (punktiert/Scottish) in ${shuffle} Takten zu Shuffle.`) : null,
-    none ? lossy(`Triolen-Feeling (Sechzehntel) in ${none} Takten entfernt.`) : null,
-  ].filter(Boolean);
+    // Beides ändert, wie der Song gespielt wird.
+    return [
+        shuffle ? lossy(`Triolen-Feeling (punktiert/Scottish) in ${shuffle} Takten zu Shuffle.`) : null,
+        none ? lossy(`Triolen-Feeling (Sechzehntel) in ${none} Takten entfernt.`) : null,
+    ].filter(Boolean);
 }
 
 /**
@@ -203,22 +220,22 @@ function fixTripletFeel(alphaTab, score){
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixPitchedTracks(alphaTab, score){
-  const changes = [];
-  for(const track of score.tracks) for(const staff of track.staves){
-    if(staff.isPercussion || hasStrings(staff)) continue;
-    const {shift, octaves, skipped} = toGuitarTab(alphaTab, staff);
-    const octave = n => `${Math.abs(n / 12)} Oktave${Math.abs(n) > 12 ? 'n' : ''}`;
-    const parts = [
-      shift ? `alle Töne ${octave(shift)} ${shift > 0 ? 'höher' : 'tiefer'}` : '',
-      octaves ? `${octaves} weitere Töne um eine Oktave versetzt` : '',
-      skipped ? `${skipped} Töne nicht zu greifen` : '',
-    ].filter(Boolean);
-    const text = `Spur „${trackName(track)}“ ohne Saiten: jetzt Gitarren-Tab`
-      + (parts.length ? ` (${parts.join(', ')})` : '') + '.';
-    changes.push(shift || octaves || skipped ? lossy(text) : done(text));
-  }
-  return changes;
+function fixPitchedTracks(alphaTab, score) {
+    const changes = [];
+    for (const track of score.tracks) for (const staff of track.staves) {
+        if (staff.isPercussion || hasStrings(staff)) continue;
+        const {shift, octaves, skipped} = toGuitarTab(alphaTab, staff);
+        const octave = n => `${Math.abs(n / 12)} Oktave${Math.abs(n) > 12 ? 'n' : ''}`;
+        const parts = [
+            shift ? `alle Töne ${octave(shift)} ${shift > 0 ? 'höher' : 'tiefer'}` : '',
+            octaves ? `${octaves} weitere Töne um eine Oktave versetzt` : '',
+            skipped ? `${skipped} Töne nicht zu greifen` : '',
+        ].filter(Boolean);
+        const text = `Spur „${trackName(track)}“ ohne Saiten: jetzt Gitarren-Tab`
+            + (parts.length ? ` (${parts.join(', ')})` : '') + '.';
+        changes.push(shift || octaves || skipped ? lossy(text) : done(text));
+    }
+    return changes;
 }
 
 /**
@@ -228,19 +245,19 @@ function fixPitchedTracks(alphaTab, score){
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixTuningOctaves(alphaTab, score){
-  const changes = [];
-  for(const track of score.tracks){
-    const instrument = instrumentOf(track);
-    for(const staff of track.staves){
-      const shift = normalizeTuningOctave(alphaTab, staff, instrument);
-      if(!shift) continue;
-      const names = [...staff.tuning].reverse().map(p => alphaTab.model.Tuning.getTextForTuning(p, true)).join(' ');
-      changes.push(lossy(`Spur „${trackName(track)}“: Tuning ${Math.abs(shift / 12)} Oktave${Math.abs(shift) > 12 ? 'n' : ''} `
-        + `${shift < 0 ? 'tiefer' : 'höher'} auf ${names}; Bünde bleiben, klingt ${shift < 0 ? 'tiefer' : 'höher'}.`));
+function fixTuningOctaves(alphaTab, score) {
+    const changes = [];
+    for (const track of score.tracks) {
+        const instrument = instrumentOf(track);
+        for (const staff of track.staves) {
+            const shift = normalizeTuningOctave(alphaTab, staff, instrument);
+            if (!shift) continue;
+            const names = [...staff.tuning].reverse().map(p => alphaTab.model.Tuning.getTextForTuning(p, true)).join(' ');
+            changes.push(lossy(`Spur „${trackName(track)}“: Tuning ${Math.abs(shift / 12)} Oktave${Math.abs(shift) > 12 ? 'n' : ''} `
+                + `${shift < 0 ? 'tiefer' : 'höher'} auf ${names}; Bünde bleiben, klingt ${shift < 0 ? 'tiefer' : 'höher'}.`));
+        }
     }
-  }
-  return changes;
+    return changes;
 }
 
 /**
@@ -250,25 +267,25 @@ function fixTuningOctaves(alphaTab, score){
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixInstruments(alphaTab, score){
-  const changes = [];
-  for(const track of score.tracks){
-    const instrument = instrumentOf(track);
-    if(instrument.program === null) continue;
-    const program = track.playbackInfo.program;
-    const staves = track.staves.filter(st => !st.isPercussion);
-    const pitches = [...new Set(staves.map(st => st.displayTranspositionPitch))];
-    const soundChanged = program !== instrument.program;
-    const notationChanged = staves.some(st => st.displayTranspositionPitch !== notationPitch(st));
-    if(!soundChanged && !notationChanged) continue;
-    setInstrument(alphaTab, track, instrument);
-    const text = `Spur „${trackName(track)}“: ${instrument.name}`
-      + (soundChanged ? ` (vorher Klang ${program})` : '')
-      + (notationChanged ? `; Notenlage wie Tab, eine Oktave höher notiert (vorher ${pitches.join(', ')})` : '')
-      + '.';
-    changes.push(done(text));
-  }
-  return changes;
+function fixInstruments(alphaTab, score) {
+    const changes = [];
+    for (const track of score.tracks) {
+        const instrument = instrumentOf(track);
+        if (instrument.program === null) continue;
+        const program = track.playbackInfo.program;
+        const staves = track.staves.filter(st => !st.isPercussion);
+        const pitches = [...new Set(staves.map(st => st.displayTranspositionPitch))];
+        const soundChanged = program !== instrument.program;
+        const notationChanged = staves.some(st => st.displayTranspositionPitch !== notationPitch(st));
+        if (!soundChanged && !notationChanged) continue;
+        setInstrument(alphaTab, track, instrument);
+        const text = `Spur „${trackName(track)}“: ${instrument.name}`
+            + (soundChanged ? ` (vorher Klang ${program})` : '')
+            + (notationChanged ? `; Notenlage wie Tab, eine Oktave höher notiert (vorher ${pitches.join(', ')})` : '')
+            + '.';
+        changes.push(done(text));
+    }
+    return changes;
 }
 
 /**
@@ -276,19 +293,19 @@ function fixInstruments(alphaTab, score){
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixCapo(score){
-  const staves = stringedStaves(score);
-  if(new Set(staves.map(st => st.capo)).size <= 1) return [];
-  const capo = Math.min(...staves.map(st => st.capo));
-  const moved = [];
-  let octaves = 0;
-  for(const staff of staves){
-    if(staff.capo === capo) continue;
-    moved.push(`${trackName(staff.track)} ${staff.capo}`);
-    octaves += moveToCapo(staff, capo);
-  }
-  const text = `Capo ungleich: alle auf Capo ${capo} (umgerechnet: ${moved.join(', ')})`;
-  return [octaves ? lossy(`${text}; ${octaves} Noten eine Oktave höher.`) : done(`${text}.`)];
+function fixCapo(score) {
+    const staves = stringedStaves(score);
+    if (new Set(staves.map(st => st.capo)).size <= 1) return [];
+    const capo = Math.min(...staves.map(st => st.capo));
+    const moved = [];
+    let octaves = 0;
+    for (const staff of staves) {
+        if (staff.capo === capo) continue;
+        moved.push(`${trackName(staff.track)} ${staff.capo}`);
+        octaves += moveToCapo(staff, capo);
+    }
+    const text = `Capo ungleich: alle auf Capo ${capo} (umgerechnet: ${moved.join(', ')})`;
+    return [octaves ? lossy(`${text}; ${octaves} Noten eine Oktave höher.`) : done(`${text}.`)];
 }
 
 /**
@@ -298,23 +315,23 @@ function fixCapo(score){
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixTuning(alphaTab, score){
-  if(sameTuning(score)) return [];
-  const staves = tuningStaves(score);
-  const sum = st => st.tuning.reduce((a, b) => a + b, 0);
-  const lowest = staves.reduce((low, st) => sum(st) < sum(low) ? st : low);
-  const tuning = [...lowest.tuning].reverse();
-  const names = tuning.map(p => alphaTab.model.Tuning.getTextForTuning(p, false)).join(' ');
-  const moved = [];
-  let misses = 0;
-  for(const staff of staves){
-    if(staff.tuning.join(',') === lowest.tuning.join(',')) continue;
-    moved.push(trackName(staff.track));
-    misses += setTuning(alphaTab, staff, tuning, true);
-  }
-  const text = `Tuning ungleich: alle auf ${names} (umgerechnet: ${moved.join(', ')})`;
-  return [misses ? lossy(`${text}; ${misses} Noten ließen sich nicht umrechnen (Bund unter 0 oder über 24), sie klingen anders.`)
-    : done(`${text}.`)];
+function fixTuning(alphaTab, score) {
+    if (sameTuning(score)) return [];
+    const staves = tuningStaves(score);
+    const sum = st => st.tuning.reduce((a, b) => a + b, 0);
+    const lowest = staves.reduce((low, st) => sum(st) < sum(low) ? st : low);
+    const tuning = [...lowest.tuning].reverse();
+    const names = tuning.map(p => alphaTab.model.Tuning.getTextForTuning(p, false)).join(' ');
+    const moved = [];
+    let misses = 0;
+    for (const staff of staves) {
+        if (staff.tuning.join(',') === lowest.tuning.join(',')) continue;
+        moved.push(trackName(staff.track));
+        misses += setTuning(alphaTab, staff, tuning, true);
+    }
+    const text = `Tuning ungleich: alle auf ${names} (umgerechnet: ${moved.join(', ')})`;
+    return [misses ? lossy(`${text}; ${misses} Noten ließen sich nicht umrechnen (Bund unter 0 oder über 24), sie klingen anders.`)
+        : done(`${text}.`)];
 }
 
 /**
@@ -324,16 +341,16 @@ function fixTuning(alphaTab, score){
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixChordTracks(alphaTab, score){
-  const target = chordsTrack(score);
-  if(!target || !score.tracks.some(t => t !== target && t.staves.some(st => st.bars.some(b => b.voices.some(v =>
-    v.beats.some(beat => !!beat.chordId)))))) return [];
-  const result = moveContent(alphaTab, score, 'chords', target.index, 'insert');
-  const text = `Akkorde nach „${trackName(target)}“ übertragen: ${result.moved} (${result.split} Schläge geteilt)`;
-  // Welche weggefallen sind (zum Nachsehen): Takt, Akkord und der, der an der Stelle bleibt.
-  const lost = result.lostChords.map(l => `Takt ${l.bar + 1}: ${l.name} aus „${l.track}“ entfällt, ${l.kept} bleibt`).join('; ');
-  return [result.lost ? lossy(`${text}; ${result.lost} abweichende an derselben Stelle: ${lost}.`)
-    : done(`${text}.`)];
+function fixChordTracks(alphaTab, score) {
+    const target = chordsTrack(score);
+    if (!target || !score.tracks.some(t => t !== target && t.staves.some(st => st.bars.some(b => b.voices.some(v =>
+        v.beats.some(beat => !!beat.chordId)))))) return [];
+    const result = moveContent(alphaTab, score, 'chords', target.index, 'insert');
+    const text = `Akkorde nach „${trackName(target)}“ übertragen: ${result.moved} (${result.split} Schläge geteilt)`;
+    // Welche weggefallen sind (zum Nachsehen): Takt, Akkord und der, der an der Stelle bleibt.
+    const lost = result.lostChords.map(l => `Takt ${l.bar + 1}: ${l.name} aus „${l.track}“ entfällt, ${l.kept} bleibt`).join('; ');
+    return [result.lost ? lossy(`${text}; ${result.lost} abweichende an derselben Stelle: ${lost}.`)
+        : done(`${text}.`)];
 }
 
 /** Ab diesem Anteil gleicher Wörter gilt der Text einer anderen Spur als derselbe wie der der Textspur. */
@@ -345,12 +362,12 @@ const SAME_LYRICS = 0.9;
  * @param {import('../../types/alphatab').model.Track} track Spur
  * @returns {string[]}
  */
-function lyricsWords(track){
-  const parts = [];
-  for(const staff of track.staves) for(const bar of staff.bars) for(const voice of bar.voices) for(const beat of voice.beats){
-    for(const syllable of beat.lyrics ?? []) if(syllable?.trim()) parts.push(syllable.trim());
-  }
-  return parts.join(' ').replace(/-\s+/g, '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').split(/\s+/).filter(Boolean);
+function lyricsWords(track) {
+    const parts = [];
+    for (const staff of track.staves) for (const bar of staff.bars) for (const voice of bar.voices) for (const beat of voice.beats) {
+        for (const syllable of beat.lyrics ?? []) if (syllable?.trim()) parts.push(syllable.trim());
+    }
+    return parts.join(' ').replace(/-\s+/g, '').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').split(/\s+/).filter(Boolean);
 }
 
 /**
@@ -359,15 +376,15 @@ function lyricsWords(track){
  * @param {string[]} b Wörter
  * @returns {number} 0 bis 1
  */
-function wordSimilarity(a, b){
-  if(!a.length || !b.length) return 0;
-  let row = new Array(b.length + 1).fill(0);
-  for(const word of a){
-    const next = [0];
-    for(let j = 1; j <= b.length; j++) next[j] = word === b[j - 1] ? row[j - 1] + 1 : Math.max(row[j], next[j - 1]);
-    row = next;
-  }
-  return row[b.length] / Math.max(a.length, b.length);
+function wordSimilarity(a, b) {
+    if (!a.length || !b.length) return 0;
+    let row = new Array(b.length + 1).fill(0);
+    for (const word of a) {
+        const next = [0];
+        for (let j = 1; j <= b.length; j++) next[j] = word === b[j - 1] ? row[j - 1] + 1 : Math.max(row[j], next[j - 1]);
+        row = next;
+    }
+    return row[b.length] / Math.max(a.length, b.length);
 }
 
 /**
@@ -380,30 +397,30 @@ function wordSimilarity(a, b){
  * @param {Change[]} changes Änderungen, wird ergänzt
  * @returns {LeftoverLyrics[]}
  */
-function fixLyricsTracks(score, changes){
-  const dest = lyricsTrack(score);
-  if(!dest) return [];
-  const others = score.tracks.filter(t => t !== dest && t.staves.some(st => st.bars.some(b => b.voices.some(v =>
-    v.beats.some(hasLyrics)))));
-  const destWords = lyricsWords(dest);
-  /** @type {LeftoverLyrics[]} */
-  const leftovers = [];
-  for(const track of others){
-    const text = lyricsLines(score, track);
-    const similarity = wordSimilarity(destWords, lyricsWords(track));
-    for(const staff of track.staves) for(const bar of staff.bars) for(const voice of bar.voices){
-      for(const beat of voice.beats) beat.lyrics = null;
+function fixLyricsTracks(score, changes) {
+    const dest = lyricsTrack(score);
+    if (!dest) return [];
+    const others = score.tracks.filter(t => t !== dest && t.staves.some(st => st.bars.some(b => b.voices.some(v =>
+        v.beats.some(hasLyrics)))));
+    const destWords = lyricsWords(dest);
+    /** @type {LeftoverLyrics[]} */
+    const leftovers = [];
+    for (const track of others) {
+        const text = lyricsLines(score, track);
+        const similarity = wordSimilarity(destWords, lyricsWords(track));
+        for (const staff of track.staves) for (const bar of staff.bars) for (const voice of bar.voices) {
+            for (const beat of voice.beats) beat.lyrics = null;
+        }
+        const percent = `${Math.round(similarity * 100)} % gleiche Wörter`;
+        if (similarity >= SAME_LYRICS) {
+            changes.push(done(`Liedtext aus „${trackName(track)}“ entfernt: derselbe wie in „${trackName(dest)}“ (${percent}).`));
+        } else {
+            changes.push(lossy(`Liedtext aus „${trackName(track)}“ entfernt: weicht von „${trackName(dest)}“ ab (${percent}), `
+                + 'als Chord-Datei abgelegt.'));
+            leftovers.push({name: `${trackName(track)} – Liedtext.txt`, text});
+        }
     }
-    const percent = `${Math.round(similarity * 100)} % gleiche Wörter`;
-    if(similarity >= SAME_LYRICS){
-      changes.push(done(`Liedtext aus „${trackName(track)}“ entfernt: derselbe wie in „${trackName(dest)}“ (${percent}).`));
-    } else {
-      changes.push(lossy(`Liedtext aus „${trackName(track)}“ entfernt: weicht von „${trackName(dest)}“ ab (${percent}), `
-        + 'als Chord-Datei abgelegt.'));
-      leftovers.push({name: `${trackName(track)} – Liedtext.txt`, text});
-    }
-  }
-  return leftovers;
+    return leftovers;
 }
 
 /**
@@ -413,29 +430,29 @@ function fixLyricsTracks(score, changes){
  * @param {import('./base.js').ChordLibrary} library Akkordkatalog
  * @returns {Change[]} Änderungen
  */
-function fixChordNames(score, library){
-  const changes = [];
-  for(const track of score.tracks) for(const staff of track.staves){
-    for(const [id, chord] of [...staff.chords ?? []]){
-      if(parseChord(chord.name)) continue;
-      const frets = [...chord.strings].reverse();
-      const tuning = [...staff.tuning].reverse();
-      const fromGrip = staff.isStringed && frets.length === tuning.length && frets.filter(f => f >= 0).length >= MIN_PLAYED
-        ? nameGrip(frets, tuning, 1)[0] : null;
-      const simple = fromGrip ?? simplifyChord(chord.name, library);
-      if(parseChord(simple)){
-        changes.push(done(`Akkord „${chord.name}“ in „${trackName(track)}“ heißt jetzt „${simple}“.`));
-        chord.name = simple;
-        continue;
-      }
-      for(const bar of staff.bars) for(const voice of bar.voices) for(const beat of voice.beats){
-        if(beat.chordId === id) beat.chordId = null;
-      }
-      staff.chords.delete(id);
-      changes.push(lossy(`Akkord „${chord.name}“ in „${trackName(track)}“ entfernt (unbekannt).`));
+function fixChordNames(score, library) {
+    const changes = [];
+    for (const track of score.tracks) for (const staff of track.staves) {
+        for (const [id, chord] of [...staff.chords ?? []]) {
+            if (parseChord(chord.name)) continue;
+            const frets = [...chord.strings].reverse();
+            const tuning = [...staff.tuning].reverse();
+            const fromGrip = staff.isStringed && frets.length === tuning.length && frets.filter(f => f >= 0).length >= MIN_PLAYED
+                ? nameGrip(frets, tuning, 1)[0] : null;
+            const simple = fromGrip ?? simplifyChord(chord.name, library);
+            if (parseChord(simple)) {
+                changes.push(done(`Akkord „${chord.name}“ in „${trackName(track)}“ heißt jetzt „${simple}“.`));
+                chord.name = simple;
+                continue;
+            }
+            for (const bar of staff.bars) for (const voice of bar.voices) for (const beat of voice.beats) {
+                if (beat.chordId === id) beat.chordId = null;
+            }
+            staff.chords.delete(id);
+            changes.push(lossy(`Akkord „${chord.name}“ in „${trackName(track)}“ entfernt (unbekannt).`));
+        }
     }
-  }
-  return changes;
+    return changes;
 }
 
 /**
@@ -443,21 +460,21 @@ function fixChordNames(score, library){
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
-function fixGrips(score){
-  const changes = [];
-  for(const staff of stringedStaves(score)){
-    const tuning = [...staff.tuning].reverse();
-    for(const chord of staff.chords?.values() ?? []){
-      const parsed = parseChord(chord.name);
-      const frets = [...chord.strings].reverse();
-      if(!parsed || frets.length !== tuning.length || frets.filter(f => f >= 0).length < MIN_PLAYED) continue;
-      if(!gripToneProblem(parsed, frets, tuning)) continue;
-      const found = findGrips(chord.name, {tuning, limit: 1})[0];
-      if(!found) continue;
-      changes.push(done(`Griff von „${chord.name}“ in „${trackName(staff.track)}“: ${gripOf(chord)} → ${found.grip}.`));
-      chord.strings = [...found.frets].reverse();
-      chord.firstFret = 0;
+function fixGrips(score) {
+    const changes = [];
+    for (const staff of stringedStaves(score)) {
+        const tuning = [...staff.tuning].reverse();
+        for (const chord of staff.chords?.values() ?? []) {
+            const parsed = parseChord(chord.name);
+            const frets = [...chord.strings].reverse();
+            if (!parsed || frets.length !== tuning.length || frets.filter(f => f >= 0).length < MIN_PLAYED) continue;
+            if (!gripToneProblem(parsed, frets, tuning)) continue;
+            const found = findGrips(chord.name, {tuning, limit: 1})[0];
+            if (!found) continue;
+            changes.push(done(`Griff von „${chord.name}“ in „${trackName(staff.track)}“: ${gripOf(chord)} → ${found.grip}.`));
+            chord.strings = [...found.frets].reverse();
+            chord.firstFret = 0;
+        }
     }
-  }
-  return changes;
+    return changes;
 }

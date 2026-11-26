@@ -1,88 +1,101 @@
 <!doctype html>
 <html lang="de">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#272b34">
-<title>Gitarrenbuch</title>
-<link rel="icon" href="favicon.svg?4" type="image/svg+xml">
-<!-- Versionszähler: nur hier erhöhen, bei jedem Hochladen mit geänderten Dateien, damit Browser keine alten Fassungen
-     aus dem Cache nehmen. Er gilt für app.css, app.js und alle Module unter js/ (Import-Map am Ende der Seite). -->
-<script>
-const VERSION = '20261123u';
-document.write(`<link rel="stylesheet" href="app.css?v=${VERSION}">`);
-</script>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport">
+    <meta content="#272b34" name="theme-color">
+    <title>Gitarrenbuch</title>
+    <link href="favicon.svg?4" rel="icon" type="image/svg+xml">
+    <!-- Versionszähler: nur hier erhöhen, bei jedem Hochladen mit geänderten Dateien, damit Browser keine alten Fassungen
+         aus dem Cache nehmen. Er gilt für app.css, app.js und alle Module unter js/ (Import-Map am Ende der Seite). -->
+    <script>
+        const VERSION = '20261128q';
+        document.write(`<link rel="stylesheet" href="app.css?v=${VERSION}">`);
+    </script>
 </head>
 <body>
 
 <div id="libraryView">
-  <header>
-    <div class="lib-menu">
-      <button class="tbtn" id="libMenuBtn" type="button" aria-label="Menü" aria-expanded="false">&#9776;</button>
-      <div class="menu" id="libMenu" hidden>
-        <button type="button" data-page="chords" title="Alle Griffbilder des Akkordkatalogs">Akkorde</button>
-        <button type="button" data-page="patterns" title="Strumming und Picking Patterns">Patterns</button>
-        <button type="button" data-page="fretboard" title="Griffbrett mit Tönen, Akkorden und Tonleitern">Griffbrett</button>
-      </div>
+    <header>
+        <div class="lib-menu">
+            <button aria-expanded="false" aria-label="Menü" class="tbtn" id="libMenuBtn" type="button">&#9776;</button>
+            <div class="menu" hidden id="libMenu">
+                <button data-page="chords" title="Alle Griffbilder des Akkordkatalogs" type="button">Akkorde</button>
+                <button data-page="patterns" title="Strumming und Picking Patterns" type="button">Patterns</button>
+                <button data-page="fretboard" title="Griffbrett mit Tönen, Akkorden und Tonleitern" type="button">
+                    Griffbrett
+                </button>
+            </div>
+        </div>
+        <div class="eyebrow">Gitarre &amp; Gesang</div>
+        <h1>Das Gitarrenbuch</h1>
+        <p class="sub" id="subCount">wird geladen &hellip;</p>
+    </header>
+
+    <div class="controls">
+        <input aria-label="Titel, Interpret oder Genre suchen" id="search"
+               placeholder="Titel, Interpret oder Genre &hellip;"
+               type="search">
+        <select aria-label="Nach Genre filtern" id="tagSel">
+            <option value="">Alle Genres</option>
+        </select>
+        <select aria-label="Nach Spur filtern" id="trackSel">
+            <option value="">Alle Spuren</option>
+        </select>
+        <select aria-label="Nach Favorit oder Einstufung filtern" id="pickSel">
+            <option value="">Alle Songs</option>
+        </select>
+        <select aria-label="Sortierung" id="sortSel">
+            <option value="title">Titel</option>
+            <option value="artist">Interpret</option>
+            <option value="played-desc">Zuletzt gespielt</option>
+            <option value="updated-desc">Zuletzt geändert</option>
+            <option value="created-desc">Zuletzt angelegt</option>
+        </select>
+        <button class="btn btn-primary" id="newSongBtn" type="button">+ Neuer Song</button>
     </div>
-    <div class="eyebrow">Gitarre &amp; Gesang</div>
-    <h1>Das Gitarrenbuch</h1>
-    <p class="sub" id="subCount">wird geladen &hellip;</p>
-  </header>
+    <p class="count" id="resultCount"></p>
 
-  <div class="controls">
-    <input type="search" id="search" placeholder="Titel, Interpret oder Genre &hellip;" aria-label="Titel, Interpret oder Genre suchen">
-    <select id="tagSel" aria-label="Nach Genre filtern"><option value="">Alle Genres</option></select>
-    <select id="trackSel" aria-label="Nach Spur filtern"><option value="">Alle Spuren</option></select>
-    <select id="pickSel" aria-label="Nach Favorit oder Einstufung filtern"><option value="">Alle Songs</option></select>
-    <select id="sortSel" aria-label="Sortierung">
-      <option value="title">Titel</option>
-      <option value="artist">Interpret</option>
-      <option value="played-desc">Zuletzt gespielt</option>
-      <option value="updated-desc">Zuletzt geändert</option>
-      <option value="created-desc">Zuletzt angelegt</option>
-    </select>
-    <button class="btn btn-primary" id="newSongBtn" type="button">+ Neuer Song</button>
-  </div>
-  <p class="count" id="resultCount"></p>
-
-  <div class="grid" id="songList"></div>
+    <div class="grid" id="songList"></div>
 </div>
 
-<main id="songView" hidden></main>
+<main hidden id="songView"></main>
 
 <div class="overlay" id="overlay">
-  <div class="sheet" id="sheet"></div>
+    <div class="sheet" id="sheet"></div>
 </div>
 
 <script>
-// Startdiagnose: Scheitert ein ES-Modul (Laden oder Verknüpfen), läuft app.js gar nicht und kann nichts melden.
-// Dann steht hier statt "wird geladen …" der Fehler bzw. nach 10 s, welche Skripte mit welchem Status kamen.
-{
-  const sub = document.getElementById('subCount');
-  const loading = () => sub.textContent.startsWith('wird geladen');
-  addEventListener('error', e => {
-    if(!loading()) return;
-    sub.textContent = `Start fehlgeschlagen: ${e.message || `Datei nicht geladen ${e.target?.src}`}`;
-  }, true);
-  setTimeout(() => {
-    if(!loading()) return;
-    const files = performance.getEntriesByType('resource')
-      .filter(r => /\.(m?js|php)/.test(r.name))
-      .map(r => `${r.name.replace(location.origin, '')} ${r.responseStatus || '?'}`);
-    sub.textContent = `Start hängt. Geladen: ${files.join(', ') || 'nichts'}`;
-  }, 10000);
-}
+    // Startdiagnose: Scheitert ein ES-Modul (Laden oder Verknüpfen), läuft app.js gar nicht und kann nichts melden.
+    // Dann steht hier statt "wird geladen …" der Fehler bzw. nach 10 s, welche Skripte mit welchem Status kamen.
+    {
+        const sub = document.getElementById('subCount');
+        const loading = () => sub.textContent.startsWith('wird geladen');
+        addEventListener('error', e => {
+            if (!loading()) return;
+            sub.textContent = `Start fehlgeschlagen: ${e.message || `Datei nicht geladen ${e.target?.src}`}`;
+        }, true);
+        setTimeout(() => {
+            if (!loading()) return;
+            const files = performance.getEntriesByType('resource')
+                .filter(r => /\.(m?js|php)/.test(r.name))
+                .map(r => `${r.name.replace(location.origin, '')} ${r.responseStatus || '?'}`);
+            sub.textContent = `Start hängt. Geladen: ${files.join(', ') || 'nichts'}`;
+        }, 10000);
+    }
 </script>
 <!-- Die Import-Map hängt den Versionszähler (oben im Kopf) an die Module unter js/, ohne die import-Zeilen zu ändern.
      Ein neues Modul hier eintragen, sonst lädt es ohne Zähler (und nach einer Änderung womöglich aus dem Cache). -->
 <script>
-{
-  const modules = ['base', 'chordfile', 'chordgrips', 'chordtheory', 'editor', 'library', 'notation', 'playback', 'conflicts', 'rhythmdialog', 'sheet', 'textview', 'transposedialog', 'uploads'];
-  const imports = Object.fromEntries(modules.map(m => [`./js/${m}.js`, `./js/${m}.js?v=${VERSION}`]));
-  document.write(`<script type="importmap">${JSON.stringify({imports})}<\/script>`
-    + `<script type="module" src="app.js?v=${VERSION}"><\/script>`);
-}
+    {
+        const modules = ['base', 'chordcheck', 'chorddetect', 'chordfile', 'chordgrips', 'chordtheory', 'editor',
+            'library', 'notation',
+            'pitchdetect', 'playback', 'conflicts', 'rhythmdialog', 'rhythmhint', 'sheet', 'textview', 'timingdialog',
+            'transposedialog', 'uploads'];
+        const imports = Object.fromEntries(modules.map(m => [`./js/${m}.js`, `./js/${m}.js?v=${VERSION}`]));
+        document.write(`<script type="importmap">${JSON.stringify({imports})}<\/script>`
+            + `<script type="module" src="app.js?v=${VERSION}"><\/script>`);
+    }
 </script>
 </body>
 </html>

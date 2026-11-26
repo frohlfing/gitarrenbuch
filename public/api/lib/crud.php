@@ -58,6 +58,13 @@ const SONG_INFO_FIELDS = [
  */
 const SONG_LEVELS = ['can', 'practice', 'cannot'];
 
+/**
+ * Höchstlänge des Grunds einer Baustelle (Feld wip.reason in song.json).
+ *
+ * @var int
+ */
+const SONG_WIP_REASON_MAX = 500;
+
 
 /**
  * Höchstlänge der Hinweise zur Spielweise auf dem Leadsheet (leadsheet.instructions, siehe api/leadsheet.php).
@@ -123,7 +130,7 @@ function read_song_json(string $slug): ?array
 
 /**
  * Schreibt $song als song.json (überschreibt eine vorhandene Datei vollständig). Die berechneten Felder files und
- * tracks werden nicht gespeichert.
+ * tracks werden nicht gespeichert, die Angaben für das Leadsheet stehen in score.json (write_leadsheet()).
  *
  * @param string $slug Slug des Lieds, der Ordner muss existieren
  * @param array $song zu speichernde Felder
@@ -131,13 +138,9 @@ function read_song_json(string $slug): ?array
  */
 function write_song_json(string $slug, array $song): void
 {
-    unset($song['files'], $song['tracks']);
-    // Leeres sources muss als {} statt [] gespeichert werden (json_decode() liefert dafür ein leeres Array), ebenso
-    // leadsheet.chords.
-    $song['sources'] = (object) ($song['sources'] ?? []);
-    if (is_array($song['leadsheet'] ?? null) && array_key_exists('chords', $song['leadsheet'])) {
-        $song['leadsheet']['chords'] = (object) $song['leadsheet']['chords'];
-    }
+    unset($song['files'], $song['tracks'], $song['leadsheet']);
+    // Leeres sources muss als {} statt [] gespeichert werden (json_decode() liefert dafür ein leeres Array).
+    $song['sources'] = (object)($song['sources'] ?? []);
     file_put_contents(
         song_dir($slug) . '/song.json',
         json_encode($song, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n"
@@ -145,16 +148,52 @@ function write_song_json(string $slug, array $song): void
 }
 
 /**
- * Angaben für das Leadsheet eines Lieds: das Feld leadsheet in song.json. Aufbau siehe api/leadsheet.php.
+ * Pfad der Angaben für das Leadsheet eines Lieds (score.json neben score.atex, Aufbau siehe api/leadsheet.php).
  *
  * @param string $slug Slug des Lieds
- * @param array|null $song song.json, wenn schon gelesen
+ * @return string Pfad der Datei (existiert nicht zwingend)
+ */
+function leadsheet_path(string $slug): string
+{
+    return song_dir($slug) . '/score.json';
+}
+
+/**
+ * Angaben für das Leadsheet eines Lieds (score.json).
+ *
+ * @param string $slug Slug des Lieds
  * @return array Angaben; leer ohne
  */
-function read_leadsheet(string $slug, ?array $song = null): array
+function read_leadsheet(string $slug): array
 {
-    $song ??= read_song_json($slug) ?? [];
-    return is_array($song['leadsheet'] ?? null) ? $song['leadsheet'] : [];
+    $path = leadsheet_path($slug);
+    $data = is_file($path) ? json_decode((string)file_get_contents($path), true) : null;
+    return is_array($data) ? $data : [];
+}
+
+/**
+ * Schreibt die Angaben für das Leadsheet eines Lieds (score.json); ohne Angaben fällt die Datei weg.
+ *
+ * @param string $slug Slug des Lieds, der Ordner muss existieren
+ * @param array $data Angaben
+ * @return void
+ * @throws RuntimeException wenn die Datei nicht geschrieben werden kann
+ */
+function write_leadsheet(string $slug, array $data): void
+{
+    $path = leadsheet_path($slug);
+    if (!$data) {
+        @unlink($path);
+        return;
+    }
+    // Leeres chords muss als {} statt [] gespeichert werden.
+    if (array_key_exists('chords', $data)) {
+        $data['chords'] = (object)$data['chords'];
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT) . "\n";
+    if (file_put_contents($path, $json) === false) {
+        throw new RuntimeException('Die Angaben für das Leadsheet konnten nicht gespeichert werden');
+    }
 }
 
 /**
@@ -205,9 +244,16 @@ function read_track_names(string $slug): array
 function with_file_flags(string $slug, array $song): array
 {
     $dir = song_dir($slug);
-    $song['sources'] = (object) ($song['sources'] ?? []);
+    $song['sources'] = (object)($song['sources'] ?? []);
     $song['files'] = array_keys(array_filter(SONG_FILES, fn(string $name) => is_file($dir . '/' . $name)));
     $song['tracks'] = read_track_names($slug);
+    // Die Angaben für das Leadsheet aus score.json, z. B. für Baustellen und Takte pro Zeile.
+    $leadsheet = read_leadsheet($slug);
+    if ($leadsheet) {
+        $song['leadsheet'] = $leadsheet;
+    } else {
+        unset($song['leadsheet']);
+    }
     // Die Angaben zu den Uploads liefert api/uploads.php.
     unset($song['uploads']);
     return $song;
@@ -239,7 +285,7 @@ function list_songs(): array
             $songs[] = $song;
         }
     }
-    usort($songs, fn(array $a, array $b) => strcasecmp((string) $a['title'], (string) $b['title']));
+    usort($songs, fn(array $a, array $b) => strcasecmp((string)$a['title'], (string)$b['title']));
     return $songs;
 }
 
@@ -271,7 +317,7 @@ function song_exists(string $artist, string $title, ?string $excludeSlug = null)
             continue;
         }
         $s = read_song_json($slug);
-        if ($s !== null && song_identity((string) ($s['artist'] ?? ''), (string) $s['title']) === $needle) {
+        if ($s !== null && song_identity((string)($s['artist'] ?? ''), (string)$s['title']) === $needle) {
             return true;
         }
     }
@@ -288,7 +334,7 @@ function validate_song_input(array $data): array
 {
     $errors = [];
 
-    if (trim((string) ($data['title'] ?? '')) === '') {
+    if (trim((string)($data['title'] ?? '')) === '') {
         $errors[] = 'title ist erforderlich';
     }
     foreach (['artist', 'notes', ...array_keys(SONG_INFO_FIELDS)] as $field) {
@@ -311,8 +357,17 @@ function validate_song_input(array $data): array
     if (isset($data['level']) && !in_array($data['level'], SONG_LEVELS, true)) {
         $errors[] = 'level muss ' . implode(', ', SONG_LEVELS) . ' oder null sein';
     }
-    if (isset($data['trackDefaults']) && !array_is_list((array) $data['trackDefaults'])) {
+    if (isset($data['trackDefaults']) && !array_is_list((array)$data['trackDefaults'])) {
         $errors[] = 'trackDefaults muss eine Liste sein';
+    }
+    if (isset($data['wip'])) {
+        $wip = $data['wip'];
+        if (!is_array($wip) || !is_string($wip['reason'] ?? '') || mb_strlen($wip['reason'] ?? '') > SONG_WIP_REASON_MAX
+            || !is_array($wip['tracks'] ?? []) || !array_is_list($wip['tracks'] ?? [])
+            || array_filter($wip['tracks'] ?? [], fn($t) => !is_string($t)) || !is_bool($wip['audio'] ?? false)) {
+            $errors[] = 'wip muss {reason: Text bis ' . SONG_WIP_REASON_MAX
+                . ' Zeichen, tracks: Spurnamen, audio: true/false} oder null sein';
+        }
     }
 
     return $errors;
@@ -330,14 +385,14 @@ function validate_song_input(array $data): array
  */
 function normalize_song_fields(array $data): array
 {
-    $optionalText = fn(string $field) => trim((string) ($data[$field] ?? '')) ?: null;
+    $optionalText = fn(string $field) => trim((string)($data[$field] ?? '')) ?: null;
 
-    $tags = array_map(fn($t) => trim((string) $t), $data['tags'] ?? []);
+    $tags = array_map(fn($t) => trim((string)$t), $data['tags'] ?? []);
     $tags = array_values(array_unique(array_filter($tags, fn(string $t) => $t !== '')));
 
     $sources = [];
     foreach (SONG_SOURCES as $key) {
-        $url = trim((string) ($data['sources'][$key] ?? ''));
+        $url = trim((string)($data['sources'][$key] ?? ''));
         if ($key === 'youtube') {
             $url = youtube_watch_url($url);
         }
@@ -352,14 +407,14 @@ function normalize_song_fields(array $data): array
     }
 
     return [
-        'title' => trim((string) ($data['title'] ?? '')),
+        'title' => trim((string)($data['title'] ?? '')),
         'artist' => $optionalText('artist'),
         'tags' => $tags,
         ...$info,
         'notes' => $optionalText('notes'),
-        'sources' => (object) $sources,
+        'sources' => (object)$sources,
         'youtubeSeconds' => isset($sources['youtube']) && isset($data['youtubeSeconds'])
-            ? (int) $data['youtubeSeconds'] : null,
+            ? (int)$data['youtubeSeconds'] : null,
     ];
 }
 
@@ -394,7 +449,7 @@ function create_song(array $data): array
     }
 
     $fields = normalize_song_fields($data);
-    if (song_exists((string) $fields['artist'], $fields['title'])) {
+    if (song_exists((string)$fields['artist'], $fields['title'])) {
         throw new ValidationException(['Song mit diesem Interpreten und Titel gibt es schon']);
     }
 
@@ -412,12 +467,11 @@ function create_song(array $data): array
     ]);
     // Die Anweisungen aus der GP-Datei sind Hinweise des Tab-Autors zur Spielweise: Sie belegen die Spielweise auf dem
     // Leadsheet vor. Das Feld instructions oben bleibt, wie es aus der Datei kam.
-    if (($fields['instructions'] ?? null) !== null) {
-        $song['leadsheet'] = ['patterns' => [], 'tabs' => [], 'chords' => [], 'links' => [],
-            'instructions' => mb_substr($fields['instructions'], 0, LEADSHEET_TEXT_MAX)];
-    }
-
     write_song_json($slug, $song);
+    if (($fields['instructions'] ?? null) !== null) {
+        write_leadsheet($slug, ['patterns' => [], 'tabs' => [], 'chords' => [], 'links' => [],
+            'instructions' => mb_substr($fields['instructions'], 0, LEADSHEET_TEXT_MAX)]);
+    }
     return with_file_flags($slug, $song);
 }
 
@@ -452,7 +506,7 @@ function update_song(string $slug, array $data): array
         && ($fields['sources']->youtube ?? null) === ($existing['sources']['youtube'] ?? null)) {
         $fields['youtubeSeconds'] = $existing['youtubeSeconds'] ?? null;
     }
-    if (song_exists((string) $fields['artist'], $fields['title'], $slug)) {
+    if (song_exists((string)$fields['artist'], $fields['title'], $slug)) {
         throw new ValidationException(['Song mit diesem Interpreten und Titel gibt es schon']);
     }
 
@@ -500,13 +554,28 @@ function update_song(string $slug, array $data): array
     // Spuren. Fehlt das Feld im Request, bleiben die gespeicherten; eine leere Liste löscht sie.
     if (array_key_exists('trackDefaults', $data)) {
         $defaults = array_map(
-            fn($t) => ['show' => (bool) ($t['show'] ?? true), 'mute' => (bool) ($t['mute'] ?? false)],
-            array_values((array) $data['trackDefaults'])
+            fn($t) => ['show' => (bool)($t['show'] ?? true), 'mute' => (bool)($t['mute'] ?? false)],
+            array_values((array)$data['trackDefaults'])
         );
         if ($defaults) {
             $song['trackDefaults'] = $defaults;
         } else {
             unset($song['trackDefaults']);
+        }
+    }
+    // Baustelle: Grund, betroffene Spuren (Namen) und ob die Audiospur dazugehört (nur gespeichert, wenn ja); null löscht
+    // sie, fehlt das Feld, bleibt die gespeicherte.
+    if (array_key_exists('wip', $data)) {
+        if (is_array($data['wip'])) {
+            $song['wip'] = [
+                'reason' => trim((string)($data['wip']['reason'] ?? '')),
+                'tracks' => array_values(array_unique(array_filter(array_map('trim', $data['wip']['tracks'] ?? [])))),
+            ];
+            if (($data['wip']['audio'] ?? false) === true) {
+                $song['wip']['audio'] = true;
+            }
+        } else {
+            unset($song['wip']);
         }
     }
     write_song_json($newSlug, $song);

@@ -22,7 +22,7 @@ if ($method !== 'GET') {
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-cache');
 if (($_GET['usage'] ?? '') !== '') {
-    echo json_encode((object) array_map(fn(array $g) => (object) $g, chord_usage()), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    echo json_encode((object)array_map(fn(array $g) => (object)$g, chord_usage()), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
 echo chord_library_json();

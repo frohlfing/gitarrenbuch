@@ -27,7 +27,7 @@ require_once __DIR__ . '/lib/http.php';
 require_once __DIR__ . '/lib/crud.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-$slug = isset($_GET['slug']) ? (string) $_GET['slug'] : null;
+$slug = isset($_GET['slug']) ? (string)$_GET['slug'] : null;
 
 try {
     switch ($method) {

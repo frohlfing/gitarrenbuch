@@ -182,7 +182,7 @@ Die neuen `audio.mp3` (von YouTube) beginnen nicht genau dort, wo die bisherige 
 diesen Versatz müssen alle Sync-Punkte in `score.atex` verschoben werden (negativ: Audio früher). „Gemessen“ ist
 ein Vergleich der beiden Spuren und nur ein Startwert: Bei Three Little Birds und Geboren um zu leben lag die
 Messung genau um das Doppelte daneben, bei Junge und Fröhliche Weihnacht passt 0. Maßgeblich ist das Gehör: Im
-Sync-Editor (Bearbeitungsmodus, Reiter „Audio“) mit „ms verschieben“ alle Sync-Punkte verschieben, bis Synth und Audiospur zusammen
+Sync-Editor (Bearbeitungsmodus, Reiter „Audio“) ohne ausgewählten Marker im Feld „Spur“ alle Sync-Punkte verschieben, bis Synth und Audiospur zusammen
 klingen, und speichern.
 Sortiert nach dem gemessenen Versatz, der größte zuerst.
 

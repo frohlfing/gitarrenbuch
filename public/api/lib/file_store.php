@@ -90,7 +90,7 @@ function validate_score(string $tex): void
     }
     if (strlen($tex) > SCORE_MAX_BYTES) {
         throw new FileValidationException(
-            'Noten sind zu groß (Limit: ' . (int) (SCORE_MAX_BYTES / 1024 / 1024) . ' MB)'
+            'Noten sind zu groß (Limit: ' . (int)(SCORE_MAX_BYTES / 1024 / 1024) . ' MB)'
         );
     }
     if (!mb_check_encoding($tex, 'UTF-8') || str_contains($tex, "\0")) {
@@ -115,11 +115,11 @@ function validate_score(string $tex): void
  * @throws FileValidationException|NotFoundException|ConflictException|RuntimeException
  */
 function store_new_score(
-    string $slug,
-    string $tex,
+    string  $slug,
+    string  $tex,
     ?string $gpPath = null,
-    string $gpName = '',
-    string $gpSource = ''
+    string  $gpName = '',
+    string  $gpSource = ''
 ): array
 {
     if (read_song_json($slug) === null) {
@@ -149,17 +149,43 @@ function store_new_score(
 }
 
 /**
- * Hebt den Stand eines Lieds vor dem Überschreiben auf, damit sich ein missglücktes Speichern rückgängig machen lässt
- * (im Bearbeitungsmodus der Knopf "Verlauf", siehe list_score_history()): die aktuelle score.atex als
- * history/score-<Zeitstempel>.atex und, daneben als score-<Zeitstempel>.json, die Angaben für das Leadsheet (Feld
- * leadsheet aus song.json), weil sie an den Takten der Noten hängen, und die Notiz, was sich beim Überschreiben ändert
- * (Feld note, nur wenn es eine gibt). Es bleiben die letzten SCORE_HISTORY_KEEP Stände.
- * Importierte Noten (store_new_score()) sind kein Stand, der Verlauf beginnt mit dem ersten Überschreiben.
+ * Muster einer Kennung im Verlauf: "score-" und der Zeitpunkt des Speicherns, z. B. "score-20261031-224255".
+ *
+ * @var string
+ */
+const HISTORY_ID_PATTERN = '/^score-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d+)?$/';
+
+/**
+ * Kennung der aktuellen Fassung im Verlauf: die neueste Notiz ohne Noten daneben (siehe keep_score_history()). Ohne
+ * eine (importierte Noten, noch nie gespeichert) der Zeitpunkt der letzten Änderung von score.atex.
+ *
+ * @param string $slug Slug des Lieds
+ * @return string Kennung, z. B. "score-20261031-224255"
+ */
+function current_history_id(string $slug): string
+{
+    $dir = song_dir($slug) . '/history';
+    $notes = glob("$dir/score-*.txt") ?: [];
+    rsort($notes);
+    foreach ($notes as $note) {
+        if (!is_file(substr($note, 0, -4) . '.atex')) {
+            return basename($note, '.txt');
+        }
+    }
+    return 'score-' . date('Ymd-His', (int)filemtime(song_dir($slug) . '/' . SONG_FILES['score']));
+}
+
+/**
+ * Legt beim Speichern die bisherige Fassung in den Verlauf (im Bearbeitungsmodus der Knopf "Verlauf", siehe
+ * list_score_history()). Jede Fassung heißt history/score-<Zeitpunkt ihres Speicherns>: .txt ist die Notiz dazu (was
+ * sich geändert hat), .atex und .json sind score.atex und score.json unverändert. Die aktuelle Fassung hat nur die
+ * .txt; beim nächsten Speichern kommen ihre Noten dazu, und die neue Fassung bekommt ihre .txt. Es bleiben die letzten
+ * SCORE_HISTORY_KEEP früheren Fassungen.
  *
  * @param string $slug Slug des Lieds (score.atex muss existieren)
  * @param string $note was sich ändert (history_note()), leer = keine Notiz
  * @return void
- * @throws RuntimeException wenn history/ nicht angelegt oder die Datei nicht kopiert werden kann
+ * @throws RuntimeException wenn history/ nicht angelegt oder eine Datei nicht geschrieben werden kann
  */
 function keep_score_history(string $slug, string $note = ''): void
 {
@@ -167,22 +193,20 @@ function keep_score_history(string $slug, string $note = ''): void
     if (!is_dir($dir) && !mkdir($dir, 0775) && !is_dir($dir)) {
         throw new RuntimeException('history/ konnte nicht angelegt werden');
     }
-    $name = unique_filename($dir, 'score-' . date('Ymd-His'), 'atex');
-    if (!copy(song_dir($slug) . '/' . SONG_FILES['score'], "$dir/$name")) {
+    $base = "$dir/" . current_history_id($slug);
+    if (!copy(song_dir($slug) . '/' . SONG_FILES['score'], "$base.atex")) {
         throw new RuntimeException('Die bisherigen Noten konnten nicht gesichert werden');
     }
-    $leadsheet = read_leadsheet($slug);
-    if (is_array($leadsheet['chords'] ?? null)) {
-        // Leeres chords muss {} bleiben (wie in write_song_json()).
-        $leadsheet['chords'] = (object) $leadsheet['chords'];
-    }
-    $data = ['leadsheet' => (object) $leadsheet];
-    if ($note !== '') {
-        $data['note'] = $note;
-    }
-    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (file_put_contents("$dir/" . basename($name, '.atex') . '.json', $json) === false) {
+    if (is_file(leadsheet_path($slug)) && !copy(leadsheet_path($slug), "$base.json")) {
         throw new RuntimeException('Die bisherigen Angaben für das Leadsheet konnten nicht gesichert werden');
+    }
+    // Nicht der Name der eben abgelegten Fassung (zweimal Speichern in derselben Sekunde).
+    $name = 'score-' . date('Ymd-His');
+    for ($n = 2; is_file("$dir/$name.txt") || is_file("$dir/$name.atex"); $n++) {
+        $name = 'score-' . date('Ymd-His') . "-$n";
+    }
+    if (file_put_contents("$dir/$name.txt", $note) === false) {
+        throw new RuntimeException('Die Notiz konnte nicht gesichert werden');
     }
     // Zeitstempel im Namen: alphabetisch = zeitlich sortiert.
     $versions = glob("$dir/score-*.atex") ?: [];
@@ -190,33 +214,41 @@ function keep_score_history(string $slug, string $note = ''): void
     foreach (array_slice($versions, 0, max(0, count($versions) - SCORE_HISTORY_KEEP)) as $old) {
         @unlink($old);
         @unlink(substr($old, 0, -5) . '.json');
+        @unlink(substr($old, 0, -5) . '.txt');
     }
 }
 
 /**
- * Listet die aufgehobenen Fassungen der Noten eines Lieds (siehe keep_score_history()), die neueste zuerst.
+ * Listet den Verlauf eines Lieds (siehe keep_score_history()): zuerst die aktuelle Fassung, dann die früheren, die
+ * neueste zuerst.
  *
  * @param string $slug Slug des Lieds
- * @return array[] je Fassung id (Dateiname ohne .atex, z. B. "score-20261031-224255"), time (Zeitpunkt des
- *                 Überschreibens, "2026-10-31 22:42:55"), size (Bytes) und note (was sich beim Überschreiben
- *                 geändert hat, leer ohne Notiz)
+ * @return array[] je Fassung id (z. B. "score-20261031-224255"), time (gespeichert, "2026-10-31 22:42:55"), size
+ *                 (Bytes), note (was sich beim Speichern geändert hat, leer ohne) und current (aktuelle Fassung, weder
+ *                 zu laden noch zu löschen)
  */
 function list_score_history(string $slug): array
 {
-    $files = glob(song_dir($slug) . '/history/score-*.atex') ?: [];
-    rsort($files);
-    $list = [];
-    foreach ($files as $file) {
-        $id = basename($file, '.atex');
-        if (!preg_match('/^score-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d+)?$/', $id, $m)) {
-            continue;
+    $dir = song_dir($slug) . '/history';
+    $score = song_dir($slug) . '/' . SONG_FILES['score'];
+    $entry = static function (string $id, string $file, bool $current) use ($dir): ?array {
+        if (!preg_match(HISTORY_ID_PATTERN, $id, $m)) {
+            return null;
         }
-        $json = substr($file, 0, -5) . '.json';
-        $data = is_file($json) ? json_decode((string) file_get_contents($json), true) : null;
-        $list[] = ['id' => $id, 'time' => "$m[1]-$m[2]-$m[3] $m[4]:$m[5]:$m[6]", 'size' => (int) filesize($file),
-            'note' => is_string($data['note'] ?? null) ? $data['note'] : ''];
+        $note = "$dir/$id.txt";
+        return ['id' => $id, 'time' => "$m[1]-$m[2]-$m[3] $m[4]:$m[5]:$m[6]", 'size' => (int)filesize($file),
+            'note' => is_file($note) ? (string)file_get_contents($note) : '', 'current' => $current];
+    };
+    $list = [];
+    if (is_file($score)) {
+        $list[] = $entry(current_history_id($slug), $score, true);
     }
-    return $list;
+    $files = glob("$dir/score-*.atex") ?: [];
+    rsort($files);
+    foreach ($files as $file) {
+        $list[] = $entry(basename($file, '.atex'), $file, false);
+    }
+    return array_values(array_filter($list));
 }
 
 /**
@@ -226,7 +258,7 @@ function list_score_history(string $slug): array
  */
 function history_note(): string
 {
-    $note = trim((string) preg_replace('/\s+/u', ' ', (string) ($_GET['note'] ?? '')));
+    $note = trim((string)preg_replace('/\s+/u', ' ', (string)($_GET['note'] ?? '')));
     return mb_substr($note, 0, NOTE_MAX);
 }
 
@@ -240,7 +272,8 @@ function history_note(): string
  */
 function score_history_path(string $slug, string $id): string
 {
-    if (!array_any(list_score_history($slug), static fn(array $version): bool => $version['id'] === $id)) {
+    $known = static fn(array $version): bool => $version['id'] === $id && !$version['current'];
+    if (!array_any(list_score_history($slug), $known)) {
         throw new NotFoundException('Fassung nicht gefunden');
     }
     return song_dir($slug) . "/history/$id.atex";
@@ -251,18 +284,18 @@ function score_history_path(string $slug, string $id): string
  *
  * @param string $slug Slug des Lieds
  * @param string $id Kennung aus list_score_history()
- * @return array das Feld leadsheet von damals, leer ohne Angaben
+ * @return array die Angaben von damals (score.json), leer ohne
  * @throws NotFoundException wenn es den Stand nicht gibt
  */
 function score_history_leadsheet(string $slug, string $id): array
 {
     $json = substr(score_history_path($slug, $id), 0, -5) . '.json';
-    $data = is_file($json) ? json_decode((string) file_get_contents($json), true) : null;
-    return is_array($data['leadsheet'] ?? null) ? $data['leadsheet'] : [];
+    $data = is_file($json) ? json_decode((string)file_get_contents($json), true) : null;
+    return is_array($data) ? $data : [];
 }
 
 /**
- * Löscht einen aufgehobenen Stand (Noten und Angaben für das Leadsheet).
+ * Löscht einen aufgehobenen Stand (Noten, Angaben für das Leadsheet und Notiz).
  *
  * @param string $slug Slug des Lieds
  * @param string $id Kennung aus list_score_history()
@@ -273,6 +306,7 @@ function delete_score_history(string $slug, string $id): void
 {
     $path = score_history_path($slug, $id);
     @unlink(substr($path, 0, -5) . '.json');
+    @unlink(substr($path, 0, -5) . '.txt');
     if (!unlink($path)) {
         throw new RuntimeException('Der Stand konnte nicht gelöscht werden');
     }
@@ -347,13 +381,13 @@ function store_audio(string $slug, string $localPath): array
     if (read_song_json($slug) === null) {
         throw new NotFoundException("Song '$slug' nicht gefunden");
     }
-    $size = (int) filesize($localPath);
+    $size = (int)filesize($localPath);
     if ($size === 0 || $size > MAX_UPLOAD_BYTES) {
         throw new FileValidationException(
             'Audiodatei leer oder größer als ' . intdiv(MAX_UPLOAD_BYTES, 1024 * 1024) . ' MB'
         );
     }
-    $head = (string) file_get_contents($localPath, false, null, 0, 3);
+    $head = (string)file_get_contents($localPath, false, null, 0, 3);
     $isMp3 = str_starts_with($head, 'ID3')
         || (strlen($head) > 1 && ord($head[0]) === 0xFF && (ord($head[1]) & 0xE0) === 0xE0);
     if (!$isMp3) {

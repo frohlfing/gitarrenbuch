@@ -1,11 +1,21 @@
 /**
  * Dialog "Uploads": die hochgeladenen Dateien eines Lieds (Guitar-Pro-, ChordPro-, Textdateien, PDFs, …) mit Quelle und
- * Beschreibung, dazu das Hochladen weiterer Dateien. Aus dem Menü des Lieds zeigt er alles; "Spur aus GuitarPro-Datei importieren" und
- * "Chord-Datei importieren" im Bearbeitungsmodus öffnen ihn zur Auswahl (nur passende Dateien, mit "Wählen").
- * Dateien werden nie geändert; nur Quelle und Beschreibung lassen sich ändern, und eine Datei lässt sich löschen.
+ * Beschreibung, dazu das Hochladen weiterer Dateien. Aus dem Menü des Lieds zeigt er alles; "Spur aus GuitarPro-Datei
+ * importieren" und "Chord-Datei importieren" im Bearbeitungsmodus öffnen ihn zur Auswahl (nur passende Dateien, mit
+ * "Wählen"). Dateien werden nie geändert; nur Quelle und Beschreibung lassen sich ändern, und eine Datei lässt sich
+ * löschen.
  */
 
-import {addUpload, deleteUpload, escapeHtml, fetchUpload, listUploads, svgIcon, updateUpload, uploadUrl} from './base.js';
+import {
+    addUpload,
+    deleteUpload,
+    escapeHtml,
+    fetchUpload,
+    listUploads,
+    svgIcon,
+    updateUpload,
+    uploadUrl
+} from './base.js';
 import {bindDropzone, closeOverlay, isOverlayOpen, openOverlay, openStackedOverlay} from './library.js';
 
 /** @typedef {import('./base.js').Upload} Upload */
@@ -30,8 +40,8 @@ export const CHORD_EXTENSIONS = ['cho', 'chopro', 'crd', 'pro', 'txt'];
  * @param {string} name Dateiname
  * @returns {string} klein, ohne Punkt ("" ohne Endung)
  */
-function extension(name){
-  return name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
+function extension(name) {
+    return name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
 }
 
 /**
@@ -39,9 +49,9 @@ function extension(name){
  * @param {number} bytes Größe
  * @returns {string} z. B. "28 KB" oder "1,6 MB"
  */
-function formatSize(bytes){
-  if(bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / 1024 / 1024).toLocaleString('de-DE', {maximumFractionDigits: 1})} MB`;
+function formatSize(bytes) {
+    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    return `${(bytes / 1024 / 1024).toLocaleString('de-DE', {maximumFractionDigits: 1})} MB`;
 }
 
 /**
@@ -49,9 +59,9 @@ function formatSize(bytes){
  * @param {string} source Angabe zur Herkunft, meist eine URL
  * @returns {string} HTML
  */
-function sourceHtml(source){
-  const text = escapeHtml(source);
-  return /^https?:\/\//i.test(source) ? `<a href="${text}" target="_blank" rel="noopener">${text}</a>` : text;
+function sourceHtml(source) {
+    const text = escapeHtml(source);
+    return /^https?:\/\//i.test(source) ? `<a href="${text}" target="_blank" rel="noopener">${text}</a>` : text;
 }
 
 /**
@@ -61,9 +71,9 @@ function sourceHtml(source){
  * @param {boolean} pick ob der Dialog zur Auswahl dient (dann steht "Wählen" am Eintrag)
  * @returns {string} HTML
  */
-function uploadHtml(slug, u, pick){
-  const date = new Date(u.added).toLocaleDateString('de-DE');
-  return `<li class="upl-item" data-file="${escapeHtml(u.file)}">
+function uploadHtml(slug, u, pick) {
+    const date = new Date(u.added).toLocaleDateString('de-DE');
+    return `<li class="upl-item" data-file="${escapeHtml(u.file)}">
     <div class="upl-head">
       <a class="upl-name" href="${escapeHtml(uploadUrl(slug, u.file))}" target="_blank" rel="noopener">${escapeHtml(u.file)}</a>
       <span class="upl-meta">${formatSize(u.size)} · ${date}</span>
@@ -87,8 +97,8 @@ function uploadHtml(slug, u, pick){
  *   zum Hochladen stehen erst nach "Datei hinzufügen" da (Knopf unter der Liste).
  * @returns {void}
  */
-export function openUploads(slug, pick = null){
-  (isOverlayOpen() ? openStackedOverlay : openOverlay)(`
+export function openUploads(slug, pick = null) {
+    (isOverlayOpen() ? openStackedOverlay : openOverlay)(`
     <h2>${escapeHtml(pick?.title ?? 'Uploads')}</h2>
     <div id="uplError"></div>
     <ul class="upl-list" id="uplList"><li class="upl-none">Lädt …</li></ul>
@@ -127,168 +137,178 @@ export function openUploads(slug, pick = null){
     </div>
   `);
 
-  const byId = id => document.getElementById(id);
-  const list = byId('uplList');
-  const error = byId('uplError');
-  /** @type {Upload[]} */
-  let uploads = [];
+    const byId = id => document.getElementById(id);
+    const list = byId('uplList');
+    const error = byId('uplError');
+    /** @type {Upload[]} */
+    let uploads = [];
 
-  const showError = message => {
-    error.innerHTML = message ? `<div class="error-box">${escapeHtml(message)}</div>` : '';
-  };
+    const showError = message => {
+        error.innerHTML = message ? `<div class="error-box">${escapeHtml(message)}</div>` : '';
+    };
 
-  /** Zeichnet die Liste (bei der Auswahl nur die passenden Dateien). */
-  const render = () => {
-    const shown = pick ? uploads.filter(u => pick.extensions.includes(extension(u.file))) : uploads;
-    list.innerHTML = shown.length
-      ? shown.map(u => uploadHtml(slug, u, !!pick)).join('')
-      : pick
-        ? `<li class="upl-none upl-warn">Noch keine passende Datei (${pick.extensions.map(e => '.' + e).join(', ')}) hochgeladen.</li>`
-        : '<li class="upl-none">Noch keine Dateien hochgeladen.</li>';
-  };
+    /** Zeichnet die Liste (bei der Auswahl nur die passenden Dateien). */
+    const render = () => {
+        const shown = pick ? uploads.filter(u => pick.extensions.includes(extension(u.file))) : uploads;
+        list.innerHTML = shown.length
+            ? shown.map(u => uploadHtml(slug, u, !!pick)).join('')
+            : pick
+                ? `<li class="upl-none upl-warn">Noch keine passende Datei (${pick.extensions.map(e => '.' + e).join(', ')}) hochgeladen.</li>`
+                : '<li class="upl-none">Noch keine Dateien hochgeladen.</li>';
+    };
 
-  /**
-   * Lädt die Liste neu.
-   * @returns {Promise<void>}
-   */
-  const reload = async () => {
-    try {
-      uploads = await listUploads(slug);
-      render();
-    } catch(err){
-      list.innerHTML = '';
-      showError(err.message);
-    }
-  };
-  void reload();
+    /**
+     * Lädt die Liste neu.
+     * @returns {Promise<void>}
+     */
+    const reload = async () => {
+        try {
+            uploads = await listUploads(slug);
+            render();
+        } catch (err) {
+            list.innerHTML = '';
+            showError(err.message);
+        }
+    };
+    void reload();
 
-  // Die Felder zum Hochladen stehen erst nach "Datei hinzufügen" da.
-  byId('uplShowAdd').addEventListener('click', () => {
-    byId('uplAddArea').hidden = false;
-    byId('uplShowRow').hidden = true;
-  });
-
-  // Reiter: Datei hochladen oder Direktlink (je eine Karte sichtbar, damit der Dialog nicht scrollen muss).
-  for(const tab of document.querySelectorAll('[data-upl-tab]')){
-    tab.addEventListener('click', () => {
-      for(const other of document.querySelectorAll('[data-upl-tab]')){
-        other.setAttribute('aria-selected', String(other === tab));
-      }
-      for(const panel of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-upl-panel]'))){
-        panel.hidden = panel.dataset.uplPanel !== tab.getAttribute('data-upl-tab');
-      }
+    // Die Felder zum Hochladen stehen erst nach "Datei hinzufügen" da.
+    byId('uplShowAdd').addEventListener('click', () => {
+        byId('uplAddArea').hidden = false;
+        byId('uplShowRow').hidden = true;
     });
-  }
 
-  /** @type {?File} per Auswahl oder Drag & Drop */
-  let file = null;
-  bindDropzone(f => {
-    file = f;
-    byId('dropzoneText').textContent = f.name;
-    byId('dropzone').classList.add('has-file');
-  });
+    // Reiter: Datei hochladen oder Direktlink (je eine Karte sichtbar, damit der Dialog nicht scrollen muss).
+    for (const tab of document.querySelectorAll('[data-upl-tab]')) {
+        tab.addEventListener('click', () => {
+            for (const other of document.querySelectorAll('[data-upl-tab]')) {
+                other.setAttribute('aria-selected', String(other === tab));
+            }
+            for (const panel of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-upl-panel]'))) {
+                panel.hidden = panel.dataset.uplPanel !== tab.getAttribute('data-upl-tab');
+            }
+        });
+    }
 
-  /**
-   * Legt eine Datei oder einen Direktlink als Upload ab und lädt die Liste neu.
-   * @param {HTMLButtonElement} btn Knopf, der gedrückt wurde (während des Hochladens gesperrt)
-   * @param {{file?: ?File, url?: string, source?: string, description?: string}} upload was hochgeladen wird
-   * @param {string[]} fields Eingabefelder, die danach geleert werden
-   * @returns {Promise<void>}
-   */
-  const add = async (btn, upload, fields) => {
-    showError('');
-    const label = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Lädt …';
-    try {
-      await addUpload(slug, upload);
-      for(const id of fields){
+    /** @type {?File} per Auswahl oder Drag & Drop */
+    let file = null;
+    bindDropzone(f => {
+        file = f;
+        byId('dropzoneText').textContent = f.name;
+        byId('dropzone').classList.add('has-file');
+    });
+
+    /**
+     * Legt eine Datei oder einen Direktlink als Upload ab und lädt die Liste neu.
+     * @param {HTMLButtonElement} btn Knopf, der gedrückt wurde (während des Hochladens gesperrt)
+     * @param {{file?: ?File, url?: string, source?: string, description?: string}} upload was hochgeladen wird
+     * @param {string[]} fields Eingabefelder, die danach geleert werden
+     * @returns {Promise<void>}
+     */
+    const add = async (btn, upload, fields) => {
+        showError('');
+        const label = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Lädt …';
+        try {
+            await addUpload(slug, upload);
+            for (const id of fields) {
+                const input = /** @type {HTMLInputElement} */ (byId(id));
+                input.value = '';
+            }
+            file = null;
+            byId('dropzoneText').textContent = 'Datei hierherziehen oder tippen zum Auswählen';
+            byId('dropzone').classList.remove('has-file');
+            await reload();
+        } catch (err) {
+            showError(err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = label;
+        }
+    };
+    /**
+     * Getrimmter Inhalt eines Eingabefelds.
+     * @param {string} id Id des Feldes
+     * @returns {string} Text
+     */
+    const value = id => {
         const input = /** @type {HTMLInputElement} */ (byId(id));
-        input.value = '';
-      }
-      file = null;
-      byId('dropzoneText').textContent = 'Datei hierherziehen oder tippen zum Auswählen';
-      byId('dropzone').classList.remove('has-file');
-      await reload();
-    } catch(err){
-      showError(err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = label;
-    }
-  };
-  /**
-   * Getrimmter Inhalt eines Eingabefelds.
-   * @param {string} id Id des Feldes
-   * @returns {string} Text
-   */
-  const value = id => {
-    const input = /** @type {HTMLInputElement} */ (byId(id));
-    return input.value.trim();
-  };
+        return input.value.trim();
+    };
 
-  byId('uplAdd').addEventListener('click', e => {
-    if(!file){
-      showError('Bitte eine Datei wählen oder hierherziehen.');
-      return;
-    }
-    void add(/** @type {HTMLButtonElement} */ (e.currentTarget), {file, source: value('uplSource'), description: value('uplDesc')},
-      ['uplFile', 'uplSource', 'uplDesc']);
-  });
-  byId('uplFetch').addEventListener('click', e => {
-    if(!value('uplUrl')){
-      showError('Bitte einen Direktlink eingeben.');
-      return;
-    }
-    void add(/** @type {HTMLButtonElement} */ (e.currentTarget), {url: value('uplUrl'), description: value('uplUrlDesc')},
-      ['uplUrl', 'uplUrlDesc']);
-  });
+    byId('uplAdd').addEventListener('click', e => {
+        if (!file) {
+            showError('Bitte eine Datei wählen oder hierherziehen.');
+            return;
+        }
+        void add(/** @type {HTMLButtonElement} */ (e.currentTarget), {
+                file,
+                source: value('uplSource'),
+                description: value('uplDesc')
+            },
+            ['uplFile', 'uplSource', 'uplDesc']);
+    });
+    byId('uplFetch').addEventListener('click', e => {
+        if (!value('uplUrl')) {
+            showError('Bitte einen Direktlink eingeben.');
+            return;
+        }
+        void add(/** @type {HTMLButtonElement} */ (e.currentTarget), {
+                url: value('uplUrl'),
+                description: value('uplUrlDesc')
+            },
+            ['uplUrl', 'uplUrlDesc']);
+    });
 
-  list.addEventListener('click', async e => {
-    const target = /** @type {HTMLElement} */ (e.target);
-    const item = /** @type {?HTMLElement} */ (target.closest('.upl-item'));
-    if(!item) return;
-    const upload = uploads.find(u => u.file === item.dataset.file);
-    if(!upload) return;
-    if(target.closest('[data-pick]')){
-      showError('');
-      try {
-        const file = await fetchUpload(slug, upload.file);
-        closeOverlay();
-        pick.onPick(file, upload);
-      } catch(err){
-        showError(err.message);
-      }
-    } else if(target.closest('[data-edit]')){
-      item.querySelector('.upl-info').innerHTML = `
+    list.addEventListener('click', async e => {
+        const target = /** @type {HTMLElement} */ (e.target);
+        const item = /** @type {?HTMLElement} */ (target.closest('.upl-item'));
+        if (!item) return;
+        const upload = uploads.find(u => u.file === item.dataset.file);
+        if (!upload) return;
+        if (target.closest('[data-pick]')) {
+            showError('');
+            try {
+                const file = await fetchUpload(slug, upload.file);
+                closeOverlay();
+                pick.onPick(file, upload);
+            } catch (err) {
+                showError(err.message);
+            }
+        } else if (target.closest('[data-edit]')) {
+            item.querySelector('.upl-info').innerHTML = `
         <input type="text" class="upl-input" data-source value="${escapeHtml(upload.source)}" placeholder="Quelle">
         <input type="text" class="upl-input" data-description value="${escapeHtml(upload.description)}" placeholder="Beschreibung">
         <div class="btn-row">
           <button type="button" class="btn btn-primary btn-sm" data-save>Speichern</button>
           <button type="button" class="btn btn-sm" data-cancel>Abbrechen</button>
         </div>`;
-    } else if(target.closest('[data-delete]')){
-      if(!confirm(`"${upload.file}" endgültig löschen?`)) return;
-      showError('');
-      try {
-        uploads = (await deleteUpload(slug, upload.file)).uploads;
-        render();
-      } catch(err){
-        showError(err.message);
-      }
-    } else if(target.closest('[data-cancel]')){
-      render();
-    } else if(target.closest('[data-save]')){
-      showError('');
-      try {
-        const source = /** @type {HTMLInputElement} */ (item.querySelector('[data-source]'));
-        const description = /** @type {HTMLInputElement} */ (item.querySelector('[data-description]'));
-        const saved = await updateUpload(slug, upload.file, {source: source.value, description: description.value});
-        uploads = uploads.map(u => u.file === saved.file ? saved : u);
-        render();
-      } catch(err){
-        showError(err.message);
-      }
-    }
-  });
+        } else if (target.closest('[data-delete]')) {
+            if (!confirm(`"${upload.file}" endgültig löschen?`)) return;
+            showError('');
+            try {
+                uploads = (await deleteUpload(slug, upload.file)).uploads;
+                render();
+            } catch (err) {
+                showError(err.message);
+            }
+        } else if (target.closest('[data-cancel]')) {
+            render();
+        } else if (target.closest('[data-save]')) {
+            showError('');
+            try {
+                const source = /** @type {HTMLInputElement} */ (item.querySelector('[data-source]'));
+                const description = /** @type {HTMLInputElement} */ (item.querySelector('[data-description]'));
+                const saved = await updateUpload(slug, upload.file, {
+                    source: source.value,
+                    description: description.value
+                });
+                uploads = uploads.map(u => u.file === saved.file ? saved : u);
+                render();
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+    });
 }

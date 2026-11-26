@@ -27,11 +27,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 require_token();
 
-$meta = json_decode((string) ($_POST['meta'] ?? ''), true);
+$meta = json_decode((string)($_POST['meta'] ?? ''), true);
 if (!is_array($meta)) {
     json_error(400, 'Ungültiges oder fehlendes Feld "meta"');
 }
-$tex = (string) ($_POST['score'] ?? '');
+$tex = (string)($_POST['score'] ?? '');
 
 // Die GP-Datei ist freiwillig; wenn eine kommt, muss sie aber vollständig angekommen sein.
 $file = $_FILES['file'] ?? null;
@@ -53,7 +53,7 @@ if ($file !== null && $file['error'] !== UPLOAD_ERR_NO_FILE) {
             : 'Datei im Feld "file" ist unvollständig');
     }
     if ($file['size'] > MAX_UPLOAD_BYTES) {
-        json_error(400, 'Datei ist zu groß (Limit: ' . (int) (MAX_UPLOAD_BYTES / 1024 / 1024) . ' MB)');
+        json_error(400, 'Datei ist zu groß (Limit: ' . (int)(MAX_UPLOAD_BYTES / 1024 / 1024) . ' MB)');
     }
     // move_uploaded_file() prüft zusätzlich, dass die Datei tatsächlich per HTTP-Upload kam.
     $safeTmp = tempnam(sys_get_temp_dir(), 'gbimport_');
@@ -87,8 +87,8 @@ try {
         $song['slug'],
         $tex,
         $safeTmp,
-        (string) ($file['name'] ?? ''),
-        trim((string) ($meta['gpSource'] ?? ''))
+        (string)($file['name'] ?? ''),
+        trim((string)($meta['gpSource'] ?? ''))
     );
 } catch (RuntimeException $e) {
     $cleanup();
@@ -102,6 +102,6 @@ try {
 $cleanup();
 
 // Cover gleich mitholen (erster Treffer bei Deezer/iTunes). Ohne Treffer bleibt es beim Platzhalter.
-$song = auto_cover($song['slug'], (string) $song['artist'], $song['title']) ?? $song;
+$song = auto_cover($song['slug'], (string)$song['artist'], $song['title']) ?? $song;
 
 json_response(201, $song);

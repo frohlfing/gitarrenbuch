@@ -42,8 +42,8 @@ const UPLOAD_MIME = [
 ];
 
 $method = $_SERVER['REQUEST_METHOD'];
-$slug = (string) ($_GET['slug'] ?? '');
-$file = (string) ($_GET['file'] ?? '');
+$slug = (string)($_GET['slug'] ?? '');
+$file = (string)($_GET['file'] ?? '');
 
 /**
  * Der Upload mit dem Namen aus list_uploads().
@@ -91,9 +91,9 @@ try {
 
         case 'POST':
             require_token();
-            $source = trim((string) ($_POST['source'] ?? ''));
-            $description = trim((string) ($_POST['description'] ?? ''));
-            $url = trim((string) ($_POST['url'] ?? ''));
+            $source = trim((string)($_POST['source'] ?? ''));
+            $description = trim((string)($_POST['description'] ?? ''));
+            $url = trim((string)($_POST['url'] ?? ''));
             $tmp = tempnam(sys_get_temp_dir(), 'gbupload_');
             if ($url !== '') {
                 $name = download_to_file($url, $tmp);
@@ -109,7 +109,7 @@ try {
                 if (!move_uploaded_file($upload['tmp_name'], $tmp)) {
                     json_error(500, 'Datei konnte nicht zwischengespeichert werden');
                 }
-                $name = (string) $upload['name'];
+                $name = (string)$upload['name'];
             }
             json_response(201, store_upload($slug, $tmp, $name, $source, $description));
 
@@ -117,7 +117,7 @@ try {
             require_token();
             $body = read_json_body();
             find_upload($slug, $file);
-            record_upload($slug, $file, trim((string) ($body['source'] ?? '')), trim((string) ($body['description'] ?? '')));
+            record_upload($slug, $file, trim((string)($body['source'] ?? '')), trim((string)($body['description'] ?? '')));
             json_response(200, find_upload($slug, $file));
 
         case 'DELETE':

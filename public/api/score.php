@@ -26,7 +26,7 @@ require_once __DIR__ . '/lib/http.php';
 require_once __DIR__ . '/lib/file_store.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-$slug = (string) ($_GET['slug'] ?? '');
+$slug = (string)($_GET['slug'] ?? '');
 
 try {
     switch ($method) {
@@ -38,7 +38,7 @@ try {
                 json_response(200, list_score_history($slug));
             }
             if (isset($_GET['version'])) {
-                send_file(score_history_path($slug, (string) $_GET['version']), 'text/plain; charset=utf-8');
+                send_file(score_history_path($slug, (string)$_GET['version']), 'text/plain; charset=utf-8');
             }
             $path = song_dir($slug) . '/' . SONG_FILES['score'];
             if (!is_file($path)) {
@@ -49,12 +49,12 @@ try {
         case 'PUT':
             require_token();
             // Ein Byte mehr als erlaubt lesen, damit validate_score() zu große Noten erkennt.
-            $tex = (string) file_get_contents('php://input', false, null, 0, SCORE_MAX_BYTES + 1);
+            $tex = (string)file_get_contents('php://input', false, null, 0, SCORE_MAX_BYTES + 1);
             json_response(200, store_score($slug, $tex, history_note()));
 
         case 'DELETE':
             require_token();
-            delete_score_history($slug, (string) ($_GET['version'] ?? ''));
+            delete_score_history($slug, (string)($_GET['version'] ?? ''));
             json_response(200, list_score_history($slug));
 
         default:

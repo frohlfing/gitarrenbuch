@@ -95,11 +95,11 @@ function search_deezer_covers(string $term): array
         }
         $hits[] = [
             'source' => 'deezer',
-            'artist' => (string) ($track['artist']['name'] ?? ''),
-            'title' => (string) ($track['title'] ?? ''),
-            'album' => (string) ($album['title'] ?? ''),
-            'url' => (string) $album['cover_big'],
-            'preview' => (string) ($album['cover_medium'] ?? $album['cover_big']),
+            'artist' => (string)($track['artist']['name'] ?? ''),
+            'title' => (string)($track['title'] ?? ''),
+            'album' => (string)($album['title'] ?? ''),
+            'url' => (string)$album['cover_big'],
+            'preview' => (string)($album['cover_medium'] ?? $album['cover_big']),
         ];
     }
     return $hits;
@@ -116,11 +116,11 @@ function search_deezer_covers(string $term): array
 function search_itunes_covers(string $term): array
 {
     $url = 'https://itunes.apple.com/search?' . http_build_query([
-        'term' => $term,
-        'entity' => 'song',
-        'country' => 'DE',
-        'limit' => COVER_SEARCH_LIMIT,
-    ]);
+            'term' => $term,
+            'entity' => 'song',
+            'country' => 'DE',
+            'limit' => COVER_SEARCH_LIMIT,
+        ]);
     $data = json_decode(http_get($url, 8, 1024 * 1024), true);
     if (!is_array($data) || !isset($data['results'])) {
         throw new RuntimeException('iTunes: keine gültige Antwort');
@@ -128,15 +128,15 @@ function search_itunes_covers(string $term): array
     $sized = fn(string $art, int $size) => preg_replace('#/\d+x\d+bb\.#', "/{$size}x{$size}bb.", $art);
     $hits = [];
     foreach ($data['results'] as $track) {
-        $art = (string) ($track['artworkUrl100'] ?? '');
+        $art = (string)($track['artworkUrl100'] ?? '');
         if ($art === '') {
             continue;
         }
         $hits[] = [
             'source' => 'itunes',
-            'artist' => (string) ($track['artistName'] ?? ''),
-            'title' => (string) ($track['trackName'] ?? ''),
-            'album' => (string) ($track['collectionName'] ?? ''),
+            'artist' => (string)($track['artistName'] ?? ''),
+            'title' => (string)($track['trackName'] ?? ''),
+            'album' => (string)($track['collectionName'] ?? ''),
             'url' => $sized($art, COVER_SIZE),
             'preview' => $sized($art, COVER_PREVIEW_SIZE),
         ];
@@ -152,7 +152,7 @@ function search_itunes_covers(string $term): array
  */
 function is_allowed_cover_url(string $url): bool
 {
-    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    $host = strtolower((string)parse_url($url, PHP_URL_HOST));
     if (parse_url($url, PHP_URL_SCHEME) !== 'https' || $host === '') {
         return false;
     }

@@ -129,9 +129,9 @@ Audiospuren von YouTube holen und ins Gitarrenbuch laden
                                                  Lied schon eine, nur zusammen mit --override
 
   Optionen
+    --user=NAME     Basic-Auth-Benutzer, Vorgabe "frank"
     --password=…    Basic-Auth-Passwort des Servers (oder Umgebungsvariable GITARRENBUCH_PASSWORD)
     --api-token=…   API-Token des Servers (oder GITARRENBUCH_API_TOKEN; Vorgabe: API_TOKEN aus config.php)
-    --user=NAME     Basic-Auth-Benutzer, Vorgabe "frank"
     --remote=URL    Adresse des Gitarrenbuchs, Vorgabe https://gitarrenbuch.frank-rohlfing.de
     --data=DIR      Datenordner für backup\, wird bei Bedarf angelegt (Vorgabe: DATA_DIR aus config.php, sonst der
                     Ordner data\ neben bin\)

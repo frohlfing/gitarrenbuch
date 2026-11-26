@@ -1,12 +1,12 @@
 <?php
 
 /**
- * Pattern-Katalog (data/patterns.json): Strumming und Picking Patterns, auf die die Songs verweisen (Feld leadsheet in
- * song.json). Aufbau und Schreibweise der Patterns siehe js/sheet.js. Fehlt data/patterns.json (data/ gehört nicht
+ * Pattern-Katalog (data/patterns.json): Strumming und Picking Patterns, auf die die Songs verweisen (score.json
+ * der Songs). Aufbau und Schreibweise der Patterns siehe js/sheet.js. Fehlt data/patterns.json (data/ gehört nicht
  * ins Repo), legt der erste Zugriff sie mit DEFAULT_PATTERNS an.
  *
  * GET /api/patterns.php   -> {"patterns": [...], "usage": {"folk": 3, ...}}. usage: in wie vielen Songs ein Pattern
- *                            vorkommt (aus dem Feld leadsheet aller song.json), damit der Editor vor dem Ändern warnen kann.
+ *                            vorkommt (aus score.json aller Songs), damit der Editor vor dem Ändern warnen kann.
  *                            Kein Token nötig.
  * PUT /api/patterns.php   -> ersetzt den Katalog. Body: {"patterns": [...]}. Antwort wie GET. Token nötig.
  */
@@ -60,7 +60,7 @@ function read_patterns(): array
         write_patterns(DEFAULT_PATTERNS);
         return DEFAULT_PATTERNS;
     }
-    $data = json_decode((string) @file_get_contents(PATTERNS_FILE), true);
+    $data = json_decode((string)@file_get_contents(PATTERNS_FILE), true);
     return is_array($data['patterns'] ?? null) ? $data['patterns'] : [];
 }
 
@@ -93,7 +93,7 @@ function pattern_stats(): array
     foreach (list_song_slugs() as $slug) {
         $data = read_leadsheet($slug);
         $ids = [];
-        foreach ((array) ($data['patterns'] ?? []) as $pattern) {
+        foreach ((array)($data['patterns'] ?? []) as $pattern) {
             if (is_array($pattern) && is_string($pattern['id'] ?? null) && $pattern['id'] !== '') {
                 $ids[$pattern['id']] = true;
             }
@@ -101,7 +101,7 @@ function pattern_stats(): array
         if (!$ids) {
             continue;
         }
-        $tags = array_values(array_filter(array_map('strval', (array) (read_song_json($slug)['tags'] ?? []))));
+        $tags = array_values(array_filter(array_map('strval', (array)(read_song_json($slug)['tags'] ?? []))));
         foreach (array_keys($ids) as $id) {
             $usage[$id] = ($usage[$id] ?? 0) + 1;
             $genres[$id] = array_values(array_unique(array_merge($genres[$id] ?? [], $tags)));
@@ -137,8 +137,8 @@ function validate_patterns(mixed $patterns): array
         if (!in_array($technique, ['strumming', 'picking'], true)) {
             json_error(400, "Pattern $n: technique muss strumming oder picking sein");
         }
-        $name = trim((string) ($p['name'] ?? ''));
-        $ts = (string) ($p['timeSignature'] ?? '');
+        $name = trim((string)($p['name'] ?? ''));
+        $ts = (string)($p['timeSignature'] ?? '');
         $grid = $p['grid'] ?? null;
         if ($name === '' || mb_strlen($name) > 80 || !preg_match('#^\d{1,2}/\d{1,2}$#', $ts) || !in_array($grid, [8, 16], true)) {
             json_error(400, "Pattern $n: name, timeSignature oder grid ungültig");
@@ -164,14 +164,14 @@ $method = $_SERVER['REQUEST_METHOD'];
 switch ($method) {
     case 'GET':
         $stats = pattern_stats();
-        json_response(200, ['patterns' => read_patterns(), 'usage' => (object) $stats['usage'], 'genres' => (object) $stats['genres']]);
+        json_response(200, ['patterns' => read_patterns(), 'usage' => (object)$stats['usage'], 'genres' => (object)$stats['genres']]);
 
     case 'PUT':
         require_token();
         $patterns = validate_patterns(read_json_body()['patterns'] ?? null);
         write_patterns($patterns);
         $stats = pattern_stats();
-        json_response(200, ['patterns' => $patterns, 'usage' => (object) $stats['usage'], 'genres' => (object) $stats['genres']]);
+        json_response(200, ['patterns' => $patterns, 'usage' => (object)$stats['usage'], 'genres' => (object)$stats['genres']]);
 
     default:
         json_error(405, "Methode '$method' nicht erlaubt");

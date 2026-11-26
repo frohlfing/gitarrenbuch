@@ -21,17 +21,17 @@ require_once __DIR__ . '/lib/file_store.php';
 require_once __DIR__ . '/lib/cover.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-$slug = isset($_GET['slug']) ? (string) $_GET['slug'] : null;
+$slug = isset($_GET['slug']) ? (string)$_GET['slug'] : null;
 
 try {
     switch ($method) {
         case 'GET':
             if ($slug === null) {
-                $title = trim((string) ($_GET['title'] ?? ''));
+                $title = trim((string)($_GET['title'] ?? ''));
                 if ($title === '') {
                     json_error(400, 'title-Parameter erforderlich');
                 }
-                json_response(200, ['results' => search_covers(trim((string) ($_GET['artist'] ?? '')), $title)]);
+                json_response(200, ['results' => search_covers(trim((string)($_GET['artist'] ?? '')), $title)]);
             }
             if (read_song_json($slug) === null) {
                 json_error(404, "Song '$slug' nicht gefunden");
@@ -48,7 +48,7 @@ try {
                 json_error(400, 'slug-Parameter erforderlich');
             }
             $data = read_json_body();
-            json_response(200, store_cover_from_url($slug, (string) ($data['url'] ?? '')));
+            json_response(200, store_cover_from_url($slug, (string)($data['url'] ?? '')));
 
         case 'POST':
             require_token();

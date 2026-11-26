@@ -109,6 +109,7 @@ prüft das Ergebnis (`exportScore()`); der Server legt den Song an (`api/import.
 | Anzeige je Spur (nur Tabs, nur Noten, Schrägstriche, Ziffern)                   | vereinheitlicht: Noten und Tabs (Tabs nur bei Saiten); was gezeigt wird, wählt der Player                                                                      |
 | Name des Tunings mit Notizen ("Key: C (orig. D)")                               | nur der Name des bekannten Tunings, sonst keiner                                                                                                               |
 | Systemtrenner zwischen den Notenzeilen                                          | aus                                                                                                                                                            |
+| Griffbilder in den Noten (`\chordDiagramsInScore`)                              | aus (die Griffbilder stehen oben auf der Seite)                                                                                                                |
 | Doppelte Taktstriche an beliebigen Stellen                                      | nur noch am Ende des Takts vor einem Abschnitt (`applySectionBars()`)                                                                                          |
 | Titel, Interpret, Album, Notizen usw. in den Noten                              | nach `song.json`, in den Noten geleert (eine Stelle je Information)                                                                                            |
 | Eingebettete Audiospur                                                          | wird `audio.mp3` (Server); die Sync-Punkte bleiben im alphaTex                                                                                                 |
@@ -175,6 +176,9 @@ Liedtext und entfernte unbekannte Akkorde. Ein anderer Klang (Schritt 6) ist kei
   übernommen: 32 Takte; Länge passt nicht zur Taktart in Takt 5, 9"); in den Noten sind sie rot markiert, speichern
   lässt sich erst nach dem Korrigieren.
 - **Chord-Datei importieren** (ChordPro oder Akkorde über dem Text, Panel "Liedtext", `insertChordFileText()`):
+  Der Text kommt nach den Abschnittsnamen in die Abschnitte der Noten und liegt an Taktstrichen bzw. Akkorden (Ablauf in
+  `docs/Editor.md`, "Chord-Datei importieren"); jeder Akkord an seinen Anker bzw. an den Schlag seiner Silbe, ohne
+  Schlag (Abschnitt fehlt in den Noten, Text zu lang) geht er verloren und zählt in der Meldung.
   Ein Akkordname bleibt, wie er ist, wenn der Katalog einen Griff für ihn hat oder die Akkorderkennung einen findet
   (`findGrips()`); das gilt für fast alle Namen, auch "D/F#", "Am7b5", "Cmaj9", "A2", "H7" oder "Bbmaj7#11". Nur Namen,
   die die Erkennung nicht lesen kann, werden direkt vereinfacht (`simplifyChord()`): ohne Basston, dann ohne
@@ -236,9 +240,10 @@ Konfliktlöser gespeichert wurde, kann noch Konflikte haben.
 
 - **Tempo weicht von der Audiospur ab:** Neben dem Tempo im linken Panel steht ein rotes "!", wenn das Tempo der
   Audiospur im Abschnitt am Cursor (aus den Sync-Punkten, `recordingTempoRegion()` in `notation.js`) ein anderes ist
-  als das notierte; der Tooltip nennt es ("Tempo der Audiospur ab Takt 1 bis 42: 177 BPM"). Angepasst wird im Sync-Editor.
+  als das notierte; der Tooltip nennt es ("Tempo in der Partitur ungenau (bis zum Ende 173 BPM)"). Angepasst wird im
+  Sync-Editor mit "Alle Tempoangaben in der Partitur korrigieren" (ohne Auswahl) oder an der roten Fahne.
   Weil man das "!" nur am Takt des Cursors sieht, steht ein zweites am Label "Audio" des unteren Panels, sobald irgendwo
-  ein Abschnitt abweicht: Der Tooltip listet alle ("Takt 116–117: notiert 153, Audiospur 156 BPM"), ein Klick setzt den
+  ein Abschnitt abweicht (Tooltip "Tempo in der Partitur ungenau"); ein Klick setzt den
   Cursor (und die Abspielposition) auf den ersten (`showTempoMismatches()`, `gotoTempoMismatch()` in `editor.js`). Die
   Abschnitte reichen von einem notierten Tempowechsel zum nächsten, nicht von Sync-Punkt zu Sync-Punkt: Gefragt ist, ob
   die notierte Zahl im Mittel zur Aufnahme passt; je Sync-Punkt ein eigenes Tempo wäre nur Rauschen.

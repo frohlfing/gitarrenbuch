@@ -11,7 +11,7 @@
  */
 function detect_gp_format(string $path): ?string
 {
-    $head = (string) file_get_contents($path, false, null, 0, 32);
+    $head = (string)file_get_contents($path, false, null, 0, 32);
     if (str_starts_with(substr($head, 1), 'FICHIER GUITAR PRO v')) {
         return match (substr($head, 21, 1)) {
             '3' => 'gp3',
@@ -50,14 +50,13 @@ function extract_gp_audio(string $path, string $dir): bool
     }
     $xml = $zip->getFromName('Content/score.gpif');
     // Inhalt des ersten Elements $name in $in (mit oder ohne CDATA), null wenn es fehlt.
-    $tag = fn(string $name, string $in): ?string
-        => preg_match("#<$name>(?:<!\[CDATA\[)?(.*?)(?:]]>)?</$name>#s", $in, $m) ? $m[1] : null;
+    $tag = fn(string $name, string $in): ?string => preg_match("#<$name>(?:<!\[CDATA\[)?(.*?)(?:]]>)?</$name>#s", $in, $m) ? $m[1] : null;
 
     $backing = $xml !== false && preg_match('#<BackingTrack>.*?</BackingTrack>#s', $xml, $b) ? $b[0] : '';
     $assetId = $tag('AssetId', $backing);
     $asset = $assetId !== null && preg_match('#<Asset id="' . preg_quote($assetId, '#') . '">.*?</Asset>#s', $xml, $a)
         ? $a[0] : '';
-    $assetPath = (string) $tag('EmbeddedFilePath', $asset);
+    $assetPath = (string)$tag('EmbeddedFilePath', $asset);
     if ($tag('Enabled', $backing) !== 'true' || $tag('Source', $backing) !== 'Local'
         || strtolower(pathinfo($assetPath, PATHINFO_EXTENSION)) !== 'mp3') {
         $zip->close();

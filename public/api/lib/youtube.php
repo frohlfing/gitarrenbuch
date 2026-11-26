@@ -60,6 +60,6 @@ function youtube_video_info(string $id): array
     return [
         'id' => $id,
         'title' => html_entity_decode($title[1] ?? '', ENT_QUOTES | ENT_HTML5, 'UTF-8'),
-        'seconds' => (int) $length[1],
+        'seconds' => (int)$length[1],
     ];
 }

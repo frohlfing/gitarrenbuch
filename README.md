@@ -255,12 +255,13 @@ gitarrenbuch/                         # Projektroot
  │    ├── patterns.json               # Pattern-Katalog (Erstbefüllung: Standardpatterns, wird im Editor gepflegt)
  │    ├── songs/                      # Ein Unterordner pro Song
  │    │    └── <slug>/                # Slug aus Interpret + Titel, z. B. "bob-marley-three-little-birds"
- │    │         ├── song.json         # Angaben (Titel, Interpret, Tags, Notizen, Quellen-URLs, Leadsheet)
+ │    │         ├── song.json         # Angaben (Titel, Interpret, Tags, Notizen, Quellen-URLs)
  │    │         ├── score.atex        # Noten, Tabs, Text, Akkorde, Abschnitte, Sync-Punkte (alphaTex)
+ │    │         ├── score.json        # Angaben für das Leadsheet, die alphaTex nicht kennt (api/leadsheet.php)
  │    │         ├── audio.mp3         # Audiospur (beim Import aus der GP-Datei herausgelöst)
  │    │         ├── cover.jpg         # Albumcover, 500 px (Deezer, iTunes oder eigenes Bild)
  │    │         ├── upload/           # Hochgeladenes Rohmaterial (GP-, ChordPro-, Textdateien, PDFs); Angaben dazu: Feld uploads in song.json
- │    │         └── history/          # Die letzten Stände vor dem Überschreiben: score-<Zeit>.atex + .json (Leadsheet-Angaben); Anzahl: SCORE_HISTORY_KEEP in config.php
+ │    │         └── history/          # Fassungen je Speichern: score-<Zeit>.txt (Notiz) + .atex + .json (Kopien, nicht bei der aktuellen); Anzahl: SCORE_HISTORY_KEEP in config.php
  │    └── backup/                     # Nur lokal: Rohmaterial je Song (<slug>/), u. a. die von YouTube geladene Spur
  ├── bin/
  │    ├── audio.php                   # YouTube → audio.mp3, lädt per API auf den Server hoch (läuft lokal)
@@ -282,7 +283,7 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── audio.php              # Liefert audio.mp3 (z. B. für den GP-Export)
  │    │    ├── chords.php             # Akkordkatalog ausliefern
  │    │    ├── cover.php              # Cover ausliefern, suchen, übernehmen, hochladen, entfernen
- │    │    ├── leadsheet.php          # Angaben für das Leadsheet (Feld leadsheet in song.json) lesen und ersetzen (auch aus dem Verlauf)
+ │    │    ├── leadsheet.php          # Angaben für das Leadsheet (score.json) lesen und ersetzen (auch aus dem Verlauf)
  │    │    ├── import.php             # Neuen Song mit Noten anlegen (Import oder Gerüst, inkl. Cover)
  │    │    ├── patterns.php           # Pattern-Katalog lesen (mit Verwendung je Pattern) und ersetzen
  │    │    ├── score.php              # score.atex ausliefern (für alphaTab) und ersetzen (Bearbeitungsmodus)
@@ -296,11 +297,14 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── base.js                # API-Zugriff, Akkorde und Griffe, Griffbilder (SVG), Griffbrett, Symbole, Marken
  │    │    ├── conflicts.js           # Konfliktlöser (Import, docs/Konflikte.md)
  │    │    ├── chordtheory.js         # Akkordname → Töne (Regeln aus docs/Musiktheorie.md)
+ │    │    ├── chordcheck.js          # Bereinigen → Griffe prüfen: passen die Noten der Akkordspur zum Akkord?
  │    │    ├── chordgrips.js          # Töne → Griffe: sucht passende Griffe und ordnet sie (erst weniger Bünde, dann weniger Finger)
  │    │    ├── notation.js            # Noten: Spuren, Spielfolge, GP/alphaTex lesen und schreiben, Bearbeiten, Transponieren
  │    │    ├── textview.js            # Ansicht "Text & Akkorde"
 │    │    ├── transposedialog.js     # Dialog Transponieren: Halbtöne, Capo, Tuning, Vorschau
+│    │    ├── timingdialog.js        # Dialog Metrum umschreiben: Notenwerte, Tempo, Takte, Taktart umrechnen
  │    │    ├── rhythmdialog.js        # Dialog Rhythmus ableiten: Begleitspur mit Strumming aus einer Spur
+ │    │    ├── rhythmhint.js          # Regelwerk für Rhythmushinweis-Generierung: wo ein Rhythmus gespielt wird
  │    │    ├── sheet.js               # Leadsheet: Pattern-Katalog, Generator, Tab-Stellen, Dialog im Bearbeitungsmodus
  │    │    ├── library.js             # Kachelübersicht, Formulare (Song, Import, Cover, Text), Overlay
  │    │    ├── playback.js            # Player (alphaTab), Mixer mit Audiospur, Sync-Editor
@@ -392,14 +396,15 @@ z. B. `["score", "audio", "cover"]`), wird bei jedem Lesen aus dem Dateisystem b
   "youtubeSeconds": 180,
   "slug": "bob-marley-three-little-birds",
   "created": "2026-10-26T02:43:52+01:00",
-  "updated": "2026-10-26T15:01:03+01:00",
-  "leadsheet": { "patterns": [{ "id": "reggae", "when": "ganzer Song" }], "tabs": [], "chords": {}, "links": [], "instructions": "" }
+  "updated": "2026-10-26T15:01:03+01:00"
 }
 ```
 
-`leadsheet` hält die Angaben für das Blatt (Patterns, Tab-Stellen, ersetzte Takte `cuts`, Griffbilder, Links, Hinweise 
-zur Spielweise; Aufbau unter "DIN-A4-Seite (Leadsheet)" in docs/Planung.md). Es fehlt, solange es keine gibt. 
-Geschrieben wird es nur über `PUT api/leadsheet.php` (vom Editor zusammen mit den Noten), "Song bearbeiten" lässt es 
+Die Angaben für das Blatt (Patterns, Tab-Stellen, ersetzte Takte `cuts`, Griffbilder, Links, Hinweise zur Spielweise,
+Takte pro Zeile; Aufbau in `api/leadsheet.php`) stehen in `score.json` neben `score.atex`. Sie hängen an den
+Takten der Noten und kommen mit ihnen 1:1 in den Verlauf. Die Datei fehlt, solange es keine gibt. Die API liefert sie
+beim Song als Feld `leadsheet` mit (`with_file_flags()`), z. B. `leadsheet.barsPerRow` für den Player. Geschrieben wird sie
+nur über `PUT api/leadsheet.php` (vom Editor zusammen mit den Noten), "Song bearbeiten" lässt sie
 unverändert. `leadsheet.instructions` (Spielweise für Seite 1) ist etwas anderes als `notes` (Notizen der Stammdaten); 
 die Felder bleiben getrennt. Beim Import einer GP-Datei wird es mit deren Anweisungen vorbelegt (`instructions` oben, 
 das bleibt daneben stehen).
@@ -421,11 +426,12 @@ Vorrang. Fehlt sie in einem Request, bleibt die gespeicherte; eine leere Liste l
 an den Abschnitten (`Player.checkBarsPerRow()`). Gesetzt wird die Zahl im Feld "Takte pro Zeile" des
 Bearbeitungsmodus, mit Speichern, Rückgängig und Verlauf (`docs/Editor.md`).
 
-**Baustelle:** Spuren, an denen noch gearbeitet wird (Schalter im Dialog "Spuren"), stehen mit ihrem Namen in
-`leadsheet.wip` (`api/leadsheet.php`), nicht in `trackDefaults`: Wie die Tab-Stellen hängen sie am Namen, wandern beim
-Umbenennen mit, gehören zu Rückgängig/Wiederholen und kommen mit in den Verlauf. Wirkung: 🚧 am Spurnamen (Editor,
-Player, Mixer), keine Patterns und Tab-Stellen fürs Leadsheet, Filter "Mit Baustelle" in der Bibliothek
-(`docs/Editor.md`, Dialog "Spuren").
+**Baustelle:** `wip` in `song.json`, gesetzt in den Stammdaten (Schalter "Baustelle"): `reason` (Grund, bis 500
+Zeichen), `tracks` (Namen der betroffenen Spuren, auch keine) und `audio` (nur `true`, wenn die Audiospur dazugehört); ohne Baustelle fehlt das Feld (null im Request
+löscht es, fehlt es im Request, bleibt das gespeicherte). Wirkung: 🚧 an der Kachel (Tooltip: der Grund) und am
+Spurnamen (Editor, Player, Mixer), keine Patterns und Tab-Stellen aus diesen Spuren fürs Leadsheet, Filter "Mit
+Baustelle" in der Bibliothek. Benennt der Editor eine dieser Spuren um oder löscht sie, trägt er das beim Speichern
+nach (er führt die Namen dazu in `Sheet.wip` mit, `docs/Editor.md`).
 
 **Instrument einer Spur:** eines von 13 aus einer festen Liste plus Schlagzeug (`INSTRUMENTS` in `js/notation.js`;
 Liste, Regeln und Analyse der GP-Dateien in `docs/Instrumente.md`). Ein Instrument legt nur den Klang fest
@@ -643,7 +649,7 @@ nur von den Bildservern von Deezer und iTunes.
 Text, Akkorde und Abschnitte werden nur einmal gespeichert, in den Noten: Silben und Akkordsymbole hängen an den
 Schlägen, haben also einen genauen Zeitpunkt, Abschnitte sind Marker an den Takten. So liegen sie auch in den
 überarbeiteten GP-Dateien des Archivs. Ein `song.cho` gibt es nicht; ChordPro und die DIN-A4-Seite werden aus den
-Noten erzeugt, nur Angaben für das Blatt (Patterns, Tab-Stellen …) kommen in `song.json` (Feld `leadsheet`); Randnotizen
+Noten erzeugt, nur Angaben für das Blatt (Patterns, Tab-Stellen …) kommen in `score.json`; Randnotizen
 sind Texte über den Schlägen in den Noten.
 Umgekehrt ginge Information verloren: ChordPro kennt nur "Akkord vor dieser Silbe", Akkorde ohne Silbe (Intro,
 Zwischenspiel) hätten keinen Schlag mehr.
@@ -806,7 +812,10 @@ jede bekommt ⌈k / n⌉). Die Skalierung (Menü → Darstellung) wirkt in "Chor
 das Blatt behält Breite und Hintergrund.
 
 Den **Systemtrenner** aus Guitar Pro (zwei schräge Striche zwischen den Notenzeilen, `\useSystemSignSeparator`)
-entfernt der Import. Den Abstand zwischen den Zeilen setzt der Player (`SYSTEM_GAP`, 45 px bei 
+entfernt der Import, ebenso Griffbilder in den Noten (`\chordDiagramsInScore`; die Griffbilder stehen oben auf der
+Seite) und Fingerangaben an den Noten (`lf`, `rf`; Greif- und Anschlagshand). Einen Auftakt, der als kurzer erster
+Takt mit eigener Taktart (z. B. 7/16 vor 3/4) oder mit Pausen am Anfang aller Spuren notiert ist, macht er zum Auftakt
+in der Taktart des Songs (`\ac`, `setAnacrusis()` in `notation.js`). Den Abstand zwischen den Zeilen setzt der Player (`SYSTEM_GAP`, 45 px bei 
 mehreren angezeigten Spuren, damit man sieht, wo eine Zeile mit allen Spuren endet; `SYSTEM_GAP_SINGLE`, 20 px bei nur 
 einer), ebenso den zwischen den Spuren einer Zeile (`TRACK_GAP`, 20 px statt 5; sonst klebte "Rhythm Guitar 1" in 
 "Junge" an den Tabs der Spur darüber) und zwischen den Angaben über den Noten (`EFFECT_GAP`, 8 px statt 2: Tempo, 
@@ -914,7 +923,7 @@ Pattern zusätzlich ">" über dem Zeichen. Strumming Patterns mit den Plektrumze
 nur bei Bedarf), darauf der Finger (auf beiden Bass-Zeilen p); eine Pause steht als x auf den Saiten, die zuletzt 
 angeschlagen wurden.
 
-**Im Song** führt `song.json` (Feld `leadsheet`) die Patterns des Songs als Verweise auf die `id`, jedes mit Freitext, 
+**Im Song** führt `score.json` die Patterns des Songs als Verweise auf die `id`, jedes mit Freitext, 
 wann es gespielt wird ("ganzer Song", "Strophe"); gewählt wird im Dialog "Leadsheet". Eine Zuordnung je Takt gibt es 
 nicht: Der Ablauf steht in den Noten, Zusammenhänge erkennt der Generator der Seite. Eine Änderung am Katalog-Pattern 
 gilt für alle Songs, die es verwenden; die API zählt sie (`usage`), der Editor warnt davor. Pattern und Spur speichern 
@@ -958,7 +967,9 @@ Die Ansicht **Chords** (Umschalter in der Kopfzeile, siehe unten) zeigt statt de
 (je Silbe ein Block, deshalb auch in Proportionalschrift und mit Umbruch auf dem Smartphone). Text und Akkorde kommen 
 aus den Spuren nach "Spuren, Capo, Text und Akkorde" (Akkorde aus allen Spuren zusammengetragen, `mergeChords()`), in 
 Abspielreihenfolge mit Wiederholungen und Strophen (ohne Sprünge wie D.S. al Coda). Zeilen enden an Satzzeichen, 
-längeren Pausen und Abschnitten, nie mitten im Wort; ein Auftakt gehört zum folgenden Abschnitt.
+längeren Pausen und Abschnitten, nie mitten im Wort; ein Auftakt (eine Zeile, die im Takt vor einem Abschnitt beginnt
+und in ihn hineinläuft) gehört zum folgenden Abschnitt, wie im Feld "Liedtext" des Bearbeitungsmodus. Eine Zeile, die
+dort ganz im Takt davor endet, bleibt im Abschnitt davor.
 
 **Jeder Takt kommt vor**, wie in den handgebauten Leadsheets (Vorbild: `leadsheet_manuell_erstellt.txt` von
 "Junge"):
@@ -1198,7 +1209,7 @@ noch fehlt, beschreibt `docs/Editor.md`; dort steht auch, was aus Guitar Pro nic
   Häkchen), Links (als QR-Code oder Text) und Hinweise zur Spielweise in Markdown; rechts die Vorschau
   (`js/sheet.js`): Seite 1 "Spielanleitung", Seite 2 "Text & Akkorde", eine Seite, wenn alles passt. Den Akkord eines 
   Schlags wählt man links (Auswahlliste der Song-Akkorde, "+" für einen neuen mit Griff). Gespeichert in
-  `song.json`, Feld `leadsheet` (siehe "Strumming und Picking Patterns" und docs/Planung.md, "DIN-A4-Seite"); die 
+  `score.json` (siehe "Strumming und Picking Patterns" und docs/Planung.md, "DIN-A4-Seite"); die 
   Tab-Stellen wandern mit, wenn Takte eingefügt, gelöscht oder
   ausgeschrieben werden oder eine Spur umbenannt wird, und alles gehört zu jedem Schritt für "Rückgängig".
   **Takte ersetzen:** Unter "Takte ersetzen" stehen Bereiche von Takten, die auf dem Blatt nicht

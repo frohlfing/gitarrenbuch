@@ -130,7 +130,7 @@ function http_get_stream(string $url, int $timeoutSeconds, int $maxBytes, array 
     $encoding = null;
     foreach ($http_response_header ?? [] as $header) {
         if (preg_match('#^HTTP/\S+\s+(\d+)#', $header, $m)) {
-            $status = (int) $m[1];
+            $status = (int)$m[1];
         }
         if (preg_match('#^Content-Encoding:\s*(\S+)#i', $header, $m)) {
             $encoding = strtolower($m[1]);

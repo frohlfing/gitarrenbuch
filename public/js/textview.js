@@ -100,14 +100,14 @@ const BARS_PER_LINE = 8;
  * @param {Score} score Noten
  * @returns {{mb: MasterBar, pass: number, t: number, end: number}[]}
  */
-export function playTimeline(score){
-  let time = 0;
-  return playOrder(score).map(({bar, pass}) => {
-    const mb = score.masterBars[bar];
-    const t = time;
-    time += mb.calculateDuration();
-    return {mb, pass, t, end: time};
-  });
+export function playTimeline(score) {
+    let time = 0;
+    return playOrder(score).map(({bar, pass}) => {
+        const mb = score.masterBars[bar];
+        const t = time;
+        time += mb.calculateDuration();
+        return {mb, pass, t, end: time};
+    });
 }
 
 /**
@@ -117,9 +117,9 @@ export function playTimeline(score){
  * @param {number} pass Durchgang
  * @returns {number} Index der Strophe, -1, wenn keine Silbe
  */
-export function verseFor(lyrics, pass){
-  if(lyrics[pass - 1]?.trim()) return pass - 1;
-  return !lyrics.slice(1).some(s => s?.trim()) && lyrics[0]?.trim() ? 0 : -1;
+export function verseFor(lyrics, pass) {
+    if (lyrics[pass - 1]?.trim()) return pass - 1;
+    return !lyrics.slice(1).some(s => s?.trim()) && lyrics[0]?.trim() ? 0 : -1;
 }
 
 /**
@@ -127,12 +127,14 @@ export function verseFor(lyrics, pass){
  * @param {?import('../../types/alphatab').model.Track} track Spur mit dem Text
  * @returns {Set<number>} Indizes der Strophen
  */
-function versesWithBreaks(track){
-  const verses = new Set();
-  for(const staff of track?.staves ?? []) for(const bar of staff.bars) for(const voice of bar.voices){
-    for(const beat of voice.beats) beat.lyrics?.forEach((s, i) => { if(endsLyricsLine(s)) verses.add(i); });
-  }
-  return verses;
+function versesWithBreaks(track) {
+    const verses = new Set();
+    for (const staff of track?.staves ?? []) for (const bar of staff.bars) for (const voice of bar.voices) {
+        for (const beat of voice.beats) beat.lyrics?.forEach((s, i) => {
+            if (endsLyricsLine(s)) verses.add(i);
+        });
+    }
+    return verses;
 }
 
 /**
@@ -143,8 +145,8 @@ function versesWithBreaks(track){
  * @param {boolean} explicit ob die Strophe gespeicherte Umbrüche hat
  * @returns {Syllable}
  */
-function syllable(t, end, raw, explicit){
-  return explicit ? {t, end, text: raw.trim(), br: endsLyricsLine(raw)} : {t, end, text: raw.trim()};
+function syllable(t, end, raw, explicit) {
+    return explicit ? {t, end, text: raw.trim(), br: endsLyricsLine(raw)} : {t, end, text: raw.trim()};
 }
 
 /**
@@ -156,33 +158,33 @@ function syllable(t, end, raw, explicit){
  * @param {function(number): {t: number, end: number}} barAt Takt, in dem ein Tick liegt
  * @returns {{syl: Syllable[], section: ?SectionMark}[]} Zeilen; section nur bei einem Auftakt gesetzt
  */
-function splitPhrases(syllables, sections, barAt){
-  /** @type {{syl: Syllable[], section: ?SectionMark}[]} */
-  const phrases = [];
-  let current = null;
-  for(const s of syllables){
-    const prev = current?.syl.at(-1);
-    // Liegen mehrere Abschnitte dazwischen (z. B. ein Zwischenspiel ohne Text), zählt der letzte.
-    const sectionBetween = prev ? sections.filter(x => x.t > prev.t && x.t <= s.t).at(-1) ?? null : null;
-    const pickup = !!sectionBetween && current !== null && current.syl[0].t >= barAt(sectionBetween.t - 1).t;
-    const chars = current ? current.syl.reduce((n, x) => n + x.text.length + 1, 0) : 0;
-    const gap = prev ? s.t - prev.end : 0;
-    const explicit = prev?.br !== undefined;
-    const lineEnd = !current || (sectionBetween && !pickup) || (explicit ? prev.br : gap >= HALF_NOTE_TICKS * 2
-      || (chars >= LINE_SOFT_CHARS && gap >= HALF_NOTE_TICKS / 2)
-      || (/[.!?;:]$/.test(prev.text) && current.syl.length >= LINE_MIN_SYLLABLES)
-      || (/,$/.test(prev.text) && current.syl.length >= LINE_COMMA_SYLLABLES));
-    const midWord = !explicit && prev?.text.endsWith('-') && !(sectionBetween && !pickup);
-    if(!current || (lineEnd && !midWord)){
-      current = {syl: [], section: null};
-      phrases.push(current);
-    } else if(sectionBetween && pickup){
-      // Die Zeile hat als Auftakt begonnen und geht im neuen Abschnitt weiter: Sie gehört zu ihm.
-      current.section = sectionBetween;
+function splitPhrases(syllables, sections, barAt) {
+    /** @type {{syl: Syllable[], section: ?SectionMark}[]} */
+    const phrases = [];
+    let current = null;
+    for (const s of syllables) {
+        const prev = current?.syl.at(-1);
+        // Liegen mehrere Abschnitte dazwischen (z. B. ein Zwischenspiel ohne Text), zählt der letzte.
+        const sectionBetween = prev ? sections.filter(x => x.t > prev.t && x.t <= s.t).at(-1) ?? null : null;
+        const pickup = !!sectionBetween && current !== null && current.syl[0].t >= barAt(sectionBetween.t - 1).t;
+        const chars = current ? current.syl.reduce((n, x) => n + x.text.length + 1, 0) : 0;
+        const gap = prev ? s.t - prev.end : 0;
+        const explicit = prev?.br !== undefined;
+        const lineEnd = !current || (sectionBetween && !pickup) || (explicit ? prev.br : gap >= HALF_NOTE_TICKS * 2
+            || (chars >= LINE_SOFT_CHARS && gap >= HALF_NOTE_TICKS / 2)
+            || (/[.!?;:]$/.test(prev.text) && current.syl.length >= LINE_MIN_SYLLABLES)
+            || (/,$/.test(prev.text) && current.syl.length >= LINE_COMMA_SYLLABLES));
+        const midWord = !explicit && prev?.text.endsWith('-') && !(sectionBetween && !pickup);
+        if (!current || (lineEnd && !midWord)) {
+            current = {syl: [], section: null};
+            phrases.push(current);
+        } else if (sectionBetween && pickup) {
+            // Die Zeile hat als Auftakt begonnen und geht im neuen Abschnitt weiter: Sie gehört zu ihm.
+            current.section = sectionBetween;
+        }
+        current.syl.push(s);
     }
-    current.syl.push(s);
-  }
-  return phrases;
+    return phrases;
 }
 
 /**
@@ -195,79 +197,80 @@ function splitPhrases(syllables, sections, barAt){
  * @param {import('../../types/alphatab').model.Track} track Spur mit dem Text
  * @returns {string} Text mit Zeilenumbrüchen
  */
-export function lyricsLines(score, track){
-  return layoutLyrics(score, track).lines.join('\n');
+export function lyricsLines(score, track) {
+    return layoutLyrics(score, track).lines.join('\n');
 }
 
 /**
- * Anfang jedes Abschnitts für den Liedtext, in der Reihenfolge der Abschnittszeilen von lyricsLines(): der Anfang
- * des Abschnitts oder, wenn er mit einem Auftakt beginnt, der Anfang des Auftakts.
+ * Abschnitte für den Liedtext, in der Reihenfolge der Abschnittszeilen von lyricsLines(): Name, Anfang des Abschnitts
+ * (start) und Anfang seines Texts (t), das ist start oder, wenn seine erste Zeile schon im Takt davor beginnt, der
+ * Anfang dieser Zeile.
  * @param {Score} score Noten
  * @param {import('../../types/alphatab').model.Track} track Spur mit dem Text
- * @returns {number[]} Zeit in Ticks (Reihenfolge der Noten, ohne Wiederholungen), je Abschnitt
+ * @returns {{t: number, start: number, name: string}[]} Zeiten in Ticks (Reihenfolge der Noten, ohne Wiederholungen)
  */
-export function lyricsSectionStarts(score, track){
-  return layoutLyrics(score, track).starts;
+export function lyricsSectionStarts(score, track) {
+    return layoutLyrics(score, track).starts;
 }
 
 /**
  * Zeilen des Liedtexts und Anfänge der Abschnitte (siehe lyricsLines() und lyricsSectionStarts()).
  * @param {Score} score Noten
  * @param {import('../../types/alphatab').model.Track} track Spur mit dem Text
- * @returns {{lines: string[], starts: number[]}}
+ * @returns {{lines: string[], starts: {t: number, start: number, name: string}[]}}
  */
-function layoutLyrics(score, track){
-  /** @type {Syllable[]} */
-  const syllables = [];
-  /** @type {SectionMark[]} */
-  const sections = [];
-  /** @type {{t: number, end: number}[]} */
-  const bars = [];
-  const explicit = versesWithBreaks(track).has(0);
-  // Zeit wie masterBar.start (Reihenfolge der Noten), wie setLyricsText() sie für die Abschnitte nimmt.
-  for(const mb of score.masterBars){
-    const time = mb.start;
-    bars.push({t: time, end: time + mb.calculateDuration()});
-    if(mb.section){
-      sections.push({t: time, name: (mb.section.text || mb.section.marker || '').replace(/^\[|]$/g, '')});
+function layoutLyrics(score, track) {
+    /** @type {Syllable[]} */
+    const syllables = [];
+    /** @type {SectionMark[]} */
+    const sections = [];
+    /** @type {{t: number, end: number}[]} */
+    const bars = [];
+    const explicit = versesWithBreaks(track).has(0);
+    // Zeit wie masterBar.start (Reihenfolge der Noten), wie setLyricsText() sie für die Abschnitte nimmt.
+    for (const mb of score.masterBars) {
+        const time = mb.start;
+        bars.push({t: time, end: time + mb.calculateDuration()});
+        if (mb.section) {
+            sections.push({t: time, name: (mb.section.text || mb.section.marker || '').replace(/^\[|]$/g, '')});
+        }
+        for (const beat of track.staves[0].bars[mb.index]?.voices[0]?.beats ?? []) {
+            const raw = beat.lyrics?.[0] ?? '';
+            const t = time + beat.playbackStart;
+            if (raw.trim()) syllables.push(syllable(t, t + beat.playbackDuration, raw, explicit));
+        }
     }
-    for(const beat of track.staves[0].bars[mb.index]?.voices[0]?.beats ?? []){
-      const raw = beat.lyrics?.[0] ?? '';
-      const t = time + beat.playbackStart;
-      if(raw.trim()) syllables.push(syllable(t, t + beat.playbackDuration, raw, explicit));
+    const barAt = t => bars.find(b => b.t <= t && t < b.end) ?? bars[bars.length - 1];
+    const sectionAt = t => sections.filter(s => s.t <= t).at(-1) ?? null;
+    /** @type {string[]} */
+    const lines = [];
+    const starts = sections.map(s => ({t: s.t, start: s.t, name: s.name}));
+    let next = 0;
+    /**
+     * Schreibt die Namen aller Abschnitte bis zu einer Zeit, je mit einer Leerzeile davor (außer ganz oben).
+     * @param {number} t Zeit in Ticks
+     * @returns {void}
+     */
+    const headers = t => {
+        for (; next < sections.length && sections[next].t <= t; next++) {
+            if (lines.length) lines.push('');
+            lines.push(`[${sections[next].name}]`);
+        }
+    };
+    for (const p of splitPhrases(syllables, sections, barAt)) {
+        // Ein Auftakt gehört schon zum nächsten Abschnitt: dessen Name steht über ihm, und dort beginnt der Abschnitt.
+        const section = p.section ?? sectionAt(p.syl[0].t);
+        if (section) {
+            headers(section.t);
+            const index = sections.indexOf(section);
+            starts[index].t = Math.min(starts[index].t, p.syl[0].t);
+        }
+        // Mehrere Wörter auf einem Schlag stehen mit "_" verbunden da ("mir_zu."), siehe splitSyllables().
+        lines.push(p.syl.reduce((line, s) => line + (line && !line.endsWith('-') ? ' ' : '') + s.text.replace(/\s+/g, '_'),
+            ''));
     }
-  }
-  const barAt = t => bars.find(b => b.t <= t && t < b.end) ?? bars[bars.length - 1];
-  const sectionAt = t => sections.filter(s => s.t <= t).at(-1) ?? null;
-  /** @type {string[]} */
-  const lines = [];
-  const starts = sections.map(s => s.t);
-  let next = 0;
-  /**
-   * Schreibt die Namen aller Abschnitte bis zu einer Zeit, je mit einer Leerzeile davor (außer ganz oben).
-   * @param {number} t Zeit in Ticks
-   * @returns {void}
-   */
-  const headers = t => {
-    for(; next < sections.length && sections[next].t <= t; next++){
-      if(lines.length) lines.push('');
-      lines.push(`[${sections[next].name}]`);
-    }
-  };
-  for(const p of splitPhrases(syllables, sections, barAt)){
-    // Ein Auftakt gehört schon zum nächsten Abschnitt: dessen Name steht über ihm, und dort beginnt der Abschnitt.
-    const section = p.section ?? sectionAt(p.syl[0].t);
-    if(section){
-      headers(section.t);
-      const index = sections.indexOf(section);
-      starts[index] = Math.min(starts[index], p.syl[0].t);
-    }
-    // Mehrere Wörter auf einem Schlag stehen mit "_" verbunden da ("mir_zu."), siehe splitSyllables().
-    lines.push(p.syl.reduce((line, s) => line + (line && !line.endsWith('-') ? ' ' : '') + s.text.replace(/\s+/g, '_'),
-      ''));
-  }
-  headers(Infinity);
-  return {lines, starts};
+    headers(Infinity);
+    return {lines, starts};
 }
 
 /**
@@ -275,142 +278,154 @@ function layoutLyrics(score, track){
  * @param {Score} score Noten
  * @returns {TextModel}
  */
-export function buildTextModel(score){
-  const textTrack = lyricsTrack(score);
-  const chordTrack = chordsTrack(score);
-  /** @type {Map<number, import('./notation.js').MergedChord[]>} Akkorde je Takt (Index des Mastertakts) */
-  const barChords = new Map();
-  for(const merged of mergeChords(score)){
-    const index = merged.beat.voice.bar.index;
-    if(!barChords.has(index)) barChords.set(index, []);
-    barChords.get(index).push(merged);
-  }
+export function buildTextModel(score) {
+    const textTrack = lyricsTrack(score);
+    const chordTrack = chordsTrack(score);
+    /** @type {Map<number, import('./notation.js').MergedChord[]>} Akkorde je Takt (Index des Mastertakts) */
+    const barChords = new Map();
+    for (const merged of mergeChords(score)) {
+        const index = merged.beat.voice.bar.index;
+        if (!barChords.has(index)) barChords.set(index, []);
+        barChords.get(index).push(merged);
+    }
 
-  // 1. Silben, Akkorde, Abschnitte und Takte mit absoluter Zeit in Abspielreihenfolge.
-  /** @type {Syllable[]} */
-  const syllables = [];
-  /** @type {{t: number, name: string}[]} */
-  const chords = [];
-  /** @type {SectionMark[]} */
-  const sections = [];
-  /** @type {{t: number, end: number, beats: number}[]} */
-  const bars = [];
-  /** @type {Map<string, string>} */
-  const grips = new Map();
-  const explicit = versesWithBreaks(textTrack);
-  const timeline = playTimeline(score);
-  for(const {mb, pass, t: time, end} of timeline){
-    bars.push({t: time, end, beats: mb.timeSignatureNumerator});
-    if(mb.section) sections.push({t: time, name: (mb.section.text || mb.section.marker || '').replace(/^\[|]$/g, '')});
-    for(const voice of textTrack?.staves[0].bars[mb.index]?.voices ?? []) for(const beat of voice.beats){
-      const verse = verseFor(beat.lyrics ?? [], pass);
-      const t = time + beat.playbackStart;
-      if(verse >= 0) syllables.push(syllable(t, t + beat.playbackDuration, beat.lyrics[verse], explicit.has(verse)));
+    // 1. Silben, Akkorde, Abschnitte und Takte mit absoluter Zeit in Abspielreihenfolge.
+    /** @type {Syllable[]} */
+    const syllables = [];
+    /** @type {{t: number, name: string}[]} */
+    const chords = [];
+    /** @type {SectionMark[]} */
+    const sections = [];
+    /** @type {{t: number, end: number, beats: number}[]} */
+    const bars = [];
+    /** @type {Map<string, string>} */
+    const grips = new Map();
+    const explicit = versesWithBreaks(textTrack);
+    const timeline = playTimeline(score);
+    for (const {mb, pass, t: time, end} of timeline) {
+        bars.push({t: time, end, beats: mb.timeSignatureNumerator});
+        if (mb.section) sections.push({
+            t: time,
+            name: (mb.section.text || mb.section.marker || '').replace(/^\[|]$/g, '')
+        });
+        for (const voice of textTrack?.staves[0].bars[mb.index]?.voices ?? []) for (const beat of voice.beats) {
+            const verse = verseFor(beat.lyrics ?? [], pass);
+            const t = time + beat.playbackStart;
+            if (verse >= 0) syllables.push(syllable(t, t + beat.playbackDuration, beat.lyrics[verse], explicit.has(verse)));
+        }
+        for (const {tick, chord} of barChords.get(mb.index) ?? []) {
+            const t = time + tick - mb.start;
+            chords.push({t, name: chord.name});
+            if (!grips.has(chord.name)) grips.set(chord.name, chord.strings.some(f => f >= 0) ? gripOf(chord) : '');
+        }
     }
-    for(const {tick, chord} of barChords.get(mb.index) ?? []){
-      const t = time + tick - mb.start;
-      chords.push({t, name: chord.name});
-      if(!grips.has(chord.name)) grips.set(chord.name, chord.strings.some(f => f >= 0) ? gripOf(chord) : '');
-    }
-  }
-  chords.sort((a, b) => a.t - b.t);
-  syllables.sort((a, b) => a.t - b.t);
-  /** @type {(t: number) => ?SectionMark} */
-  const sectionAt = t => sections.filter(s => s.t <= t).at(-1) ?? null;
-  const barAt = t => bars.find(b => b.t <= t && t < b.end) ?? bars[bars.length - 1];
+    chords.sort((a, b) => a.t - b.t);
+    syllables.sort((a, b) => a.t - b.t);
+    /** @type {(t: number) => ?SectionMark} */
+    const sectionAt = t => sections.filter(s => s.t <= t).at(-1) ?? null;
+    const barAt = t => bars.find(b => b.t <= t && t < b.end) ?? bars[bars.length - 1];
 
-  // 2. Zeilen (splitPhrases()).
-  const phrases = splitPhrases(syllables, sections, barAt);
-  for(const p of phrases){
-    if(p.section) continue;
-    // Auftakt: Die Zeile liegt ganz im Takt vor einem Abschnitt, und dort geht der Text weiter.
-    const next = sections.find(x => x.t >= p.syl.at(-1).end && x.t > p.syl[0].t);
-    const lastBar = next ? barAt(next.t - 1) : null;
-    p.section = next && p.syl[0].t >= lastBar.t && !/[.!?]$/.test(p.syl.at(-1).text)
-      && syllables.some(s => s.t >= next.t && s.t < next.t + (lastBar.end - lastBar.t))
-      ? next : sectionAt(p.syl[0].t);
-  }
+    // 2. Zeilen (splitPhrases()), mit demselben Abschnitt wie im Feld "Liedtext" (lyricsLines()): Eine Zeile gehört zum
+    // Abschnitt, in dem sie beginnt, außer sie beginnt im Takt davor und läuft in ihn hinein.
+    const phrases = splitPhrases(syllables, sections, barAt);
+    for (const p of phrases) p.section ??= sectionAt(p.syl[0].t);
 
-  // 3. Jeder Takt kommt vor. In Abschnitten mit Text bekommt die erste Silbe des Takts den Taktstrich; ein Takt ohne
-  // eigene Silbe (oder deren erste erst in der zweiten Takthälfte beginnt, ein Auftakt) bekommt einen leeren Teil, der
-  // an die laufende Zeile angehängt wird. Abschnitte ganz ohne Text (Intro, Solo) werden zu Taktzeilen.
-  const textSections = new Set(phrases.map(p => p.section));
-  /** @type {Map<Syllable, {syl: Syllable[], section: ?SectionMark}>} */
-  const phraseOf = new Map();
-  for(const p of phrases) for(const s of p.syl) phraseOf.set(s, p);
-  /**
-   * Stelle in einem Takt, an die Akkorde kommen: ein Teil einer Textzeile oder ein Takt einer Taktzeile.
-   * leads: leerer Teil eines Takts, in dem eine Zeile beginnt (gehört an deren Anfang).
-   * @type {{t: number, section: ?SectionMark, syl?: Syllable, part?: LinePart, bar?: BarCell, leads?: boolean}[]}
-   */
-  const anchors = [];
-  for(const b of bars){
-    const section = sectionAt(b.t);
-    const own = syllables.filter(s => s.t >= b.t && s.t < b.end);
-    const list = [];
-    if(!textSections.has(section)){
-      list.push({t: b.t, section, bar: {t: b.t, chords: [], at: [], beats: b.beats, length: b.end - b.t}});
-    } else if(!own.length || own[0].t - b.t >= (b.end - b.t) / 2){
-      // Beginnt im Takt eine Zeile (Auftakt), gehört der leere Teil schon zu ihr.
-      const leads = own.length > 0 && phraseOf.get(own[0]).syl[0] === own[0];
-      list.push({t: b.t, section: leads ? phraseOf.get(own[0]).section : section, leads,
-        part: {t: b.t, text: '', bar: false, chords: []}});
+    // 3. Jeder Takt kommt vor. In Abschnitten mit Text bekommt die erste Silbe des Takts den Taktstrich; ein Takt ohne
+    // eigene Silbe (oder deren erste erst in der zweiten Takthälfte beginnt, ein Auftakt) bekommt einen leeren Teil, der
+    // an die laufende Zeile angehängt wird. Abschnitte ganz ohne Text (Intro, Solo) werden zu Taktzeilen.
+    const textSections = new Set(phrases.map(p => p.section));
+    /** @type {Map<Syllable, {syl: Syllable[], section: ?SectionMark}>} */
+    const phraseOf = new Map();
+    for (const p of phrases) for (const s of p.syl) phraseOf.set(s, p);
+    /**
+     * Stelle in einem Takt, an die Akkorde kommen: ein Teil einer Textzeile oder ein Takt einer Taktzeile.
+     * leads: leerer Teil eines Takts, in dem eine Zeile beginnt (gehört an deren Anfang).
+     * @type {{t: number, section: ?SectionMark, syl?: Syllable, part?: LinePart, bar?: BarCell, leads?: boolean}[]}
+     */
+    const anchors = [];
+    for (const b of bars) {
+        const section = sectionAt(b.t);
+        const own = syllables.filter(s => s.t >= b.t && s.t < b.end);
+        const list = [];
+        if (!textSections.has(section)) {
+            list.push({t: b.t, section, bar: {t: b.t, chords: [], at: [], beats: b.beats, length: b.end - b.t}});
+        } else if (!own.length || own[0].t - b.t >= (b.end - b.t) / 2) {
+            // Beginnt im Takt eine Zeile (Auftakt), gehört der leere Teil schon zu ihr.
+            const leads = own.length > 0 && phraseOf.get(own[0]).syl[0] === own[0];
+            list.push({
+                t: b.t, section: leads ? phraseOf.get(own[0]).section : section, leads,
+                part: {t: b.t, text: '', bar: false, chords: []}
+            });
+        }
+        for (const s of own) list.push({
+            t: s.t,
+            section: phraseOf.get(s).section,
+            syl: s,
+            part: {t: s.t, text: s.text, bar: false, chords: []}
+        });
+        if (list[0].part) list[0].part.bar = true;
+        // Ein Akkord gehört an die nächste Stelle im Takt, wenn bis dahin kein anderer angeschlagen wird (Akkord kurz vor
+        // der Silbe), sonst an die Stelle, die gerade klingt.
+        for (const c of chords.filter(x => x.t >= b.t && x.t < b.end)) {
+            const nextChord = chords.find(x => x.t > c.t);
+            const ahead = list.find(a => a.t >= c.t);
+            const target = ahead && !(nextChord && nextChord.t <= ahead.t) ? ahead : (list.filter(a => a.t <= c.t).at(-1) ?? list[0]);
+            (target.part ?? target.bar).chords.push(c.name);
+            target.bar?.at.push(c.t - b.t);
+        }
+        anchors.push(...list);
     }
-    for(const s of own) list.push({t: s.t, section: phraseOf.get(s).section, syl: s, part: {t: s.t, text: s.text, bar: false, chords: []}});
-    if(list[0].part) list[0].part.bar = true;
-    // Ein Akkord gehört an die nächste Stelle im Takt, wenn bis dahin kein anderer angeschlagen wird (Akkord kurz vor
-    // der Silbe), sonst an die Stelle, die gerade klingt.
-    for(const c of chords.filter(x => x.t >= b.t && x.t < b.end)){
-      const nextChord = chords.find(x => x.t > c.t);
-      const ahead = list.find(a => a.t >= c.t);
-      const target = ahead && !(nextChord && nextChord.t <= ahead.t) ? ahead : (list.filter(a => a.t <= c.t).at(-1) ?? list[0]);
-      (target.part ?? target.bar).chords.push(c.name);
-      target.bar?.at.push(c.t - b.t);
-    }
-    anchors.push(...list);
-  }
 
-  // 4. Zeilen: Eine Textzeile beginnt mit der ersten Silbe einer Phrase; leere Takte davor gehören an das Ende der
-  // vorigen Zeile, am Anfang eines Abschnitts an den Anfang der ersten. Taktzeilen fassen bis zu BARS_PER_LINE Takte.
-  /** @type {{t: number, section: ?SectionMark, line: TextLine, hasText?: boolean}[]} */
-  const items = [];
-  let item = null;
-  for(const a of anchors){
-    const startsPhrase = a.leads || (a.syl && phraseOf.get(a.syl).syl[0] === a.syl);
-    const kind = a.bar ? 'bars' : 'parts';
-    if(!item || item.section !== a.section || !item.line[kind] || (startsPhrase && item.hasText)
-      || (a.bar && item.line.bars.length >= BARS_PER_LINE)){
-      item = {t: a.t, section: a.section, line: {t: a.t, [kind]: []}};
-      items.push(item);
+    // 4. Zeilen: Eine Textzeile beginnt mit der ersten Silbe einer Phrase; leere Takte davor gehören an das Ende der
+    // vorigen Zeile, am Anfang eines Abschnitts an den Anfang der ersten. Taktzeilen fassen bis zu BARS_PER_LINE Takte.
+    /** @type {{t: number, section: ?SectionMark, line: TextLine, hasText?: boolean}[]} */
+    const items = [];
+    let item = null;
+    for (const a of anchors) {
+        const startsPhrase = a.leads || (a.syl && phraseOf.get(a.syl).syl[0] === a.syl);
+        const kind = a.bar ? 'bars' : 'parts';
+        if (!item || item.section !== a.section || !item.line[kind] || (startsPhrase && item.hasText)
+            || (a.bar && item.line.bars.length >= BARS_PER_LINE)) {
+            item = {t: a.t, section: a.section, line: {t: a.t, [kind]: []}};
+            items.push(item);
+        }
+        if (a.bar) {
+            item.line.bars.push(a.bar);
+        } else {
+            item.line.parts.push(a.part);
+            if (a.syl) item.hasText = true;
+        }
     }
-    if(a.bar){
-      item.line.bars.push(a.bar);
-    } else {
-      item.line.parts.push(a.part);
-      if(a.syl) item.hasText = true;
-    }
-  }
 
-  // Eine Zeile endet mit einem Takt, wenn die nächste mit einem Takt beginnt (sonst geht der Takt dort weiter).
-  items.forEach((it, i) => {
-    const next = items[i + 1]?.line;
-    it.line.closed = !next || !!next.bars || next.parts[0].bar;
-  });
-  const out = [];
-  for(const item of items){
-    if(!out.length || out.at(-1).ref !== item.section) out.push({ref: item.section, name: item.section?.name ?? '', lines: []});
-    out.at(-1).lines.push(item.line);
-  }
-  // Zeitbereich je Abschnitt: von seiner ersten Zeile bis zur ersten des nächsten (ein Auftakt gehört so schon zum
-  // neuen Abschnitt, wie in der Ansicht). Damit findet "Abschnitte vergleichen" zum Abschnitt seine Takte.
-  const songEnd = timeline.at(-1)?.end ?? 0;
-  return {
-    sections: out.map(({name, lines}, i) => ({name, lines, start: lines[0].t, end: out[i + 1]?.lines[0].t ?? songEnd})),
-    chords: [...grips].map(([name, grip]) => ({name, grip})),
-    chordTimes: chords,
-    lyricsTrack: syllables.length ? textTrack.name : '',
-    chordsTrack: chords.length ? chordTrack.name : '',
-  };
+    // Eine Zeile endet mit einem Takt, wenn die nächste mit einem Takt beginnt (sonst geht der Takt dort weiter).
+    items.forEach((it, i) => {
+        const next = items[i + 1]?.line;
+        it.line.closed = !next || !!next.bars || next.parts[0].bar;
+    });
+    const out = [];
+    for (const item of items) {
+        if (!out.length || out.at(-1).ref !== item.section) out.push({
+            ref: item.section,
+            name: item.section?.name ?? '',
+            lines: []
+        });
+        out.at(-1).lines.push(item.line);
+    }
+    // Zeitbereich je Abschnitt: von seiner ersten Zeile bis zur ersten des nächsten (ein Auftakt gehört so schon zum
+    // neuen Abschnitt, wie in der Ansicht). Damit findet "Abschnitte vergleichen" zum Abschnitt seine Takte.
+    const songEnd = timeline.at(-1)?.end ?? 0;
+    return {
+        sections: out.map(({name, lines}, i) => ({
+            name,
+            lines,
+            start: lines[0].t,
+            end: out[i + 1]?.lines[0].t ?? songEnd
+        })),
+        chords: [...grips].map(([name, grip]) => ({name, grip})),
+        chordTimes: chords,
+        lyricsTrack: syllables.length ? textTrack.name : '',
+        chordsTrack: chords.length ? chordTrack.name : '',
+    };
 }
 
 // noinspection JSUnusedGlobalSymbols: für Leadsheet und Druck, noch ohne Aufrufer
@@ -420,8 +435,8 @@ export function buildTextModel(score){
  * @param {TextModel} model Inhalt aus buildTextModel()
  * @returns {string} HTML, leer ohne Griffbilder
  */
-export function renderChordDiagrams(model){
-  return model.chords.filter(c => c.grip).map(c => chordDiagramSvg(c.name, c.grip)).join('');
+export function renderChordDiagrams(model) {
+    return model.chords.filter(c => c.grip).map(c => chordDiagramSvg(c.name, c.grip)).join('');
 }
 
 /**
@@ -435,33 +450,33 @@ export function renderChordDiagrams(model){
  * @param {{sections: {name: string, lines: TextLine[], note?: string}[]}} model Inhalt aus buildTextModel()
  * @returns {string} HTML
  */
-export function renderTextView(model){
-  if(!model.sections.length) return '<p class="empty">Dieser Song hat weder Text noch Akkorde.</p>';
-  const barline = '<span class="tv-barline">|</span>';
-  /** @type {(p: LinePart) => string} */
-  const chordHtml = p => (p.bar ? barline : '') + escapeHtml(p.chords.join(' '));
-  const line = l => {
-    if(l.hint !== undefined) return `<div class="tv-line tv-hint">${escapeHtml(l.hint)}</div>`;
-    const parts = l.bars ? l.bars.map(b => ({t: b.t, text: '', bar: true, chords: b.chords})) : l.parts;
-    // Ein Strich schließt die Zeile, wenn mit ihr ein Takt endet.
-    const close = l.closed ? `<span class="tv-part tv-empty"><span class="tv-chord">${barline}</span><span class="tv-syl"> </span></span>` : '';
-    return `<div class="tv-line${l.bars ? ' tv-barrow' : ''}">${parts.map(p => {
-      // Silben mit Bindestrich gehören zum nächsten Wort: ohne Leerzeichen anschließen. Dehnt ein Akkord oder
-      // Taktstrich die Silbe, füllt ein Strich die Lücke im Wort (tv-stretch).
-      const joined = p.text.endsWith('-');
-      // Ein Takt ohne Silbe braucht trotzdem die Höhe einer Textzeile, sonst rutscht sein Akkord nach unten.
-      const word = joined ? p.text.slice(0, -1) : p.text ? p.text + ' ' : ' ';
-      const classes = ['tv-part', joined && (p.chords.length || p.bar) ? 'tv-stretch' : '', p.text ? '' : 'tv-empty'];
-      return `<span class="${classes.filter(Boolean).join(' ')}" data-t="${p.t}"${p.bar ? ' data-bar' : ''}>`
-        + `<span class="tv-chord">${chordHtml(p)}</span>`
-        + `<span class="tv-syl">${escapeHtml(word)}</span></span>`;
-    }).join('')}${close}</div>`;
-  };
-  return `
+export function renderTextView(model) {
+    if (!model.sections.length) return '<p class="empty">Dieser Song hat weder Text noch Akkorde.</p>';
+    const barline = '<span class="tv-barline">|</span>';
+    /** @type {(p: LinePart) => string} */
+    const chordHtml = p => (p.bar ? barline : '') + escapeHtml(p.chords.join(' '));
+    const line = l => {
+        if (l.hint !== undefined) return `<div class="tv-line tv-hint">${escapeHtml(l.hint)}</div>`;
+        const parts = l.bars ? l.bars.map(b => ({t: b.t, text: '', bar: true, chords: b.chords})) : l.parts;
+        // Ein Strich schließt die Zeile, wenn mit ihr ein Takt endet.
+        const close = l.closed ? `<span class="tv-part tv-empty"><span class="tv-chord">${barline}</span><span class="tv-syl"> </span></span>` : '';
+        return `<div class="tv-line${l.bars ? ' tv-barrow' : ''}">${parts.map(p => {
+            // Silben mit Bindestrich gehören zum nächsten Wort: ohne Leerzeichen anschließen. Dehnt ein Akkord oder
+            // Taktstrich die Silbe, füllt ein Strich die Lücke im Wort (tv-stretch).
+            const joined = p.text.endsWith('-');
+            // Ein Takt ohne Silbe braucht trotzdem die Höhe einer Textzeile, sonst rutscht sein Akkord nach unten.
+            const word = joined ? p.text.slice(0, -1) : p.text ? p.text + ' ' : ' ';
+            const classes = ['tv-part', joined && (p.chords.length || p.bar) ? 'tv-stretch' : '', p.text ? '' : 'tv-empty'];
+            return `<span class="${classes.filter(Boolean).join(' ')}" data-t="${p.t}"${p.bar ? ' data-bar' : ''}>`
+                + `<span class="tv-chord">${chordHtml(p)}</span>`
+                + `<span class="tv-syl">${escapeHtml(word)}</span></span>`;
+        }).join('')}${close}</div>`;
+    };
+    return `
     ${model.sections.map(s => `
       <section class="tv-section">
         ${s.name ? `<h3>${escapeHtml(s.name)}${s.note ? ` <span class="tv-note">${escapeHtml(s.note)}</span>` : ''}</h3>`
-          : ''}
+        : ''}
         ${s.lines.map(line).join('')}
       </section>`).join('')}
   `;

@@ -1,10 +1,11 @@
 <?php
 
 /**
- * Angaben für das Leadsheet, die alphaTex nicht kennt (siehe public/js/sheet.js). Sie stehen im Feld leadsheet von
- * song.json (siehe read_leadsheet()):
+ * Angaben für das Leadsheet, die alphaTex nicht kennt (siehe public/js/sheet.js). Sie stehen in score.json neben
+ * score.atex (siehe read_leadsheet()) und kommen mit ihr unverändert in den Verlauf; die API liefert sie beim Lied
+ * als Feld leadsheet mit (with_file_flags()):
  *
- *   "leadsheet": {
+ *   {
  *     "patterns": [{"id": "folk", "when": "Strophe und Refrain"}],
  *     "tabs": [{"from": 0, "to": 3, "track": "picking", "label": "Intro"}],
  *     "cuts": [{"from": 40, "to": 47, "text": "wiederholen und leiser werden"}],
@@ -13,7 +14,6 @@
  *     "instructions": "Markdown",
  *     "layout": {"twoPages": true, "columns": false, "font": 12, "compactTabs": false, "smallChords": false,
  *                "tabCounts": false, "mergeSections": true},
- *     "wip": ["picking"],
  *     "barsPerRow": 4
  *   }
  *
@@ -28,8 +28,6 @@
  * einer GP-Datei wird es mit deren Anweisungen vorbelegt (api/import.php). layout: wie das Blatt gesetzt wird
  * (Kontrollkästchen im Reiter "Leadsheet": zwei Seiten, Text zweispaltig, Schrift in pt, Tabs zusammenfassen,
  * Griffbilder klein, Zählzeiten unter den Tabs, gleiche Abschnitte nur einmal); gespeichert nur, wenn es von LEADSHEET_LAYOUT abweicht.
- * wip: Baustellen, die Namen der Spuren, an denen noch gearbeitet wird (Schalter im Dialog "Spuren" des Editors; wie
- * bei tabs zieht der Editor den Namen beim Umbenennen nach); nur gespeichert, wenn es welche gibt.
  * barsPerRow: Takte pro Zeile in den Noten, gezählt ab jedem Abschnitt (Feld in der Leiste des Editors); nur
  * gespeichert, wenn gesetzt.
  *
@@ -39,8 +37,8 @@
  * GET /api/leadsheet.php?slug=xyz   -> Inhalt, fehlende Felder leer. Kein Token nötig.
  * GET /api/leadsheet.php?slug=xyz&version=<id>
  *                                   -> dasselbe aus einem aufgehobenen Stand (id aus api/score.php?history=1).
- * PUT /api/leadsheet.php?slug=xyz   -> ersetzt das Feld leadsheet in song.json (ohne Einträge fällt es weg). Body wie
- *                                      oben (ohne "leadsheet"). Vorher kommt der bisherige Stand in den Verlauf
+ * PUT /api/leadsheet.php?slug=xyz   -> ersetzt score.json (ohne Einträge fällt sie weg). Body wie oben. Vorher
+ *                                      kommt der bisherige Stand in den Verlauf
  *                                      (siehe keep_score_history(); mit &note=… samt Notiz, was sich ändert), außer
  *                                      mit &keep=0 (der Editor setzt es, wenn er im selben Speichern schon die Noten
  *                                      gesichert hat). Antwort: das
@@ -86,7 +84,7 @@ function leadsheet_text(mixed $value, string $what, int $max = 200): string
     if ($value !== null && !is_string($value)) {
         json_error(400, "$what muss Text sein");
     }
-    $text = trim((string) $value);
+    $text = trim((string)$value);
     if (mb_strlen($text) > $max) {
         json_error(400, "$what ist zu lang (höchstens $max Zeichen)");
     }
@@ -160,10 +158,10 @@ function validate_leadsheet(array $data): array
     }
     $cleanChords = [];
     foreach ($chords as $name => $shown) {
-        if (!is_bool($shown) || mb_strlen((string) $name) > 40) {
+        if (!is_bool($shown) || mb_strlen((string)$name) > 40) {
             json_error(400, "Griffbild '$name' ungültig");
         }
-        $cleanChords[(string) $name] = $shown;
+        $cleanChords[(string)$name] = $shown;
     }
 
     $links = $data['links'] ?? [];
@@ -187,18 +185,6 @@ function validate_leadsheet(array $data): array
         ];
     }
 
-    $wip = $data['wip'] ?? [];
-    if (!is_array($wip) || !array_is_list($wip) || count($wip) > LEADSHEET_MAX_ITEMS) {
-        json_error(400, 'wip muss eine Liste mit höchstens ' . LEADSHEET_MAX_ITEMS . ' Spurnamen sein');
-    }
-    $cleanWip = [];
-    foreach ($wip as $k => $name) {
-        $name = leadsheet_text($name, 'Baustelle ' . ($k + 1));
-        if ($name !== '' && !in_array($name, $cleanWip, true)) {
-            $cleanWip[] = $name;
-        }
-    }
-
     $barsPerRow = $data['barsPerRow'] ?? 0;
     if (!is_int($barsPerRow) || $barsPerRow < 0 || $barsPerRow > LEADSHEET_BARS_PER_ROW_MAX) {
         json_error(400, 'barsPerRow muss eine ganze Zahl von 0 bis ' . LEADSHEET_BARS_PER_ROW_MAX . ' sein');
@@ -212,7 +198,6 @@ function validate_leadsheet(array $data): array
         'links' => $cleanLinks,
         'instructions' => leadsheet_text($data['instructions'] ?? '', 'instructions', LEADSHEET_TEXT_MAX),
         'layout' => leadsheet_layout($data['layout'] ?? null),
-        'wip' => $cleanWip,
         'barsPerRow' => $barsPerRow,
     ];
 }
@@ -262,7 +247,7 @@ function leadsheet_layout(mixed $layout): array
 }
 
 $method = $_SERVER['REQUEST_METHOD'];
-$slug = (string) ($_GET['slug'] ?? '');
+$slug = (string)($_GET['slug'] ?? '');
 
 try {
     $song = read_song_json($slug);
@@ -272,17 +257,16 @@ try {
     switch ($method) {
         case 'GET':
             $data = isset($_GET['version'])
-                ? score_history_leadsheet($slug, (string) $_GET['version']) : read_leadsheet($slug, $song);
+                ? score_history_leadsheet($slug, (string)$_GET['version']) : read_leadsheet($slug);
             $result = [
                 'patterns' => is_array($data['patterns'] ?? null) ? array_values($data['patterns']) : [],
                 'tabs' => is_array($data['tabs'] ?? null) ? array_values($data['tabs']) : [],
                 'cuts' => is_array($data['cuts'] ?? null) ? array_values($data['cuts']) : [],
-                'chords' => (object) (is_array($data['chords'] ?? null) ? $data['chords'] : []),
+                'chords' => (object)(is_array($data['chords'] ?? null) ? $data['chords'] : []),
                 'links' => is_array($data['links'] ?? null) ? array_values($data['links']) : [],
                 'instructions' => is_string($data['instructions'] ?? null) ? $data['instructions'] : '',
                 'layout' => array_merge(LEADSHEET_LAYOUT,
                     array_intersect_key(is_array($data['layout'] ?? null) ? $data['layout'] : [], LEADSHEET_LAYOUT)),
-                'wip' => is_array($data['wip'] ?? null) ? array_values($data['wip']) : [],
                 'barsPerRow' => is_int($data['barsPerRow'] ?? null) ? $data['barsPerRow'] : 0,
             ];
             json_response(200, $result);
@@ -301,20 +285,13 @@ try {
             if (!$data['cuts']) {
                 unset($data['cuts']);
             }
-            // Ebenso die Baustellen und die Takte pro Zeile.
-            if (!$data['wip']) {
-                unset($data['wip']);
-            }
+            // Ebenso die Takte pro Zeile.
             if (!$data['barsPerRow']) {
                 unset($data['barsPerRow']);
             }
-            if (!$data['patterns'] && !$data['tabs'] && !isset($data['cuts']) && !$data['chords'] && !$data['links'] && $data['instructions'] === ''
-                && !isset($data['layout']) && !isset($data['wip'])
-                && !isset($data['barsPerRow'])) {
-                unset($song['leadsheet']);
-            } else {
-                $song['leadsheet'] = $data;
-            }
+            // Leere Listen und Texte gelten als keine Angaben.
+            $empty = !array_filter($data, static fn($value) => $value !== [] && $value !== '');
+            write_leadsheet($slug, $empty ? [] : $data);
             $song['updated'] = date('c');
             write_song_json($slug, $song);
             json_response(200, with_file_flags($slug, $song));

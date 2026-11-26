@@ -18,7 +18,7 @@ require_once __DIR__ . '/lib/http.php';
 require_once __DIR__ . '/lib/file_store.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-$slug = (string) ($_GET['slug'] ?? '');
+$slug = (string)($_GET['slug'] ?? '');
 
 try {
     switch ($method) {
