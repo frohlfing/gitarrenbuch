@@ -1164,31 +1164,6 @@ export function chordDiagramSvg(name, grip) {
  *   Song, sondern zur Nutzung, und soll ohne Token und ohne Schreiben auf dem Server gehen.
  */
 
-/**
- * Namen der 128 General-MIDI-Instrumente, Index = MIDI-Programm (0 bis 127), für die Testseite dev/instruments.html.
- * Im Dialog "Spuren" gibt es nur die kurze Liste INSTRUMENTS (notation.js, docs/Instrumente.md).
- * @type {string[]}
- */
-export const INSTRUMENT_NAMES = [
-    'Akustikflügel', 'Helles Klavier', 'E-Flügel', 'Honky-Tonk-Klavier', 'E-Piano 1', 'E-Piano 2', 'Cembalo',
-    'Clavinet', 'Celesta', 'Glockenspiel', 'Spieluhr', 'Vibraphon', 'Marimba', 'Xylophon', 'Röhrenglocken', 'Dulcimer',
-    'Drawbar-Orgel', 'Percussive-Orgel', 'Rock-Orgel', 'Kirchenorgel', 'Harmonium', 'Akkordeon', 'Mundharmonika',
-    'Tango-Akkordeon', 'Akustikgitarre (Nylon)', 'Akustikgitarre (Stahl)', 'E-Gitarre (Jazz)', 'E-Gitarre (clean)',
-    'E-Gitarre (gedämpft)', 'E-Gitarre (verzerrt)', 'Distortion-Gitarre', 'Gitarren-Obertöne', 'Akustikbass', 'E-Bass',
-    'E-Bass (Plektrum)', 'Fretless-Bass', 'Slap-Bass 1', 'Slap-Bass 2', 'Synth-Bass 1', 'Synth-Bass 2', 'Violine',
-    'Bratsche', 'Cello', 'Kontrabass', 'Tremolo-Streicher', 'Pizzicato-Streicher', 'Harfe', 'Pauken',
-    'Streicherensemble 1', 'Streicherensemble 2', 'Synth-Streicher 1', 'Synth-Streicher 2', 'Chor Aahs',
-    'Gesang (Voice Oohs)', 'Synth-Stimme', 'Orchester-Hit', 'Trompete', 'Posaune', 'Tuba', 'Gedämpfte Trompete',
-    'Waldhorn', 'Blechbläsersatz', 'Synth-Blech 1', 'Synth-Blech 2', 'Sopransaxophon', 'Altsaxophon', 'Tenorsaxophon',
-    'Baritonsaxophon', 'Oboe', 'Englischhorn', 'Fagott', 'Klarinette', 'Piccolo', 'Flöte', 'Blockflöte', 'Panflöte',
-    'Flaschenblasen', 'Shakuhachi', 'Pfeife', 'Okarina', 'Rechteck', 'Sägezahn', 'Calliope', 'Chiff', 'Charang',
-    'Stimme', 'Quinten', 'Bass + Lead', 'New Age', 'Warm', 'Polysynth', 'Chor', 'Gestrichen', 'Metallisch', 'Halo',
-    'Sweep', 'Regen', 'Soundtrack', 'Kristall', 'Atmosphäre', 'Helligkeit', 'Kobolde', 'Echos', 'Sci-Fi', 'Sitar',
-    'Banjo', 'Shamisen', 'Koto', 'Kalimba', 'Dudelsack', 'Fiedel', 'Shanai', 'Glöckchen', 'Agogo', 'Steel Drums',
-    'Woodblock', 'Taiko', 'Melodic Tom', 'Synth-Drum', 'Umgekehrtes Becken', 'Gitarrenbundgeräusch', 'Atem',
-    'Meeresrauschen', 'Vogelgezwitscher', 'Telefonklingeln', 'Hubschrauber', 'Applaus', 'Gewehrschuss'
-];
-
 /** Einstufungen: Wert in song.json, Bezeichnung, Kurzform für die Kachel. */
 export const LEVELS = [
     {value: 'can', label: 'Kann ich', short: 'kann ich'},
