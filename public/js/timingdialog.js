@@ -25,6 +25,7 @@ import {
     chordsTrack,
     parseScore,
     relinkBars,
+    roundTempo,
     splitTicks,
     tempoAt,
     tieChain,
@@ -110,6 +111,16 @@ const SLOT_WIDTH = 26;
  * @returns {number}
  */
 const times = (x, [p, q]) => x * p / q;
+
+/**
+ * Tempo mal Faktor, auf eine ganze Zahl gerundet: Tempi sind im Gitarrenbuch immer ganzzahlig (roundTempo()). Mit
+ * Audiospur ändert das die Wiedergabe nicht (sie folgt zwischen den Sync-Punkten der Aufnahme), ohne nur um Bruchteile
+ * eines Prozents.
+ * @param {number} bpm Tempo
+ * @param {Ratio} ratio Faktor
+ * @returns {number}
+ */
+const scaledTempo = (bpm, ratio) => roundTempo(times(bpm, ratio));
 
 /**
  * Ob zwei Faktoren gleich sind.
@@ -446,7 +457,7 @@ export function retime(alphaTab, score, plan) {
         for (const voice of bar.voices) {
             if (voice.isEmpty) continue;
             const beats = voice.beats.flatMap(beat => {
-                for (const a of beat.automations) if (a.type === tempoType) a.value = times(a.value, plan.tempo);
+                for (const a of beat.automations) if (a.type === tempoType) a.value = scaledTempo(a.value, plan.tempo);
                 const chain = scaleBeat(alphaTab, beat, plan.notes);
                 if (!chain) failed.add(bar.index);
                 else if (beat.notes.length) ties += chain.length - 1;
@@ -553,7 +564,7 @@ export function retime(alphaTab, score, plan) {
         for (const {item, tick} of bar.tempo) {
             const at = locate(i, times(tick, plan.notes));
             item.ratioPosition = at.offset / lengthOf(layout[at.k]);
-            item.value = times(item.value, plan.tempo);
+            item.value = scaledTempo(item.value, plan.tempo);
             masterBars[at.k].tempoAutomations.push(item);
         }
         for (const [offset, fermata] of bar.fermata) {
@@ -674,7 +685,7 @@ export function retime(alphaTab, score, plan) {
     const first = masterBars[0];
     if (!sameRatio(plan.tempo, [1, 1]) && !first.tempoAutomations.some(a => a.ratioPosition === 0)) {
         first.tempoAutomations.unshift(alphaTab.model.Automation.buildTempoAutomation(false, 0,
-            times(songTempo, plan.tempo), 2));
+            scaledTempo(songTempo, plan.tempo), 2));
     }
     return {problems, warnings, ties, shuffle};
 }
@@ -1361,7 +1372,7 @@ export class TimingDialog {
         const columns = [
             ['Taktart', v => `${v.ts.num}/${v.ts.den}`, false],
             ['Notenwerte', v => escapeHtml(notesLabel(v.notes)), false],
-            ['Tempo', v => `${Math.round(times(tempo, v.notes) * 10) / 10} BPM`, true],
+            ['Tempo', v => `${scaledTempo(tempo, v.notes)} BPM`, true],
             ['Takte', (v, k) => String(summaries[k].count), true],
         ].filter(([, cell], i) => i === 0 || new Set(this.shown.map((v, k) => cell(v, k))).size > 1);
         const rows = this.shown.map((v, k) => {
@@ -1461,7 +1472,7 @@ export class TimingDialog {
         const summary = (label, score) => {
             if (!score) return `<tr><th>${label}</th><td colspan="4">–</td></tr>`;
             const ts = timeSignatures(score).map(t => `${t.num}/${t.den}`).join(', ');
-            return `<tr><th>${label}</th><td>${ts}</td><td>${Math.round(tempoAt(score, 0) * 10) / 10} BPM</td>
+            return `<tr><th>${label}</th><td>${ts}</td><td>${roundTempo(tempoAt(score, 0))} BPM</td>
               <td class="tm-num">${score.masterBars.length}</td><td class="tm-values">${songValues(score)}</td></tr>`;
         };
         const table = `<table class="tm-summary"><thead><tr><th></th><th>Taktart</th><th>Tempo</th><th>Takte</th>

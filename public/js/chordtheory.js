@@ -1,5 +1,5 @@
 /**
- * Akkordtheorie: zerlegt einen Akkordnamen in seine Töne. Die Regeln stehen in docs/Musiktheorie.md; jeder Name aus den
+ * Akkordtheorie: Zerlegt einen Akkordnamen in seine Töne. Die Regeln stehen in docs/Musiktheorie.md; jeder Name aus den
  * Tabellen dort ergibt sich aus diesen Regeln (Dreiklang aus Terz und Quinte, dazu ein vierter Ton, Erweiterungen,
  * Alterationen, Auslassungen und Basston).
  *

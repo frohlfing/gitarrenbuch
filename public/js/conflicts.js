@@ -1,6 +1,40 @@
 /**
- * Konfliktlöser: bringt Noten ohne Rückfrage in die Form des Gitarrenbuchs.  Regeln und Reihenfolge in
- * `docs/Konflikte.md`, "Konfliktlöser: die Regeln".
+ * Konfliktlöser: bringt Noten ohne Rückfrage in die Form des Gitarrenbuchs. Ein Konflikt ist eine Abweichung von dieser
+ * Form: jede Information an genau einer Stelle, der Song von oben nach unten, ein Capo und ein Tuning für alle Spuren.
+ * Konflikte kommen nur aus Guitar-Pro-Dateien (beim Import und bei "Spur aus Guitar-Pro-Datei importieren"); der
+ * Editor erzeugt keine, deshalb zeigt sie nirgends jemand an. Vorher hat cleanImportedScore() in notation.js das
+ * Formale bereinigt.
+ *
+ * Begriffe: Die Akkordspur ist die Spur mit den meisten Akkorden (chordsTrack()), die Textspur die mit den meisten
+ * Silben (lyricsTrack()).
+ *
+ * Die Schritte in dieser Reihenfolge (die Nummern stehen auch in resolveConflicts()); in Klammern, warum es ein
+ * Konflikt ist und warum er in GP-Dateien typisch ist:
+ *
+ *  1. Wiederholungen, Volta-Klammern, Sprünge und Simile ausschreiben (unrollRepeats()). Nur so sind Takt, Silbe,
+ *     Akkord und Sync-Punkt eindeutig; GP-Dateien sparen damit Platz.
+ *  2. Takte mit falscher Länge auffüllen bzw. kürzen (fixBarLengths()); Guitar Pro erlaubt unvollständige Takte.
+ *  3. Triolen-Feeling nur als Shuffle (fixTripletFeel()); das Gitarrenbuch kennt nur Achtel-Shuffle.
+ *  4. Spuren ohne Saiten werden Gitarren-Tab (fixPitchedTracks()); jede Spur ist Tab.
+ *  5. Tuning in der üblichen Oktave (fixTuningOctaves(), Oktav-Trick aus Guitar Pro).
+ *  6. Instrument aus der festen Liste und Notenlage für Tab (fixInstruments()).
+ *  7. Ein Capo für alle Spuren (fixCapo()). Akkordnamen und Leadsheet gehen von einem Capo aus; in Guitar Pro hat jede
+ *     Spur ihren eigenen, Gesang oder Bass oft keinen.
+ *  8. Ein Tuning für alle Spuren mit so vielen Saiten wie die Akkordspur (fixTuning()); ein Song hat ein Tuning
+ *     (Leiste, Transponieren, Kopf des Blatts). Spuren mit anderer Saitenzahl (Bass) behalten ihres.
+ *  9. Akkorde nur in der Akkordspur (fixChordTracks()); in GP stehen sie oft an Gitarre und Gesang.
+ * 10. Liedtext nur in der Textspur (fixLyricsTracks()); das Panel "Liedtext" bearbeitet nur sie.
+ * 11. Unbekannte Akkordnamen ersetzen (fixChordNames()): Ohne gelesenen Namen (parseChord()) gibt es keine Töne, also
+ *     keinen berechneten Griff, kein Transponieren und keine Prüfung. GP-Namen sind frei ("N.C.", "Dsus2/4", Tippfehler).
+ * 12. Griff, der nicht zum Namen passt (fixGrips()); Griffbilder in GP sind frei gezeichnet und oft falsch benannt,
+ *     sonst widersprächen sich Griffbild und Name auf dem Blatt, und der Akkordkatalog lernte den falschen Griff.
+ * 13. Griffbilder: eigene bleiben, fehlende kommen aus dem Katalog (normalizeChords()).
+ *
+ * Ohne eigenen Schritt gleicht schon das Einlesen (parseScore() → normalizeLevels()) die Lautstärke an.
+ *
+ * Der Import fragt nicht nach und speichert keinen Bericht; die Änderungen (Change) stehen nur in der Konsole, solche
+ * mit Datenverlust mit "⚠". Was Datenverlust ist, sagt jeder Schritt selbst (lossy()); ein anderer Klang durch das
+ * Instrument (Schritt 6) ist keiner.
  */
 
 import {gripOf, normalizeChords} from './base.js';
@@ -78,7 +112,7 @@ const lossy = text => ({text, critical: true});
  */
 
 /**
- * Löst alle Konflikte (docs/Konflikte.md) ohne Rückfrage, Schritt für Schritt in der Reihenfolge der Regeln.
+ * Löst alle Konflikte ohne Rückfrage, Schritt für Schritt in der Reihenfolge der Regeln (Kopf der Datei).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {string} tex Noten als alphaTex
  * @param {import('./base.js').ChordLibrary} library Akkordkatalog
@@ -187,7 +221,9 @@ function addRests(alphaTab, voice, ticks) {
 }
 
 /**
- * Triolen-Feeling: punktierte Achtel und Scottish (Achtel) werden Shuffle, die Sechzehntel-Varianten fallen weg.
+ * Triolen-Feeling: punktierte Achtel und Scottish (Achtel) werden Shuffle, die Sechzehntel-Varianten fallen weg; die
+ * Noten bleiben, wie sie sind. (GP3/GP4 kennen nur Achtel-Triolen, GP5 auch Sechzehntel-Triolen, GP6 bis GP8 dazu
+ * punktiert und Scottish in Achteln und Sechzehnteln.)
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
@@ -215,7 +251,10 @@ function fixTripletFeel(alphaTab, score) {
 }
 
 /**
- * Spuren ohne Saiten (Gesang, Orgel …) werden Gitarren-Tab (toGuitarTab()); um Oktaven verschoben ist Datenverlust.
+ * Spuren ohne Saiten (Gesang, Orgel …) werden Gitarren-Tab in Standard-Tuning (toGuitarTab()): Ihr Tonraum ist der des
+ * Griffbretts. Der ganze Satz wandert um so viele Oktaven, dass möglichst viele Töne zwischen tiefer leerer Saite und
+ * 12. Bund der hohen liegen; einzelne Töne, die dann noch nicht zu greifen sind, um eine weitere Oktave. Klingt die
+ * Spur dadurch anders (verschoben, oktaviert, nicht zu greifen), ist das Datenverlust.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
@@ -289,7 +328,8 @@ function fixInstruments(alphaTab, score) {
 }
 
 /**
- * Capo: der kleinste aller Spuren mit Saiten; die anderen werden umgerechnet (klingen gleich).
+ * Capo: der kleinste aller Spuren mit Saiten; die anderen werden umgerechnet (klingen gleich, moveToCapo()). Noten,
+ * die unter dem Capo lägen, kommen auf eine andere Saite oder eine Oktave höher (das ist Datenverlust).
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */
@@ -310,7 +350,8 @@ function fixCapo(score) {
 
 /**
  * Tuning: das tiefste, das eine Spur verwendet (kleinste Summe der Tonhöhen), für alle Spuren mit so vielen Saiten wie
- * die Akkordspur; die anderen werden umgerechnet (klingen gleich).
+ * die Akkordspur; die anderen werden auf derselben Saite umgerechnet (klingen gleich, setTuning(…, true)). Noten, deren
+ * Bund unter 0 oder über 24 läge, bleiben stehen und klingen anders (Datenverlust).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
@@ -335,8 +376,9 @@ function fixTuning(alphaTab, score) {
 }
 
 /**
- * Akkorde: alle in die Akkordspur (Schläge werden dafür geteilt, klingt gleich); an derselben Stelle gewinnt die
- * Akkordspur.
+ * Akkorde: alle in die Akkordspur (moveContent(), Modus "insert": fehlt dort an der Stelle ein Schlag, wird der
+ * klingende geteilt und angebunden, klingt gleich). Zwei verschiedene Akkorde an derselben Stelle: Die Akkordspur
+ * gewinnt, der andere fällt weg (Datenverlust, mit Takt, Name, Herkunftsspur und dem Akkord, der bleibt).
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
@@ -424,8 +466,9 @@ function fixLyricsTracks(score, changes) {
 }
 
 /**
- * Unbekannte Akkordnamen: mit Griff (mindestens drei Saiten) der Name aus dem Griff, sonst vereinfacht; bleibt er
- * unbekannt ("N.C."), fällt der Akkord weg.
+ * Unbekannte Akkordnamen (parseChord() kann sie nicht lesen, Regeln in docs/Musiktheorie.md): mit Griff (mindestens
+ * drei Saiten) der Name aus dem Griff (nameGrip()), sonst vereinfacht (simplifyChord(): "Dsus2/4" → "Dsus2"); bleibt
+ * er unbekannt ("N.C."), fällt der Akkord weg (Datenverlust).
  * @param {Score} score Noten, werden geändert
  * @param {import('./base.js').ChordLibrary} library Akkordkatalog
  * @returns {Change[]} Änderungen
@@ -456,7 +499,9 @@ function fixChordNames(score, library) {
 }
 
 /**
- * Griffe, die nicht zum Namen passen: Der Name gewinnt, der Griff wird der erste Vorschlag der Griffsuche (findGrips()).
+ * Griffe, die nicht zum Namen passen (gripToneProblem(), je Akkord mit mindestens drei gespielten Saiten, im Tuning
+ * der Spur): Der Name gewinnt, denn ein Griff allein ist mehrdeutig; der Griff wird der erste Vorschlag der Griffsuche
+ * (findGrips(), ohne den Katalog). Die Noten ändern sich nicht, nur das Griffbild.
  * @param {Score} score Noten, werden geändert
  * @returns {Change[]} Änderungen
  */

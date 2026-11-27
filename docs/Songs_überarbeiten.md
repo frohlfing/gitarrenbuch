@@ -1,336 +1,213 @@
-# Nachlieferung und Prüfung nach der Archiv-Übernahme
-
-Stand 27.10.2026. Übernommen wurden 42 Lieder aus `data/archiv`. Diese Liste zeigt, wo noch etwas fehlt oder wo
-du nachsehen solltest, damit jedes Lied so vollständig ist, als wäre es über den Import angelegt worden.
-
-## Audio fehlt (✅ erledigt)
-
-Im Archiv gab es für diese Lieder keine MP3-Datei.
-
-- [x] Frank Rohlfing – Ich bin in Rente - ich muss gar nichts!
-- [x] Ludwig van Beethoven – Für Elise
-- [x] Traditional – Adeste Fideles
-- [x] Traditional – Amarillo
-- [x] Traditional – Beginner Blues
-- [x] Traditional – Drunken Sailor
-- [x] Traditional – Easy Slow Delta Blues
-- [x] Traditional – Happy Birthday
-- [x] Traditional – Kol Dodie
-- [x] Traditional – Kommet ihr Hirten
-- [x] Traditional – Stille Nacht
-
--> das ist ok.
-
-## Keine GP-Quelle ❌
-Diese 11 Songs haben keine GP-Quelle (keine Datei im Upload-Ordner):
-- die-feisten-nussschuesselblues (YouTube)
-- m-l-m-s-c-froehliche-weihnacht (YouTube)
-- marius-mueller-westernhagen-dicke (YouTube)
-- marius-mueller-westernhagen-geiler-is-schon (YouTube)
-- traditional-adeste-fideles
-- traditional-amarillo
-- traditional-beginner-blues
-- traditional-easy-slow-delta-blues
-- traditional-kol-dodie
-- frank-rohlfing-ich-bin-in-rente-ich-muss-gar-nichts (vermutlich eigener Song)
-- gitarrenbuch-test-struktur-editor (Testsong)
-
-## Cover (✅ erledigt)
-
-Stand 27.10.2026 hat jedes der 42 Lieder ein Cover mit 500 × 500 px. 
-
-## Noten fehlen (✅ erledigt)
-
-- [x] Frank Rohlfing – Ich bin in Rente - ich muss gar nichts! – angelegt wie „+ Neues Lied“ (Gerüst mit 4 Takten,
-  G-Dur, Tempo 114 laut Leadsheet). Es gab keine GP-Datei, nur das Leadsheet.
-
--> das ist ok.
-
-## Namen prüfen (✅ erledigt)
-
-Übernommen wie in der GP-Datei; die übliche Schreibweise weicht ab.
-
-- [x] The Animals – House Of Rising Sun (üblich: „The House of the Rising Sun“) -> Nein, ist korrekt so
-- [x] Die Ärzte – Ich weiss nicht (ob es Liebe ist) (Original: „Ich weiß nicht (ob es Liebe ist)“)
-- [x] John Lennon – Happy Xmas War is Over (üblich: „Happy Xmas (War Is Over)“)
-
-## Quelle für Guitar Pro prüfen (✅ erledigt)
-
-- [x] Bruce Springsteen – This Land Is Your Land – der UG-Link zeigt auf die Fassung von Woody Guthrie (passt zur Datei
-  unter `Upload/`, im Gitarrenbuch steht das Lied aber unter Bruce Springsteen). -> Das is ok, von Springsteen gibt es keine GP-Datei.
-- [x] Traditional – Easy Slow Delta Blues – der Link zeigt auf eine Lektion vom Blues Guitar Institute. -> das ist ok.
-
-## Zwei Ultimate-Guitar-Links in den Notizen (✅ erledigt)
-
-Als Quelle wurde jeweils der erste Link übernommen. Der zweite steht weiter in den Notizen.
-
-| Lied                                        | Übernommen (Quelle)                                              | Zweiter Link (nur Notizen)                                      |
-|---------------------------------------------|------------------------------------------------------------------|-----------------------------------------------------------------|
-| Bob Dylan – Blowin' In The Wind             | `tab/bob-dylan/blowin-in-the-wind-official-2077645`              | `tab/bob-dylan/blowin-in-the-wind-chords-14835`                 |
-| Bob Marley – No Woman No Cry                | `tab/bob-marley/no-woman-no-cry-official-1920907`                | `tab/bob-marley/no-woman-no-cry-guitar-pro-1520306`             |
-| Bob Marley – Three Little Birds             | `tab/bob-marley/three-little-birds-official-2072761`             | `tab/bob-marley/three-little-birds-tabs-3713126`                |
-| Bruce Springsteen – This Land Is Your Land  | `tab/woody-guthrie/this-land-is-your-land-official-2777410`      | `tab/bruce-springsteen/this-land-is-your-land-chords-671502`    |
-| Die Ärzte – Junge                           | `tab/2097451`                                                    | `tab/751634`                                                    |
-| Ludwig van Beethoven – Für Elise            | `tab/2484503`                                                    | `tab/100626`                                                    |
-| Marius Müller-Westernhagen – Dicke          | `tab/77147`                                                      | `tab/1997337`                                                   |
-| Traditional – Drunken Sailor                | `tab/misc-traditional/drunken-sailor-official-2812862`           | `tab/misc-traditional/drunken-sailor-guitar-pro-669922`         |
-
-Alle Links beginnen mit `https://tabs.ultimate-guitar.com/`.
-
-## Ohne Quelle für Guitar Pro (✅ erledigt)
-
-In den Notizen stand kein Ultimate-Guitar-Link.
-
-- [X] Frank Rohlfing – Ich bin in Rente - ich muss gar nichts! (eigenes Lied, braucht keine) -> hierzu gibt es keine GP-Datei bei UG
-- [x] Ganz Schön Feist – Du willst immer nur ficken -> nachgetragen und runtergeladen (ptb-Datei ersetzt)
-- [X] John Lennon – Happy Xmas War is Over -> nachgetragen und runtergeladen
-- [x] M.L.M.S.C. – Fröhliche Weihnacht -> gibt es nicht bei UG
-- [x] Traditional – Adeste Fideles -> hatte ich selbst erstellt 
-- [x] Traditional – Amarillo -> hatte ich selbst erstellt
-- [x] Traditional – Beginner Blues -> hatte ich selbst erstellt
-- [x] Traditional – Kol Dodie -> hatte ich selbst erstellt
-- [x] Traditional – Kommet ihr Hirten -> nachgetragen und runtergeladen
-- [x] Traditional – Stille Nacht -> nachgetragen und runtergeladen
-- [x] Unheilig – Geboren um zu leben -> hatte ich aus PDS manuell übertragen
-
-## YouTube-Quelle (✅ erledigt)
-
-Stand 27.10.2026 ist bei allen 31 Liedern mit Audio eine YouTube-URL samt Clip-Länge eingetragen.
-
-## Clip weicht von der Audiospur ab (✅ erledigt)
-
-Verglichen wurde die Länge des YouTube-Clips mit der von `audio.mp3`. YouTube nennt die Länge nur in ganzen
-Sekunden, eine Abweichung bis 1 Sekunde ist deshalb normal. Gleiche Länge heißt nicht sicher gleiche Audiospur, ist
-aber ein guter Hinweis. Bei 29 Liedern passt es, abweichend sind:
-
-| Lied                                  | Clip |  MP3 | Abweichung | Bemerkung                                         |
-|---------------------------------------|-----:|-----:|-----------:|---------------------------------------------------|
-| John Lennon – Happy Xmas War is Over  | 3:33 | 3:35 |     −2,7 s | bekannt: Stille am Ende fehlt im Clip (s. unten)  |
-| Die Ärzte – Junge                     | 3:36 | 3:37 |     −1,4 s | geprüft: richtiger Clip                           |
-
-- [x] **Junge:** Clip ist der richtige.
-
-## Audio neu extrahieren (✅ erledigt)
-
-- [ ] John Lennon – Happy Xmas War is Over – `audio.mp3` stammt aus der GP-Datei und wurde damals über notmp3.com
-  geholt („Ultimate Mix“). Darin stecken das YouTube-Vorschaubild als Cover, ein Titel und der Kommentar
-  `https://notmp3.com`. Neu extrahieren aus dem YouTube-Clip, der 2 Sekunden kürzer ist (Stille am Ende entfernt).
-  Die Sync-Punkte bleiben gültig, solange der Clip am Anfang gleich beginnt: Sie zählen ab Beginn der Audiospur, und
-  der letzte liegt bei 3:23, also vor dem Ende des neuen Clips (rund 3:33). Beginnt der Clip früher oder später,
-  müssen alle Sync-Punkte um diese Zeit verschoben werden.
-
-## Tempo passt nicht zur Audiospur (✅ erledigt)
-
-Erledigt am 28.10.2026: Alle Tempoangaben dieser Lieder sind mit dem gemessenen Faktor multipliziert und auf ganze
-Zahlen gerundet (auch Tempowechsel, z. B. Stairway To Heaven und House Of Rising Sun). Die vorherigen Noten liegen
-in `data/backup/<slug>/score-vor-tempo-korrektur.atex`. Die Spalte „notiert“ zeigt den alten Wert.
-
-Die Kopfzeile des Songs zeigt das rot: „105 BPM (⚠ Audio: 211 BPM)“. Gemessen wird vom ersten bis zum
-letzten Sync-Punkt (mit allen Tempowechseln) und auf eine ganze Zahl gerundet; markiert ist jeder Song, bei dem ein
-anderes ganzzahliges Tempo besser passt. Korrigiert wird später im Editor mit „Tempo an der Audiospur anpassen“.
-Sortiert nach der Abweichung, die größte zuerst.
-
-| Lied                                            | notiert | Audiospur | Bemerkung                                          |
-|-------------------------------------------------|--------:|----------:|----------------------------------------------------|
-| Die Ärzte – Junge                               |     105 |       211 | Achtel zu Vierteln gemacht, Tempo nicht verdoppelt |
-| Bob Dylan – Blowin' In The Wind                 |     348 |       178 | vermutlich umgekehrt: Tempo doppelt                |
-| Die Ärzte – Manchmal haben Frauen               |     105 |       117 |                                                    |
-| The Animals – House Of Rising Sun               |     115 |       125 |                                                    |
-| Marius Müller-Westernhagen – Dicke              |      62 |        66 |                                                    |
-| Johnny Cash – Ring Of Fire                      |     207 |       209 |                                                    |
-| John Lennon – Happy Xmas War is Over            |     100 |        98 |                                                    |
-| Led Zeppelin – Stairway To Heaven               |     140 |       142 |                                                    |
-| Bob Dylan – Knockin' On Heaven's Door           |     140 |       141 |                                                    |
-| Bob Marley – Redemption Song                    |     117 |       116 |                                                    |
-| Die Ärzte – Ich weiss nicht (ob es Liebe ist)   |      92 |        91 |                                                    |
-| Marius Müller-Westernhagen – Johnny Walker      |     150 |       151 |                                                    |
-| Pink Floyd – Wish You Were Here                 |     120 |       121 |                                                    |
-| R.E.M. – Losing My Religion                     |     126 |       125 |                                                    |
-| The Beach Boys – Sloop John B                   |   125,6 |       126 | Kommazahl                                          |
-| The Cranberries – Zombie                        |      83 |        84 |                                                    |
-
-
-## Längen prüfen ❌
-
-Gemessen am 27.10.2026, so wie sie im Formular „Song bearbeiten“ neben den Quellen stehen. „Noten“ ist die
-Spieldauer im eigenen Tempo, „Sync-Ende“ die Stelle in der Audiospur, an der die Noten laut Sync-Punkten enden.
-Kleine Unterschiede zur MP3 (Ein- und Ausklingen) sind normal. Aufgeführt sind Abweichungen ab 10 Sekunden.
-
-| Lied                                           | Noten | Sync-Ende |  MP3 | Auffällig                                |
-|------------------------------------------------|------:|----------:|-----:|------------------------------------------|
-| Die Ärzte – Junge                              |  6:05 |      3:11 | 3:37 | Noten fast doppelt so lang wie Audiospur |
-| Bob Dylan – Blowin' In The Wind                |  1:23 |      2:44 | 2:50 | Noten nur halb so lang wie Audiospur     |
-| R.E.M. – Losing My Religion                    |  4:23 |      4:42 | 4:54 | MP3 31 s länger                          |
-| Pink Floyd – Wish You Were Here                |  5:06 |      5:19 | 5:34 | MP3 29 s länger                          |
-| The Animals – House Of Rising Sun              |  4:32 |      4:09 | 4:08 | Noten 24 s länger                        |
-| John Lennon – Happy Xmas War is Over           |  3:16 |      3:23 | 3:35 | MP3 19 s länger                          |
-| Marius Müller-Westernhagen – Dicke             |  4:23 |      4:07 | 4:09 | Noten 14 s länger                        |
-| Unheilig – Geboren um zu leben                 |  3:43 |      3:44 | 3:56 | MP3 14 s länger (Sync endet früh)        |
-| Marius Müller-Westernhagen – Johnny Walker     |  3:15 |      3:23 | 3:28 | MP3 13 s länger                          |
-| Bob Marley – Redemption Song                   |  3:43 |      3:46 | 3:55 | MP3 12 s länger (Sync endet früh)        |
-
-- [x] **Junge:** Die Noten dauern 6:05, die MP3 nur 3:37, und die Sync-Punkte enden schon bei 3:11. Geklärt: Die
-  Noten stehen auf Tempo 105, die Audiospur läuft laut Sync-Punkt mit rund 211 BPM (in der GP-Datei `OriginalTempo`
-  105, `ModifiedTempo` 210,95). Das Lied ist im halben Tempo notiert; die Sync-Punkte gleichen das aus.
-- [ ] **Blowin' In The Wind:** Die Noten decken nur 1:23 ab; die Sync-Punkte strecken sie auf die ganze Audiospur.
-  Vermutlich fehlen Strophen oder Wiederholungen.
-- [ ] Die übrigen Lieder der Tabelle kurz anhören, ob Intro, Outro oder Wiederholungen in den Noten fehlen.
-
-## Sync-Punkte an die YouTube-Spur anpassen ❌
-
-Die neuen `audio.mp3` (von YouTube) beginnen nicht genau dort, wo die bisherige Spur aus der GP-Datei begann. Um
-diesen Versatz müssen alle Sync-Punkte in `score.atex` verschoben werden (negativ: Audio früher). „Gemessen“ ist
-ein Vergleich der beiden Spuren und nur ein Startwert: Bei Three Little Birds und Geboren um zu leben lag die
-Messung genau um das Doppelte daneben, bei Junge und Fröhliche Weihnacht passt 0. Maßgeblich ist das Gehör: Im
-Sync-Editor (Bearbeitungsmodus, Reiter „Audio“) ohne ausgewählten Marker im Feld „Spur“ alle Sync-Punkte verschieben, bis Synth und Audiospur zusammen
-klingen, und speichern.
-Sortiert nach dem gemessenen Versatz, der größte zuerst.
-
-| Lied                                            | gemessen | nach Gehör      |
-|-------------------------------------------------|---------:|-----------------|
-| Bob Marley – Three Little Birds                 |  −456 ms | −228 ms         |
-| Unheilig – Geboren um zu leben                  |  −321 ms | −160 ms         |
-| The Beach Boys – Sloop John B                   |  −213 ms | −213 ms         |
-| Ben E. King – Stand By Me                       |  −141 ms |                 |
-| Bob Marley – Redemption Song                    |  −141 ms |                 |
-| Johnny Cash – Ring Of Fire                      |  −141 ms |                 |
-| The Cranberries – Zombie                        |  −141 ms |                 |
-| U2 – With Or Without You                        |  −141 ms |                 |
-| Die Ärzte – Manchmal haben Frauen               |  −137 ms |                 |
-| Pink Floyd – Wish You Were Here                 |  −133 ms |                 |
-| John Lennon – Happy Xmas War is Over            |  +124 ms | +124 ms         |
-| Die Ärzte – Junge                               |  −117 ms | 0 ms            |
-| M.L.M.S.C. – Fröhliche Weihnacht                |  −100 ms | 0 ms            |
-| Bob Dylan – Knockin' On Heaven's Door           |   −49 ms |                 |
-| Bob Dylan – Blowin' In The Wind                 |   −36 ms |                 |
-| Bob Marley – No Woman No Cry                    |   −36 ms |                 |
-| Bruce Springsteen – This Land Is Your Land      |   −36 ms |                 |
-| Chris Stapleton – Tennessee Whiskey             |   −36 ms |                 |
-| Die Ärzte – Ich weiss nicht (ob es Liebe ist)   |   −36 ms |                 |
-| Die Ärzte – Schlaflied                          |   −36 ms |                 |
-| Die Feisten – Nussschüsselblues                 |   −36 ms |                 |
-| Die Toten Hosen – Alles aus Liebe               |   −36 ms | 0 ms (passt so) |
-| Ganz Schön Feist – Du willst immer nur ficken   |   −36 ms |                 |
-| Hannes Wader – Kokain                           |   −36 ms |                 |
-| Led Zeppelin – Stairway To Heaven               |   −36 ms |                 |
-| Marius Müller-Westernhagen – Dicke              |   −36 ms |                 |
-| Marius Müller-Westernhagen – Geiler is schon    |   −36 ms |                 |
-| Marius Müller-Westernhagen – Johnny Walker      |   −36 ms |                 |
-| The Animals – House Of Rising Sun               |   −36 ms |                 |
-| R.E.M. – Losing My Religion                     |   +25 ms |                 |
-| Snow Patrol – Chasing Cars                      |   −18 ms |                 |
-
-- [ ] Alle Lieder nach Gehör prüfen und im Sync-Editor verschieben (die Werte „nach Gehör“ oben sind noch nicht
-  übernommen).
-
-## Sync-Punkte passen nicht zur Audiospur (4 ❌)
-
-Die Kopfzeile zeigt das rot: „(⚠ Sync-Punkte passen nicht zur Audiospur)“, wenn der letzte Sync-Punkt hinter dem Ende
-der Audiospur liegt. Ein negativer erster Sync-Punkt ist gewollt (Takt 1 beginnt vor der Audiospur) und wird nicht
-gemeldet.
-
-- [ ] Die Ärzte – Junge: Der letzte Sync-Punkt muss ganz leicht korrigiert werden: Das Audio kommt in Takt 158 minimal zu früh.
-- [ ] Bob Dylan – Knockin' On Heaven's Door: letzter Sync-Punkt 2,5 s hinter dem Ende der Audiospur.
-- [ ] Die Ärzte – Ich weiss nicht (ob es Liebe ist): letzter Sync-Punkt 0,7 s hinter dem Ende.
-- [ ] The Animals – House Of Rising Sun: letzter Sync-Punkt 0,6 s hinter dem Ende.
-
-## Akkorde prüfen (3 ❌)
-
-Neu dazugekommen sind Akkorde in drei Songs:
-- [ ] Tennessee Whiskey: 2 Akkorde aus „Vocal“
-- [ ] Johnny Walker: 6 Akkorde aus „Guitar (P. Bursch)“
-- [ ] Losing My Religion: 1 Akkord aus „Guitar & Mandolin“     
-
-## Tuning (1 ❌) 
-
-- [ ] „Johnny Walker“: Das Tuning steht eine Oktave zu hoch. Das ist vermutlich ein Fehler aus der GP-Datei, zudem passt die
-Anzeige nicht in den Kopf.
-
-
-Volta-Klammern sind die Klammern über den Schlusstakten einer Wiederholung („1.“ und „2.“). Beim ersten Durchgang spielt man den Takt unter „1.“, nach der Wiederholung springt man direkt zu „2.“. Auf Deutsch heißen sie auch „Haus 1 / Haus 2“ oder „Klammer 1 / 2“. Sie stehen in zwei Songs:
-- Für Elise: zweimal, beide Teile mit 1. und 2. Klammer.
-- Kol Dodie: einmal.
-
-## Wiederholungszeichen (6 ❌) 
-
-Wiederholungszeichen entfernen
-
-| Song                    | Wiederholungen                             |
-|-------------------------|--------------------------------------------|
-| Fröhliche Weihnacht     | vier, drei davon 2× und eine 5×            |
-| Für Elise               | zwei, je 2×, mit Volta-Klammern            |
-| Kol Dodie               | zwei, je 2×, die zweite mit Volta-Klammern |
-| Schlaflied (Die Ärzte)  | eine, 3×                                   |
-| Kommet, ihr Hirten      | eine, 3×, ab Songanfang                    |
-| Drunken Sailor          | eine, 4×, ab Songanfang                    |
-
-
-## Unterschiede im Wortlaut (Noten → Leadsheet)
-
-Nicht aufgeführt sind reine Schreibweisen: fehlende Leerzeichen im Leadsheet, „V2:“ vor den Strophen, Griffbilder am Zeilenende, „z-ombie“ und ähnliche Silbentrennung.
-
-Kokain
-- Refrain: „Oh oh oh oh oh Mama“ → „Oh... oh Mama“
-- Outro: In den Noten steht eine ganze Zeile „la la la …“ mehr.
-
-Redemption Song
-- „But my hand was made strong“ → „my head“
-- „Won't you help to sing These song of freedom?“ → „these songs“ (3×)
-
-Junge
-- „(Was soll' n die Nachbarn sagen?)“ → „sollen“ (5×)
-- „(Was soll' n das Finanzamt sagen?)“ → „soll“
-
-Ich weiß nicht, ob es Liebe ist
-- „Vor zwei Wochen hab' ich Dich zum ersten Mal“ → „2 … hab … 1.“
-
-Manchmal haben Frauen
-- „zwischen Männern“ → „zw.“
-- „der Typ mir plötzlich leid“ → „der Kerl“
-- „Mundgeruch brachte mir Übelkeit“ → „machte“
-- „und ich rannte nach Haus“ → „und rannte nach Haus“
-
-Schlaflied
-- „Die Nacht, sie schaut“ → „die schaut“
-- „Der runde Mond**, er** hat dich gerne“ → „Mond der hat“
-- „hm hmm hm hm“ → „hm hm hm hm“
-
-Nussschüsselblues
-- „Bau Bak bau ba wa dik bau... hei hei hei“ → „Bau bak bau wa dik bau… hei, hei, hei“
-- Die nächste Zeile beginnt mit einem vierten „hei“, das im Leadsheet fehlt.
-
-Alles aus Liebe
-- „nicht weiss“ → „weiß“
-- „wie gross“ → „groß“
-
-Stairway to Heaven
-- „Ooh, it makes me wonder.“ → „Ooh 'makes me wonder.“
-- „Yes, there are two paths“ → „There're two path“
-- „the road you're on“ → „your on“
-- „And it makes me wonder. Ohhhohoh“ → „Ooh, 'makes me wonder. Ooh 'makes me wonder.“
-
-Geiler is schon
-- „Ich brauch' auch kein Schloß“ → „Ich brauche kein Schloß“
-- „Aber geiler wärs' schon“ → „is'“
-- „der kann uns mal... lecken.“ → „lecken“ fehlt im Leadsheet.
-
-Wish You Were Here
-- „Soo, so you think“ → „So, so“
-
-Zombie
-- „Hey hey oh oh, oh“ → „Hey, hey, hey, oh,“
-- Outro „oh oh oh, … oh oh do ja ja ja ja, ah.“ → im Leadsheet „doo doo doo doo, …“
-
-With or Without You
-- „Uh oh oh oh Uh oh“ → „Uh oh oh oh. Uh oh oh oh.“
-- „With or without you. Without you, uh.“ → im Leadsheet nur „With or without you.“
-
-Happy Birthday
-- „Happy Birthday lieber NAME!“ → „dear NAME!“                                                                                                                                 
-
-## Capo
-Per Skript für vier Songs eingetragen: 
-No Woman No Cry (1), 
-Kokain (2), 
-Schlaflied (5) und 
-Geboren um zu leben (7). (Die Tonspur in der importierten GP-Datei war um 5 Halbtöne erhöht.)
+# Songs überarbeiten
+
+Was je Song noch zu kontrollieren ist, nach Interpret sortiert.
+
+- **Längen prüfen:** gemessen am 27.10.2026. „Noten“ ist die Spieldauer im eigenen Tempo, „Sync-Ende“ die Stelle in
+  der Audiospur, an der die Noten laut Sync-Punkten enden. Aufgeführt sind Abweichungen ab 10 Sekunden; kurz
+  anhören, ob Intro, Outro oder Wiederholungen in den Noten fehlen.
+- **Sync-Versatz:** Die `audio.mp3` von YouTube beginnt nicht genau dort, wo die Spur aus der GP-Datei begann. Im
+  Sync-Editor ohne ausgewählten Marker im Feld „Spur“ alle Sync-Punkte verschieben, bis Synth und Audiospur zusammen
+  klingen. „Gemessen“ ist nur ein Startwert (bei Three Little Birds und Geboren um zu leben lag er genau um das
+  Doppelte daneben); maßgeblich ist das Gehör.
+- **Unterschiede im Wortlaut:** Noten → Leadsheet. Nicht aufgeführt sind reine Schreibweisen (fehlende Leerzeichen,
+  „V2:“ vor den Strophen, Griffbilder am Zeilenende, Silbentrennung wie „z-ombie“).
+- **Keine GP-Quelle:** keine Datei im Upload-Ordner, die Noten sind nicht gegen ein Original zu prüfen.
+
+## Ben E. King – Stand By Me
+- Sync-Versatz nach Gehör prüfen (gemessen −141 ms).
+
+## Bob Dylan – Blowin' In The Wind
+- Längen prüfen (Noten 1:23, Audiospur 2:50): Die Sync-Punkte strecken die Noten auf die ganze Audiospur, vermutlich
+  fehlen Strophen oder Wiederholungen.
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+
+## Bob Dylan – Knockin' On Heaven's Door
+- Der letzte Sync-Punkt liegt 2,5 s hinter dem Ende der Audiospur.
+- Sync-Versatz nach Gehör prüfen (gemessen −49 ms).
+
+## Bob Marley – No Woman No Cry
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Capo 1 prüfen (per Skript eingetragen).
+
+## Bob Marley – Redemption Song
+- Längen prüfen (MP3 12 s länger, Sync endet früh).
+- Sync-Versatz nach Gehör prüfen (gemessen −141 ms).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „But my hand was made strong“ → „my head“
+  - „Won't you help to sing These song of freedom?“ → „these songs“ (3×)
+
+## Bob Marley – Three Little Birds
+- Sync-Punkte um −228 ms verschieben (nach Gehör ermittelt, noch nicht übernommen; gemessen −456 ms).
+
+## Bruce Springsteen – This Land Is Your Land
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+
+## Chris Stapleton – Tennessee Whiskey
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Akkorde prüfen: 2 Akkorde aus „Vocal“ sind neu in die Akkordspur gekommen.
+
+## Die Ärzte – Ich weiß nicht (ob es Liebe ist)
+- Der letzte Sync-Punkt liegt 0,7 s hinter dem Ende der Audiospur.
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Vor zwei Wochen hab' ich Dich zum ersten Mal“ → „2 … hab … 1.“
+
+## Die Ärzte – Junge
+- Längen prüfen (Noten fast doppelt so lang wie Audiospur): Die Noten stehen im halben Tempo (105 statt rund 211
+  BPM), die Sync-Punkte gleichen das aus.
+- Der letzte Sync-Punkt muss ganz leicht korrigiert werden: Das Audio kommt in Takt 158 minimal zu früh.
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „(Was soll' n die Nachbarn sagen?)“ → „sollen“ (5×)
+  - „(Was soll' n das Finanzamt sagen?)“ → „soll“
+
+## Die Ärzte – Manchmal haben Frauen
+- Sync-Versatz nach Gehör prüfen (gemessen −137 ms).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „zwischen Männern“ → „zw.“
+  - „der Typ mir plötzlich leid“ → „der Kerl“
+  - „Mundgeruch brachte mir Übelkeit“ → „machte“
+  - „und ich rannte nach Haus“ → „und rannte nach Haus“
+
+## Die Ärzte – Schlaflied
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Capo 5 prüfen (per Skript eingetragen).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Die Nacht, sie schaut“ → „die schaut“
+  - „Der runde Mond, er hat dich gerne“ → „Mond der hat“
+  - „hm hmm hm hm“ → „hm hm hm hm“
+
+## Die Feisten – Nussschüsselblues
+- Keine GP-Quelle (nur YouTube).
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Bau Bak bau ba wa dik bau... hei hei hei“ → „Bau bak bau wa dik bau… hei, hei, hei“
+  - Die nächste Zeile beginnt mit einem vierten „hei“, das im Leadsheet fehlt.
+
+## Die Toten Hosen – Alles aus Liebe
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „nicht weiss“ → „weiß“
+  - „wie gross“ → „groß“
+
+## Frank Rohlfing – Ich bin in Rente - ich muss gar nichts!
+- Keine GP-Quelle (vermutlich eigener Song).
+
+## Ganz Schön Feist – Du willst immer nur ficken
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+
+## Gitarrenbuch – Test
+- Testsong, keine GP-Quelle.
+
+## Hannes Wader – Kokain
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Capo 2 prüfen (per Skript eingetragen).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - Refrain: „Oh oh oh oh oh Mama“ → „Oh... oh Mama“
+  - Outro: In den Noten steht eine ganze Zeile „la la la …“ mehr.
+
+## John Lennon – Happy Xmas (War is Over)
+- Längen prüfen (MP3 19 s länger).
+- Sync-Punkte um +124 ms verschieben (nach Gehör ermittelt, noch nicht übernommen).
+
+## Johnny Cash – Ring Of Fire
+- Sync-Versatz nach Gehör prüfen (gemessen −141 ms).
+
+## Led Zeppelin – Stairway To Heaven
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Am Tempowechsel in Takt 225 (194 BPM) fehlt ein Sync-Punkt.
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Ooh, it makes me wonder.“ → „Ooh 'makes me wonder.“
+  - „Yes, there are two paths“ → „There're two path“
+  - „the road you're on“ → „your on“
+  - „And it makes me wonder. Ohhhohoh“ → „Ooh, 'makes me wonder. Ooh 'makes me wonder.“
+
+## Ludwig van Beethoven – Für Elise
+- Nichts offen.
+
+## M.L.M.S.C. – Fröhliche Weihnacht
+- Keine GP-Quelle (nur YouTube).
+
+## Marius Müller-Westernhagen – Dicke
+- Keine GP-Quelle (nur YouTube).
+- Längen prüfen (Noten 14 s länger).
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+
+## Marius Müller-Westernhagen – Geiler is schon
+- Keine GP-Quelle (nur YouTube).
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Ich brauch' auch kein Schloß“ → „Ich brauche kein Schloß“
+  - „Aber geiler wärs' schon“ → „is'“
+  - „der kann uns mal... lecken.“ → „lecken“ fehlt im Leadsheet.
+
+## Marius Müller-Westernhagen – Johnny Walker
+- Längen prüfen (MP3 13 s länger).
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- Akkorde prüfen: 6 Akkorde aus „Guitar (P. Bursch)“ sind neu in die Akkordspur gekommen.
+
+## Pink Floyd – Wish You Were Here
+- Längen prüfen (MP3 29 s länger).
+- Sync-Versatz nach Gehör prüfen (gemessen −133 ms).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Soo, so you think“ → „So, so“
+
+## R.E.M. – Losing My Religion
+- Längen prüfen (MP3 31 s länger).
+- Sync-Versatz nach Gehör prüfen (gemessen +25 ms).
+- Akkorde prüfen: 1 Akkord aus „Guitar & Mandolin“ ist neu in die Akkordspur gekommen.
+
+## Snow Patrol – Chasing Cars
+- Sync-Versatz nach Gehör prüfen (gemessen −18 ms).
+
+## The Animals – House Of Rising Sun
+- Längen prüfen (Noten 24 s länger).
+- Der letzte Sync-Punkt liegt 0,6 s hinter dem Ende der Audiospur.
+- Sync-Versatz nach Gehör prüfen (gemessen −36 ms).
+- An den Tempowechseln in Takt 161, 164, 165, 166, 167, 169 und 170 fehlen Sync-Punkte.
+
+## The Beach Boys – Sloop John B
+- Sync-Punkte um −213 ms verschieben (nach Gehör ermittelt, noch nicht übernommen).
+
+## The Cranberries – Zombie
+- Sync-Versatz nach Gehör prüfen (gemessen −141 ms).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Hey hey oh oh, oh“ → „Hey, hey, hey, oh,“
+  - Outro „oh oh oh, … oh oh do ja ja ja ja, ah.“ → im Leadsheet „doo doo doo doo, …“
+
+## Traditional – Adeste Fideles
+- Keine GP-Quelle.
+
+## Traditional – Amarillo
+- Keine GP-Quelle.
+
+## Traditional – Beginner Blues
+- Keine GP-Quelle.
+
+## Traditional – Drunken Sailor
+- Sync-Punkt in Takt 1 prüfen (der erste lag in Takt 3; Takt 1–2 haben jetzt sichtbar 120 BPM, ab Takt 3 stehen 123).
+
+## Traditional – Easy Slow Delta Blues
+- Keine GP-Quelle.
+
+## Traditional – Happy Birthday
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Happy Birthday lieber NAME!“ → „dear NAME!“
+
+## Traditional – Kol Dodie
+- Keine GP-Quelle.
+
+## Traditional – Kommet ihr Hirten
+- Nichts offen.
+
+## Traditional – Stille Nacht
+- Nichts offen.
+
+## U2 – With Or Without You
+- Sync-Versatz nach Gehör prüfen (gemessen −141 ms).
+- Unterschiede im Wortlaut (Noten → Leadsheet):
+  - „Uh oh oh oh Uh oh“ → „Uh oh oh oh. Uh oh oh oh.“
+  - „With or without you. Without you, uh.“ → im Leadsheet nur „With or without you.“
+
+## Unheilig – Geboren um zu leben
+- Längen prüfen (MP3 14 s länger, Sync endet früh).
+- Sync-Punkte um −160 ms verschieben (nach Gehör ermittelt, noch nicht übernommen; gemessen −321 ms).
+- Capo 7 prüfen (per Skript eingetragen; die Tonspur in der importierten GP-Datei war um 5 Halbtöne erhöht).

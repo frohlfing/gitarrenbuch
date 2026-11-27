@@ -16,6 +16,7 @@ import {
     NOTE_LABELS,
     structureOf,
     STRUCTURES,
+    svgIcon,
 } from './js/base.js';
 import {NoteEditor} from './js/editor.js';
 import {
@@ -318,6 +319,8 @@ function showSong(song) {
       </div>
       <div class="songstrip" id="songStrip" hidden></div>
     </div>
+    <button class="song-edit" id="songEditBtn" type="button" aria-label="Bearbeiten"
+      title="Bearbeiten: Noten, Text, Akkorde, Spuren, Leadsheet, Audio">${svgIcon('edit')}</button>
     <a class="song-close" href="${LIST_HASH}" aria-label="Zur Songliste" title="Zur Songliste">&#10005;</a>
     <div class="songbar"></div>
     <div id="playerRoot"></div>
@@ -328,7 +331,6 @@ function showSong(song) {
     menuWrap.innerHTML = `
     <button class="tbtn" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
     <div class="menu" id="menu" hidden>
-      <button type="button" id="noteEditBtn" title="Noten, Text, Akkorde, Spuren, Leadsheet, Audio">Bearbeiten</button>
       <button type="button" id="songDataBtn">Stammdaten</button>
       <button type="button" id="displayBtn">Darstellung</button>
       <button type="button" id="exportBtn" title="Notation mit Audiospur als Guitar-Pro-Datei (.gp)">GP-Export</button>
@@ -398,12 +400,11 @@ function showSong(song) {
     });
     // Beim Öffnen gilt "Stammdaten gespeichert" als zurückgesetzt; ✕ zeigt den Song neu, wenn Noten oder Stammdaten
     // gespeichert wurden.
-    document.getElementById('noteEditBtn').addEventListener('click', () => {
+    // In den Bearbeitungsmodus führt der Stift oben rechts neben ✕; im Modus ist er ausgeblendet, beendet wird mit dem ✕
+    // der Werkzeugleiste. Unter 1080 px Breite fehlt er, zum Bearbeiten braucht es Platz (app.css).
+    document.getElementById('songEditBtn').addEventListener('click', () => {
         setMenu(false);
-        if (noteEditor) {
-            noteEditor.finish();
-            return;
-        }
+        if (noteEditor) return;
         songDataChanged = false;
         openNoteEditor(songPlayer, () => songDataChanged);
     });

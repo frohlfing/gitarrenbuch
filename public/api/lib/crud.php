@@ -247,7 +247,7 @@ function with_file_flags(string $slug, array $song): array
     $song['sources'] = (object)($song['sources'] ?? []);
     $song['files'] = array_keys(array_filter(SONG_FILES, fn(string $name) => is_file($dir . '/' . $name)));
     $song['tracks'] = read_track_names($slug);
-    // Die Angaben für das Leadsheet aus score.json, z. B. für Baustellen und Takte pro Zeile.
+    // Die Angaben für das Leadsheet aus score.json, z. B. die Takte pro Zeile für den Player.
     $leadsheet = read_leadsheet($slug);
     if ($leadsheet) {
         $song['leadsheet'] = $leadsheet;

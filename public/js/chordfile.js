@@ -1,6 +1,7 @@
 /**
- * Liedtext und Akkorde aus einer Akkorddatei: ChordPro (.cho, Akkorde in eckigen Klammern im Text) oder Text mit den
- * Akkorden über den Zeilen (z. B. von einer Tab-Seite kopiert).
+ * Liedtext und Akkorde aus einer Chord-Datei lesen. Unterstütztes Format:
+ *   - ChordPro (.cho, Akkorde in eckigen Klammern im Text)
+ *   - Text mit den Akkorden über den Zeilen (z. B. von einer Tab-Seite kopiert).
  */
 
 import {chordKey} from './base.js';

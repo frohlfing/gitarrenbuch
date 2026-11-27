@@ -5,13 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Prioritäten der Griffe (Test)</title>
 <!--
-  Vergleicht Einteilungen der Griffe in Prioritäten (findGrips() in js/chordgrips.js) nebeneinander. Jede Variante in VARIANTS
-  legt fest, welche Priorität ein Griff hat (priority) und wie die Griffe innerhalb einer Priorität geordnet sind (compare):
-    Heute:     Priorität 1 bis 4 getrennt, innerhalb nach compareGrips().
-    3 und 4 zusammen: Priorität 4 wird Priorität 3; Priorität 3 und 4 stehen in einer Gruppe, gemeinsam nach compareGrips() sortiert.
-  Je Spalte steht oben, was der Akkorddialog zeigen würde (ohne Griffe des Katalogs): Priorität 1 und 2, bei weniger als sechs
-  aufgefüllt aus dem Rest in der Reihenfolge der Variante. Darunter alle Gruppen. Wer sich gegenüber "Heute" nach vorn oder hinten
-  verschiebt, ist farbig markiert; "vorher Priorität n" nennt die heutige Priorität. Hilfsmittel; gehört nicht zur Anwendung.
+  Zeigt die Prioritäten der Griffe - Hilfsmittel; gehört nicht zur Anwendung.
 -->
 <style>
   :root{--up:#1a7f37; --down:#c62828; --line:#ccc; --bg:#f6f6f6;}
@@ -78,7 +72,7 @@ const PER_ROW = 6;
 const VARIANTS = [
   {
     id: 'now', title: 'Heute',
-    text: 'Priorität 1 bis 4 getrennt, wie in docs/Akkorddialog.md (Abschnitt 4).',
+    text: 'Priorität 1 bis 4 getrennt, wie in findGrips() (js/chordgrips.js).',
     priority: g => g.priority,
     compare: (a, b) => compareGrips(a.features, b.features),
   },

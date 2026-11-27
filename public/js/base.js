@@ -112,8 +112,8 @@ export function diagramFirstFret(frets) {
 }
 
 /**
- * Bund eines Barrés (ein Finger über mehrere Saiten), siehe barreOf() in chordgrips.js und docs/Akkorddialog.md, Abschnitt 3
- * (F 133211, Bm x24432, F#m xx4222). alphaTab zeichnet den Balken von der ersten bis zur letzten Saite in diesem Bund.
+ * Bund eines Barrés (ein Finger über mehrere Saiten), Regeln siehe barreOf() in chordgrips.js (F 133211, Bm x24432,
+ * F#m xx4222). alphaTab zeichnet den Balken von der ersten bis zur letzten Saite in diesem Bund.
  * @param {number[]} frets Bünde von der tiefen E-Saite aus
  * @returns {?number} Bund, null ohne Barré
  */
@@ -223,7 +223,9 @@ function keySignatureOf(tonic, minor) {
  * sie mit den notierten Vorzeichen. Viele GP-Dateien haben gar keine Vorzeichen, obwohl das Lied etwa in A steht.
  * Gewählt wird die Tonleiter, in die Akkorde und Töne am besten passen; Grundton ist der Schlussakkord, wenn seine
  * Tonart kaum schlechter passt (A-Dur mit G-Akkord, also A-Mixolydisch, wird A-Dur, nicht D-Dur). Gedacht für
- * Vorschläge im Editor; der Import ändert die Vorzeichen nicht.
+ * Vorschläge im Editor (rotes "!" am Feld "Tonart"); der Import ändert die Vorzeichen nicht. Eine Abweichung ist kein
+ * Konflikt, denn die notierte Tonart muss nicht zu allen Akkorden passen: Zwischendominanten (D7 in C), entlehnte
+ * Akkorde (Bb in C), Blues (A7, D7, E7 in A), die Dur-Dominante in Moll (E in a-Moll), modale Songs, Rückungen.
  * @param {Score} score Noten
  * @returns {?{keySignature: number, minor: boolean}} bessere Vorzeichen, null, wenn die notierten passen, die
  *   Vorzeichen im Lied wechseln oder es keine Akkorde gibt
@@ -355,7 +357,10 @@ export const COMMON_CHORDS = ['C', 'D', 'E', 'G', 'A', 'Am', 'Dm', 'Em', 'C7', '
  * @property {SongFile[]} files vorhandene Dateien (berechnet die API bei jedem Lesen), z. B. ["score", "cover"]
  * @property {string[]} tracks Namen der Spuren aus der Partitur (berechnet die API bei jedem Lesen), z. B. ["Guitar"]
  * @property {{reason: string, tracks: string[], audio?: boolean}} [wip] Baustelle (Stammdaten): Grund, betroffene Spuren
- *   und ob die Audiospur dazugehört; fehlt ohne
+ *   und ob die Audiospur dazugehört; fehlt ohne. Wirkung: 🚧 an der Kachel (Tooltip: der Grund) und am Spurnamen
+ *   (Editor, Player, Mixer), keine Patterns und Tab-Stellen aus diesen Spuren fürs Leadsheet, Filter "Mit Baustelle"
+ *   in der Bibliothek. Benennt der Editor eine dieser Spuren um oder löscht sie, trägt er das beim Speichern nach
+ *   (Sheet.wip).
  * @property {{show: boolean, mute: boolean}[]} [trackDefaults] Vorgaben je Spur (in der Reihenfolge der Spuren), ob sie in
  *   den Noten angezeigt und gehört wird; gesetzt im Dialog "Spuren" des Editors. Was ein Gerät im Mixer einstellt,
  *   hat dort Vorrang. Fehlt, wenn nie gesetzt.

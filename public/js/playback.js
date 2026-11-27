@@ -616,6 +616,15 @@ const HIDDEN_SCORE_ELEMENTS = [
 const PLAYER_STATE_PLAYING = 1;
 
 /**
+ * Symbole des Play-Knopfs als SVG: Die Schriftzeichen ▶ und ❚❚ sitzen je nach Schrift nicht in der Mitte des Kreises.
+ * Das Dreieck ist um ein Stück nach rechts gesetzt, damit es optisch mittig wirkt.
+ */
+const PLAY_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">'
+    + '<path d="M8 4.5v15l12-7.5z"/></svg>';
+const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor">'
+    + '<path d="M6 4.5h4v15H6zM14 4.5h4v15h-4z"/></svg>';
+
+/**
  * Kleinste Änderung des Tempofaktors, für die während der Wiedergabe das Abspieltempo von alphaTab umgestellt wird
  * (Anteil). Nötig ist das nur, solange im Sync-Editor geänderte Sync-Punkte noch nicht im MIDI stecken (siehe
  * applySpeed()). Jede Umstellung setzt den Synth intern neu an die Position, das ist als Aussetzer hörbar; kleinere
@@ -642,7 +651,11 @@ const EFFECT_GAP = 8;
 
 /** Schrift aller Texte in den Noten (Akkorde, Abschnitte, Liedtext, Tempo, Spurnamen, …), wie die Seite (app.css). */
 const TEXT_FONT = '"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-/** Schriftgröße der Akkordnamen über den Noten (px, bei Größe 100 %). */
+/**
+ * Schriftgröße der Akkordnamen über den Noten (px, bei Größe 100 %). Blau wie in "Chords" ginge nur mit einer Änderung
+ * an alphaTab: Eine Farbe nur für Akkordnamen gibt es nicht, über den Stil des Schlags färben sich Tempo, Abschnitt
+ * und Text mit.
+ */
 const CHORD_FONT_SIZE = 16;
 /** Schriftgröße des Liedtexts unter den Noten (px, bei Größe 100 %; Vorgabe von alphaTab 12). */
 const LYRICS_FONT_SIZE = 13;
@@ -921,7 +934,7 @@ export class Player {
       <div class="mixer-dialog" data-ref="mixer" hidden></div>
       <div class="transport" data-ref="transport">
         <div class="tline"><div data-ref="progress"></div></div>
-        <button class="tbtn tbtn-play" data-ref="play" type="button" disabled aria-label="Abspielen">&#9654;</button>
+        <button class="tbtn tbtn-play" data-ref="play" type="button" disabled aria-label="Abspielen">${PLAY_ICON}</button>
         <span class="ttime" data-ref="time"><span data-ref="timeNow">0:00</span><span class="ttime-sep"> / </span><span
           data-ref="timeEnd">0:00</span></span>
         <button class="tbtn" data-ref="loop" type="button" aria-pressed="false" aria-label="Wiederholen"
@@ -2051,7 +2064,7 @@ export class Player {
      */
     onStateChanged(state) {
         const playing = state === PLAYER_STATE_PLAYING;
-        this.el.play.innerHTML = playing ? '&#10074;&#10074;' : '&#9654;';
+        this.el.play.innerHTML = playing ? PAUSE_ICON : PLAY_ICON;
         this.el.play.setAttribute('aria-label', playing ? 'Pause' : 'Abspielen');
         // Der Bearbeitungsmodus zeigt Takt und Linie des Abspielens nur, solange gespielt wird (siehe app.css).
         document.getElementById('songView')?.classList.toggle('is-playing', playing);

@@ -1,7 +1,8 @@
 /**
  * Regelwerk für Rhythmushinweis-Generierung: Der Rhythmushinweis sagt, wo ein Rhythmus gespielt wird (Dialog
  * "Rhythmus ableiten", später das Leadsheet). Die Regeln gelten in dieser Reihenfolge, die erste, die genau die Takte
- * des Rhythmus trifft, liefert den Text (Beschreibung mit Beispielen: docs/Editor.md, gleiche Nummern):
+ * des Rhythmus trifft, liefert den Text (die Nummern stehen auch an den Regeln im Code). Ist der Rhythmus vereinfacht
+ * (Anschläge neben dem Sechzehntelraster weggelassen), steht "vereinfacht" fett dabei:
  *
  * 1. Ganzer Song – "ganzer Song"
  * 2. Abschnittsgruppen – alle Abschnitte der Gruppen ganz ("Verse 1" und "Verse 2" sind "Verse"): "Verse, Chorus"

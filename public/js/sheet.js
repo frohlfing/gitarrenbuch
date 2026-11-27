@@ -63,7 +63,8 @@ import {buildTextModel, playTimeline, renderTextView, verseFor} from './textview
  *
  * Ein Pattern beschreibt einen Takt im Raster (Achtel oder Sechzehntel), ein Zeichen bzw. Schritt je Rasterplatz. Die
  * Zählzeiten werden nicht eingegeben, sondern aus Taktart und Raster berechnet (countLabels()). Betont wird mit
- * Großbuchstaben.
+ * Großbuchstaben: So steht alles in einem Feld und kann nicht auseinanderlaufen (üblich wäre ein ">" über dem Schlag,
+ * so zeigt es das Raster).
  * - Strumming Patterns (strumming), `strokes`: d = Plektrum abwärts, u = Plektrum aufwärts, x = gedämpfter Anschlag, . = nichts (der vorige
  *   Anschlag klingt weiter, am Anfang Pause); groß (D, U, X) = betont. Beispiel Folk in 4/4, Achtel: "d.du.udu",
  *   mit Betonung auf 1 und 3 "D.duD.du".
@@ -72,7 +73,11 @@ import {buildTextModel, playTimeline, renderTextView, verseFor} from './textview
  *   (tiefste gegriffene Saite des Akkords), q = Daumen auf dem zweiten Bass (Wechselbass), i = g-Saite, m = b-Saite,
  *   a = hohe e-Saite. Mehrere Buchstaben ohne Leerzeichen klingen zugleich ("pa", "ima"), groß = betont, . = klingen
  *   lassen, x = Pause. Beispiel Travis in 4/4, Achtel: "p i q m p i q m". Mit p und q gilt ein Pattern für jeden
- *   Akkord.
+ *   Akkord (pickString()); einen Finger auf einer anderen Saite gibt es deshalb nicht.
+ *
+ * Ein Song verweist auf seine Patterns nur mit Freitext, wann sie gespielt werden (score.json); eine Zuordnung je
+ * Takt gibt es nicht, der Ablauf steht in den Noten. Eine Änderung an einem Pattern des Katalogs gilt für alle Songs,
+ * die es verwenden; die API zählt sie (usage), der Dialog warnt davor.
  *
  * Pattern und Spur speichern nicht dasselbe: Die Spur ist die genaue Ausführung mit allen Ausnahmen, das Pattern die
  * verallgemeinerte Beschreibung für das Blatt. Ableiten und Ausrollen sind Hilfen beim Übertragen, keine Kopplung.
@@ -1782,7 +1787,8 @@ export function printLeadsheet(view, title) {
  *   werden in einer Kopie der Noten die wiederholten Takte gelöscht und die Zeichen gesetzt. Die Taktnummern stimmen
  *   in der Kopie nicht mehr und werden ausgeblendet; die Spielfolge steht in Worten in der Überschrift der Tab-Stelle.
  * - Zählzeiten: Die kennt alphaTab nicht. Sie stehen als Text unter jeder Zeile, an den Stellen, an denen alphaTab
- *   die Schläge gezeichnet hat (boundsLookup), dazwischen gleichmäßig verteilt.
+ *   die Schläge gezeichnet hat (boundsLookup), dazwischen gleichmäßig verteilt. Sie zeigen auch den Unterschied
+ *   zwischen Halber und Viertel, die in den Notenhälsen der Tab (ohne Notenkopf) gleich aussehen.
  *
  * Zeichnen dauert etwa 0,2 s je Zeichnung; fertige Zeichnungen werden gemerkt, solange die Noten dieselben sind.
  * Im Dialog bei vielen abweichenden Takten also ein paar Sekunden, bis alle stehen (Frank: Der Dialog wird selten
@@ -3183,7 +3189,7 @@ export class LeadsheetTab {
             let count = 0;
             ed.change(() => {
                 count = edit.copyBars(t => parseScore(ed.alphaTab, t), ed.score, ed.tex, copies);
-            });
+            }, {label: `Takte ${toRight ? 'rechts' : 'links'} übernommen (Abschnitte vergleichen)`});
             list = buildTextModel(ed.score).sections;
             const bars = new Set(copies.map(c => c.to + 1));
             const tracks = new Set(copies.map(c => c.track));
@@ -3321,7 +3327,7 @@ export class LeadsheetTab {
                 /** @type {(Pattern|null)[]} */
                 const perBar = score.masterBars.map((_, i) => bars.has(i) ? pattern : null);
                 result = rollOut(ed.alphaTab, score, index, perBar, this.catalog, library, force);
-            });
+            }, {label: 'Pattern auf Spur ausgerollt'});
 
             const list = numbers => numbers.slice(0, 8).map(i => i + 1).join(', ') + (numbers.length > 8 ? ' …' : '');
             ed.toast(`${result.written.length} Takte geschrieben`

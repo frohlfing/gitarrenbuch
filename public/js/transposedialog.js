@@ -448,7 +448,7 @@ export class TransposeDialog {
         if (best === current) return;
         box.dataset.capo = String(best);
         box.dataset.steps = String(current - best);
-        box.innerHTML = `Empfohlen: ${best} (ergibt die meisten offenen Akkorde)
+        box.innerHTML = `Empfohlen: ${best} (ergibt die leichtesten Griffe)
       <button class="btn btn-sm" type="button" data-suggest-apply title="Capo und die Halbtöne setzen, die den Klang erhalten">Übernehmen</button>`;
     }
 

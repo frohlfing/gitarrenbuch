@@ -502,9 +502,12 @@ function ref(host, name) {
 
 /**
  * Quelle der Audiodatei im Panel "Audio" des Bearbeitungsmodus: YouTube-URL mit Link zur YouTube-Suche nach Interpret
- * und Titel (wie die Trailersuche der Videothek; die gefundene URL trägt man selbst ein), den Längen von Partitur
- * und Audiospur und einem Knopf zum Speichern. Die Länge des Clips steht in song.json (youtubeSeconds); YouTube wird
- * nur gefragt, wenn sich die URL ändert oder die Länge noch fehlt.
+ * und Titel (wie die Trailersuche der Videothek; die gefundene URL trägt man selbst ein), den Längen und einem Knopf
+ * zum Speichern. Ein eingefügter Link wird sofort auf https://www.youtube.com/watch?v=<ID> gekürzt (Playlist,
+ * Startzeit usw. fallen weg), der Server kürzt beim Speichern noch einmal. Die Längen zeigen, ob ein Clip passt:
+ * "Noten" (Spieldauer im eigenen Tempo mit Wiederholungen, ohne Sync-Punkte), "Clip" (das eingetragene Video) und
+ * "MP3" (vorhandene audio.mp3). Die Länge des Clips steht in song.json (youtubeSeconds); YouTube wird nur gefragt,
+ * wenn sich die URL ändert oder die Länge noch fehlt (dann zeigt der Tooltip den Videotitel).
  * Darunter steht, wenn nötig, dass bin/audio.php die Audiospur einbinden muss (siehe updateAudioHint()). Gespeichert
  * wird sofort, unabhängig von den Noten.
  * @param {HTMLElement} host leeres Element, in das der Block gezeichnet wird
@@ -807,6 +810,12 @@ export function openSongForm(song, onSaved, onDeleted = null) {
         };
         if (!payload.title) {
             errorBox.innerHTML = '<div class="error-box">Titel ist erforderlich.</div>';
+            return;
+        }
+        // Tempi sind ganzzahlig (roundTempo() in notation.js).
+        const tempo = isEdit ? '' : byId('tempoInput').value.trim();
+        if (tempo && !/^\d+$/.test(tempo)) {
+            errorBox.innerHTML = '<div class="error-box">Tempo als ganze Zahl angeben, z. B. 120.</div>';
             return;
         }
 

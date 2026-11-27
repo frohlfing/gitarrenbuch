@@ -1,6 +1,6 @@
 /**
- * Tonhöhe der Melodie aus der Audiospur (Dialog "Melodie ableiten", Schalter "Tonhöhe mit Hilfe der Audiospur
- * korrigieren"). Der Rhythmus kommt aus der Melodiespur (eine Silbe je Note), die Tonhöhe je Silbe aus dem Gesang:
+ * Tonhöhe der Melodie aus der Audiospur erkennen (für Dialog "Melodie ableiten").
+ * Der Rhythmus kommt aus der Melodiespur (eine Silbe je Note), die Tonhöhe je Silbe aus dem Gesang:
  *
  * 1. Zeit jeder Silbe über die Sync-Punkte (erster Durchgang eines Takts), vom Anschlag bis zum Ende ihrer gebundenen
  *    Note; Gesangspausen sind Stellen ohne Melodienote (mindestens PAUSE_MS).

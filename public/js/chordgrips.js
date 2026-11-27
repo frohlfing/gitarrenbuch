@@ -1,8 +1,8 @@
 /**
- * Griffe zu einem Akkordnamen: sucht alle spielbaren Griffe, deren Töne zu den Tönen des Akkords passen (parseChord()
+ * Griffe zu einem Akkordnamen: Sucht alle spielbaren Griffe, deren Töne zu den Tönen des Akkords passen (parseChord()
  * in chordtheory.js), gibt ihnen eine Priorität (FoundGrip.priority) und ordnet sie (compareGrips()). Zu jedem Namen
- * wird immer mindestens ein Griff gefunden (RELAXATIONS). Die Regeln stehen in docs/Akkorddialog.md: Spanne, Finger
- * und Barré (Abschnitt 3, barreOf()), Prioritäten (Abschnitt 4) und Reihenfolge innerhalb einer Prio (Abschnitt 5).
+ * wird immer mindestens ein Griff gefunden (RELAXATIONS). Spielbar heißt: höchstens drei Bünde Spanne (MAX_SPAN) und
+ * vier Finger (MAX_FINGERS), ein Barré zählt als ein Finger (barreOf()).
  *
  * Griffe sind Bünde von der tiefen Saite aus, -1 = nicht gespielt, als Text wie im Katalog ("x32010").
  */
@@ -12,12 +12,13 @@ import {nameChord, parseChord} from './chordtheory.js';
 /** Standard-Tuning als MIDI-Tonhöhen von der tiefen Saite aus (E2 A2 D3 G3 B3 E4). */
 export const STANDARD_TUNING = [40, 45, 50, 55, 59, 64];
 
-/** Größte Spanne in Bünden (höchster minus tiefster gegriffener Bund): drei Bünde (Bund 2 bis 4), siehe docs/Akkorddialog.md. */
+/** Größte Spanne in Bünden (höchster minus tiefster gegriffener Bund): 2, also drei Bünde (z. B. Bund 2 bis 4). */
 const MAX_SPAN = 2;
 
 /**
- * Die Suche lockert ihre Bedingungen schrittweise und nimmt die erste Lockerung, die Griffe liefert (docs/Akkorddialog.md,
- * Abschnitt 3): maxSpan ist die größte Spanne, essentialOnly lässt die Töne weg, die den Akkord nicht bestimmen.
+ * Die Suche lockert ihre Bedingungen schrittweise und nimmt die erste Lockerung, die Griffe liefert: erst vier, dann
+ * fünf Bünde Spanne, dann ohne die Töne, die den Akkord nicht bestimmen (Quinte, Sexte, Erweiterungen, zusätzliche
+ * Töne; siehe gripToneProblem()). maxSpan ist die größte Spanne, essentialOnly lässt diese Töne weg.
  */
 const RELAXATIONS = [
     {maxSpan: MAX_SPAN, essentialOnly: false},
@@ -27,7 +28,7 @@ const RELAXATIONS = [
     {maxSpan: MAX_SPAN + 2, essentialOnly: true},
 ];
 
-/** So viele Saiten muss ein Griff mindestens spielen, um Priorität 1 zu haben (docs/Akkorddialog.md, Abschnitt 4). */
+/** So viele Saiten muss ein Griff mindestens spielen, um Priorität 1 zu haben (siehe findGrips()). */
 const PREFERRED_MIN_STRINGS = 4;
 
 /** Höchste Zahl an Fingern (der Daumen am Hals zählt nicht). */
@@ -60,7 +61,10 @@ export function gripText(frets) {
 }
 
 /**
- * Das Barré eines Griffs (Regeln: docs/Akkorddialog.md, Abschnitt 3).
+ * Das Barré eines Griffs: Ab vier gegriffenen Saiten liegt der Zeigefinger im tiefsten gegriffenen Bund und deckt von
+ * seiner tiefsten Saite an alle höheren bis einschließlich der e-Saite ab; eine leere oder abgedämpfte Saite darüber gibt
+ * es dabei nicht. Bei mehr als vier gegriffenen Saiten ist es nötig, bei genau vier wird es genommen, wenn es geht (F
+ * 133211, Bm x24432, F#m xx4222). Das Griffbild zeichnet den Balken genauso (barreFret() in base.js).
  * @param {number[]} frets Bünde von der tiefen Saite aus, -1 = nicht gespielt
  * @returns {?{fret: number, from: number, to: number}} Bund und die Saiten (Index von der tiefen aus; to ist die e-Saite),
  *   null ohne Barré
@@ -186,8 +190,8 @@ export function gripFeatures(chord, frets, tuning = STANDARD_TUNING, limits = {}
 }
 
 /**
- * Schlüssel zum Ordnen von Griffen innerhalb einer Priorität (kleiner = besser); die Reihenfolge steht in docs/Akkorddialog.md,
- * Abschnitt 5.
+ * Schlüssel zum Ordnen von Griffen innerhalb einer Priorität (kleiner = besser), in dieser Reihenfolge: näher am Sattel
+ * (tiefster gegriffener Bund), kleinere Spanne, vier Finger ohne Barré zuletzt, weniger Finger, mehr gespielte Saiten.
  * @param {GripFeatures} features Merkmale des Griffs
  * @returns {number[]} Schlüssel, Zahl für Zahl zu vergleichen
  */
@@ -216,11 +220,19 @@ export function compareGrips(a, b) {
  * @property {number[]} frets Bünde von der tiefen Saite aus
  * @property {GripFeatures} features Merkmale
  * @property {boolean} preferred ob der Griff Priorität 1 hat
- * @property {number} priority Priorität 1 bis 4, 1 = höchste (docs/Akkorddialog.md, Abschnitt 4)
+ * @property {number} priority Priorität 1 bis 4, 1 = höchste (siehe findGrips())
  */
 
 /**
- * Sucht Griffe für einen Akkordnamen, beste zuerst.
+ * Sucht Griffe für einen Akkordnamen, beste zuerst. Die Prioritäten:
+ * 1. Grundstellung (die tiefste gespielte Saite spielt den Grundton, bei einem Slash-Akkord den Basston), aufsteigend
+ *    (die Tonhöhe fällt von der tiefsten zur höchsten gespielten Saite nie), durchschlagbar von der tiefsten gespielten
+ *    Saite bis einschließlich der e-Saite, mindestens vier Saiten. Bei Zweiklängen wie C5 genügen drei Saiten ohne
+ *    Lücke, die hohen Saiten dürfen schweigen.
+ * 2. Grundstellung, aufsteigend und ohne Lücke, aber die e-Saite schweigt oder es klingen weniger als vier Saiten.
+ * 3. Umkehrung oder nicht aufsteigend, ohne Lücke.
+ * 4. Eine Saite zwischen den gespielten ist abgedämpft.
+ * Innerhalb einer Priorität ordnet compareGrips().
  * @param {string} name Akkordname, z. B. "Am7" oder "D/F#"
  * @param {Object} [options] Einstellungen
  * @param {number[]} [options.tuning] Tonhöhen der leeren Saiten von der tiefen Saite aus, Standard: Standard-Tuning

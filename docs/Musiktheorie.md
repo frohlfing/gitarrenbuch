@@ -85,15 +85,15 @@ Töne zerlegen (Dreiklang aus der Zeile, vierter Ton aus der Spalte) und umgekeh
 herleiten. Die Tabelle zeigt alle Kombinationen mit den Akkordnamen für C (die gängigste Schreibweise zuerst); Klammern
 im Namen (`C7(b5)`) bedeuten dasselbe wie ohne Klammern:
 
-| Dreiklang  | Intervall | + kleine Septime (b7) | + große Septime (7) | + Sexte (6)    | + Sekunde (add9)  | + Quarte (add4)        |
-|------------|-----------|-----------------------|---------------------|----------------|-------------------|------------------------|
-| Dur        | 1, 3, 5   | C7                    | Cmaj7, CΔ7          | C6, Cmaj6      | Cadd9, Cadd2, C2  | Cadd4, Cadd11          |
-| Moll       | 1, b3, 5  | Cm7                   | Cmmaj7, CmΔ7        | Cm6, Cmin6     | Cmadd9, Cm2       | Cmadd4, Cmadd11        |
-| Vermindert | 1, b3, b5 | Cm7b5, Cø             | Cdimmaj7 (²)        | Cdim7, C°7 (¹) | Cdimadd9 (²)      | Cdimadd4 (²)           |
-| Übermäßig  | 1, 3, #5  | C7#5, C7+, Caug7      | Cmaj7#5, CM7+ (²)   | Caug6 (²)      | Caugadd9 (²)      | Caugadd4 (²)           |
-| Dur mit b5 | 1, 3, b5  | C7b5                  | Cmaj7b5 (²)         | C6b5 (²)       | Cadd9b5 (²)       | Cadd4b5 (²)            |
-| Sus4       | 1, 4, 5   | C7sus4                | Cmaj7sus4           | C6sus4 (²)     | Csus4add9 (³)     | –                      |
-| Sus2       | 1, 2, 5   | C7sus2                | Cmaj7sus2           | C6sus2 (²)     | –                 | Csus2add4 (³)          |
+| Dreiklang  | Intervall | + kleine Septime (b7) | + große Septime (7) | + Sexte (6)    | + Sekunde (add9) | + Quarte (add4) |
+|------------|-----------|-----------------------|---------------------|----------------|------------------|-----------------|
+| Dur        | 1, 3, 5   | C7                    | Cmaj7, CΔ7          | C6, Cmaj6      | Cadd9, Cadd2, C2 | Cadd4, Cadd11   |
+| Moll       | 1, b3, 5  | Cm7                   | Cmmaj7, CmΔ7        | Cm6, Cmin6     | Cmadd9, Cm2      | Cmadd4, Cmadd11 |
+| Vermindert | 1, b3, b5 | Cm7b5, Cø             | Cdimmaj7 (²)        | Cdim7, C°7 (¹) | Cdimadd9 (²)     | Cdimadd4 (²)    |
+| Übermäßig  | 1, 3, #5  | C7#5, C7+, Caug7      | Cmaj7#5, CM7+ (²)   | Caug6 (²)      | Caugadd9 (²)     | Caugadd4 (²)    |
+| Dur mit b5 | 1, 3, b5  | C7b5                  | Cmaj7b5 (²)         | C6b5 (²)       | Cadd9b5 (²)      | Cadd4b5 (²)     |
+| Sus4       | 1, 4, 5   | C7sus4                | Cmaj7sus4           | C6sus4 (²)     | Csus4add9 (³)    | –               |
+| Sus2       | 1, 2, 5   | C7sus2                | Cmaj7sus2           | C6sus2 (²)     | –                | Csus2add4 (³)   |
 
 - (¹) Beim verminderten Dreiklang ist der vierte Ton die **verminderte Septime** (bb7, 9 Halbtöne). Sie klingt wie eine
   Sexte, daher steht `Cdim7` in der Spalte „Sexte“. Der vollverminderte Akkord (`Cdim7`) besteht nur aus kleinen Terzen,
@@ -132,13 +132,13 @@ Die Stufenakkorde der C-Dur-Tonleiter mit Septime (Dreiklang der Stufe plus die 
 
 Hinter dem Schrägstrich steht der **tiefste Ton** (Basston). Der Akkord davor bleibt, nur der Bass wechselt.
 
-| Akkord              | Bedeutung                               | Töne in C                  | Art                         |
-|---------------------|-----------------------------------------|----------------------------|-----------------------------|
-| `C/E`, `D/F#`       | Dur, Terz im Bass (1. Umkehrung)        | E bzw. F#, dann der Akkord | Umkehrung                   |
-| `C/G`               | C-Dur, Quinte im Bass (2. Umkehrung)    | G, dann C E G              | Umkehrung                   |
-| `Cmaj7/E`, `C7/Bb`  | Vierklang, Terz bzw. Septime im Bass    | E bzw. Bb, dann der Akkord | Umkehrung                   |
-| `C/D`, `C/A`, `C/B` | Basston, der nicht im Dreiklang steht   | D, A bzw. B, dann C E G    | Akkord mit fremdem Bass     |
-| `Am/G`              | Absteigende Basslinie                   | G, dann A C E              | typisch in Liedbegleitungen |
+| Akkord              | Bedeutung                             | Töne in C                  | Art                         |
+|---------------------|---------------------------------------|----------------------------|-----------------------------|
+| `C/E`, `D/F#`       | Dur, Terz im Bass (1. Umkehrung)      | E bzw. F#, dann der Akkord | Umkehrung                   |
+| `C/G`               | C-Dur, Quinte im Bass (2. Umkehrung)  | G, dann C E G              | Umkehrung                   |
+| `Cmaj7/E`, `C7/Bb`  | Vierklang, Terz bzw. Septime im Bass  | E bzw. Bb, dann der Akkord | Umkehrung                   |
+| `C/D`, `C/A`, `C/B` | Basston, der nicht im Dreiklang steht | D, A bzw. B, dann C E G    | Akkord mit fremdem Bass     |
+| `Am/G`              | Absteigende Basslinie                 | G, dann A C E              | typisch in Liedbegleitungen |
 
 - Steht der Basston im Akkord (E oder G bei C-Dur), ist es eine **Umkehrung**: dieselben Töne, anderer tiefster Ton.
 - Steht er nicht im Akkord (D, A, B bei C-Dur), kommt er als zusätzlicher Bass dazu.
@@ -151,9 +151,9 @@ Zwei Töne: der Grundton und ein weiterer.
 
 Der Akkord hat keine Terz und passt deswegen zu Dur und Moll.
 
-| Akkord                 | Intervall | Töne in C | Akkordname für C    |
-|------------------------|-----------|-----------|---------------------|
-| Powerchord             | 1, 5      | C G       | C5                  |
+| Akkord     | Intervall | Töne in C | Akkordname für C |
+|------------|-----------|-----------|------------------|
+| Powerchord | 1, 5      | C G       | C5               |
 
 ### Akkord ohne Quinte (no5)
 
@@ -177,34 +177,34 @@ Hand, daher werden Töne weggelassen (meist die Quinte, bei Fünfklängen auch d
 Die Stufen oberhalb der Oktave (Halbtöne vom Grundton, die Reihe geht über 12 hinaus; für die Tonhöhe zählt der Wert
 modulo 12):
 
-| Stufe | Halbtöne | Name               | Ton in C | gleicher Ton wie |
-|-------|---------:|--------------------|----------|------------------|
-| b9    |       13 | kleine None        | Db       | b2               |
-| 9     |       14 | None               | D        | 2                |
-| #9    |       15 | übermäßige None    | Eb       | b3               |
-| 11    |       17 | Undezime           | F        | 4                |
-| #11   |       18 | übermäßige Undezime| F#       | #4 / b5          |
-| b13   |       20 | kleine Tredezime   | Ab       | b6 / #5          |
-| 13    |       21 | Tredezime          | A        | 6                |
+| Stufe | Halbtöne | Name                | Ton in C | gleicher Ton wie |
+|-------|---------:|---------------------|----------|------------------|
+| b9    |       13 | kleine None         | Db       | b2               |
+| 9     |       14 | None                | D        | 2                |
+| #9    |       15 | übermäßige None     | Eb       | b3               |
+| 11    |       17 | Undezime            | F        | 4                |
+| #11   |       18 | übermäßige Undezime | F#       | #4 / b5          |
+| b13   |       20 | kleine Tredezime    | Ab       | b6 / #5          |
+| 13    |       21 | Tredezime           | A        | 6                |
 
 Die Matrix zeigt alle Kombinationen aus Vierklang mit Septime (Zeile) und Erweiterung (Spalte) mit den Akkordnamen für C:
 
-| Vierklang               | Intervall      | + None (9)   | + Undezime (11) | + Tredezime (13) |
-|-------------------------|----------------|--------------|-----------------|------------------|
-| Dur + b7                | 1, 3, 5, b7    | C9           | C11             | C13              |
-| Dur + 7                 | 1, 3, 5, 7     | Cmaj9, CM9   | Cmaj11          | Cmaj13           |
-| Moll + b7               | 1, b3, 5, b7   | Cm9          | Cm11            | Cm13             |
-| Moll + 7                | 1, b3, 5, 7    | Cmmaj9 (²)   | Cmmaj11 (²)     | Cmmaj13 (²)      |
-| Vermindert + b7 (m7b5)  | 1, b3, b5, b7  | Cm9b5        | Cm11b5          | Cm13b5 (²)       |
-| Vermindert + bb7 (dim7) | 1, b3, b5, bb7 | Cdim9 (²)    | Cdim11 (²)      | Cdim13 (²)       |
-| Übermäßig + b7          | 1, 3, #5, b7   | C9#5         | C11#5 (²)       | C13#5 (²)        |
-| Übermäßig + 7           | 1, 3, #5, 7    | Cmaj9#5 (²)  | Cmaj11#5 (²)    | Cmaj13#5 (²)     |
-| Dur mit b5 + b7         | 1, 3, b5, b7   | C9b5         | C11b5 (²)       | C13b5 (²)        |
-| Dur mit b5 + 7          | 1, 3, b5, 7    | Cmaj9b5 (²)  | Cmaj11b5 (²)    | Cmaj13b5 (²)     |
-| Sus4 + b7               | 1, 4, 5, b7    | C9sus4       | –               | C13sus4          |
-| Sus4 + 7                | 1, 4, 5, 7     | Cmaj9sus4 (²)| –               | Cmaj13sus4 (²)   |
-| Sus2 + b7               | 1, 2, 5, b7    | –            | C11sus2 (²)     | C13sus2 (²)      |
-| Sus2 + 7                | 1, 2, 5, 7     | –            | Cmaj11sus2 (²)  | Cmaj13sus2 (²)   |
+| Vierklang               | Intervall      | + None (9)    | + Undezime (11) | + Tredezime (13) |
+|-------------------------|----------------|---------------|-----------------|------------------|
+| Dur + b7                | 1, 3, 5, b7    | C9            | C11             | C13              |
+| Dur + 7                 | 1, 3, 5, 7     | Cmaj9, CM9    | Cmaj11          | Cmaj13           |
+| Moll + b7               | 1, b3, 5, b7   | Cm9           | Cm11            | Cm13             |
+| Moll + 7                | 1, b3, 5, 7    | Cmmaj9 (²)    | Cmmaj11 (²)     | Cmmaj13 (²)      |
+| Vermindert + b7 (m7b5)  | 1, b3, b5, b7  | Cm9b5         | Cm11b5          | Cm13b5 (²)       |
+| Vermindert + bb7 (dim7) | 1, b3, b5, bb7 | Cdim9 (²)     | Cdim11 (²)      | Cdim13 (²)       |
+| Übermäßig + b7          | 1, 3, #5, b7   | C9#5          | C11#5 (²)       | C13#5 (²)        |
+| Übermäßig + 7           | 1, 3, #5, 7    | Cmaj9#5 (²)   | Cmaj11#5 (²)    | Cmaj13#5 (²)     |
+| Dur mit b5 + b7         | 1, 3, b5, b7   | C9b5          | C11b5 (²)       | C13b5 (²)        |
+| Dur mit b5 + 7          | 1, 3, b5, 7    | Cmaj9b5 (²)   | Cmaj11b5 (²)    | Cmaj13b5 (²)     |
+| Sus4 + b7               | 1, 4, 5, b7    | C9sus4        | –               | C13sus4          |
+| Sus4 + 7                | 1, 4, 5, 7     | Cmaj9sus4 (²) | –               | Cmaj13sus4 (²)   |
+| Sus2 + b7               | 1, 2, 5, b7    | –             | C11sus2 (²)     | C13sus2 (²)      |
+| Sus2 + 7                | 1, 2, 5, 7     | –             | Cmaj11sus2 (²)  | Cmaj13sus2 (²)   |
 
 - (²) Theoretischer Name: Er folgt der Formel, wird auf der Gitarre aber kaum gespielt.
 - `–` heißt: Die Stufe steckt schon im Dreiklang (Sus4 hat die 11 = Quarte, Sus2 die 9 = Sekunde).
@@ -213,20 +213,20 @@ Die Matrix zeigt alle Kombinationen aus Vierklang mit Septime (Zeile) und Erweit
 
 Sexte und None zusammen ergeben den **6/9-Akkord**:
 
-| Akkord        | Intervall      | Töne in C   | Akkordname für C |
-|---------------|----------------|-------------|------------------|
-| Dur + 6 + 9   | 1, 3, 5, 6, 9  | C E G A D   | C6/9, C6add9     |
-| Moll + 6 + 9  | 1, b3, 5, 6, 9 | C Eb G A D  | Cm6/9, Cm6add9   |
+| Akkord       | Intervall      | Töne in C  | Akkordname für C |
+|--------------|----------------|------------|------------------|
+| Dur + 6 + 9  | 1, 3, 5, 6, 9  | C E G A D  | C6/9, C6add9     |
+| Moll + 6 + 9 | 1, b3, 5, 6, 9 | C Eb G A D | Cm6/9, Cm6add9   |
 
 Die **Alterationen** der Erweiterungsstufen werden an den Namen gehängt und ersetzen die ungeänderte Stufe. Sie kommen vor
 allem bei Dominantseptakkorden vor (Blues, Jazz):
 
-| Akkord       | Intervall      | Töne in C    | Akkordname für C |
-|--------------|----------------|--------------|------------------|
-| 7 + b9       | 1, 3, 5, b7, b9 | C E G Bb Db | C7b9             |
-| 7 + #9       | 1, 3, 5, b7, #9 | C E G Bb Eb | C7#9             |
-| 7 + #11      | 1, 3, 5, b7, #11 | C E G Bb F# | C7#11           |
-| 7 + b13      | 1, 3, 5, b7, b13 | C E G Bb Ab | C7b13           |
+| Akkord   | Intervall        | Töne in C   | Akkordname für C |
+|----------|------------------|-------------|------------------|
+| 7 + b9   | 1, 3, 5, b7, b9  | C E G Bb Db | C7b9             |
+| 7 + #9   | 1, 3, 5, b7, #9  | C E G Bb Eb | C7#9             |
+| 7 + #11  | 1, 3, 5, b7, #11 | C E G Bb F# | C7#11            |
+| 7 + b13  | 1, 3, 5, b7, b13 | C E G Bb Ab | C7b13            |
 
 Für das Gitarrenbuch genügt es, Namen mit Erweiterung zu **vereinfachen**: `C9` → `C7`, `Cmaj9` → `Cmaj7`, `Cm9` → `Cm7`,
 `C11` und `C13` → `C7`. `simplifyChord()` (`js/chordfile.js`) macht das bisher nur zum Teil (Namen ohne "7" wie `C9`

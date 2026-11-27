@@ -1,22 +1,53 @@
-/* GITARRENBUCH-ÄNDERUNGEN (30.10.–22.11.2026, siehe README "Setup" → "alphaTab"):
- * 1. In update() der Effekt-Zeilen (EffectBandSlot) gehört jede Zeile einer Art von Angabe:
- *    "this.shared.uniqueEffectId=t.info.effectId," statt "t.info.canShareBand||(…),". alphaTab packte
- *    verschiedene Angaben (Akkord, Abschnitt, Anschlag, Text, …) in dieselbe Zeile, solange sie sich nicht
- *    überschneiden: Akkorde einer Notenzeile standen auf verschiedenen Höhen, auf demselben Schlag überdeckten
- *    sich Abschnitts- und Akkordname.
- * 2. Liedtext (LyricsEffectInfo) in der Tab-Zeile unter den Tabs statt darüber, wie in Guitar Pro: "mode:yh.SharedTop"
- *    → "mode:yh.SharedBottom" beim ersten Effekt der Tab-Zeile (new wu([{effect:new lo,…).
- * 3. Abstand der Effekt-Bänder unter der Zeile davor statt danach (bS() von EffectBandContainer, pS = oben):
- *    "this.pS||(e+=s)," vor "i.shared.y=e" und "e+=i.shared.height+(this.pS?s:0)" statt "+s". So hat der Text
- *    Abstand zu den Tabs und keinen überflüssigen darunter.
- * 4. (31.10.2026) Zeilenumbrüche im Liedtext ("\n" am Ende einer Silbe) werden nicht gezeichnet: in createNewGlyph()
- *    von LyricsEffectInfo (lo) "e.lyrics.map(l=>l&&l.replace(/\n/g,""))" statt "e.lyrics".
- * 5. (22.11.2026) Betonung (Akzent) auch über den Tabs, wenn keine Noten angezeigt werden (in den Noten zeichnet
- *    sie alphaTab selbst): neue Klassen GbAccentGlyph und GbAccentEffectInfo direkt hinter der des Plektrumzeichens
- *    (_o, PickStrokeEffectInfo), und in der Tab-Zeile hinter "{effect:new _o,mode:yh.OwnedTop}" der Eintrag
- *    "{effect:new GbAccentEffectInfo,mode:yh.OwnedTop,shouldCreate:t=>!t.showStandardNotation}". Die Zeile ist
- *    halb so hoch wie das Zeichen und das Zeichen nach oben gerückt (doLayout(): "this.offsetY=0,this.height*=.5"),
- *    damit es näher unter dem Plektrumzeichen steht. */
+/* GITARRENBUCH-ÄNDERUNGEN
+ * Diese Datei ist für das Gitarrenbuch angepasst (die MPL-2.0 erlaubt das, die Datei bleibt unter MPL-2.0). Die
+ * unveränderte Fassung liegt daneben als alphaTab.core.mjs.orig. Bei einem Update von alphaTab prüfen, ob die
+ * Änderungen noch nötig sind, und sie sonst neu einfügen. Eine geänderte Fassung kommt ohne Strg+F5 im Browser an,
+ * weil public/.htaccess für .mjs "Cache-Control: no-cache" schickt (siehe dort).
+ *
+ * 1. Jede Art von Angabe in einer eigenen Zeile: In update() der Effekt-Zeilen (EffectBandSlot, minifiziert
+ *    "update(t){t.info.canShareBand||(this.shared.uniqueEffectId=t.info.effectId),…") steht
+ *    "this.shared.uniqueEffectId=t.info.effectId," statt "t.info.canShareBand||(…),". Eine Zeile über bzw. unter
+ *    den Noten gehört so immer nur einer Art von Angabe (Akkordname, Abschnitt, Tempo, Text, Anschlagzeichen, …).
+ *    Grund: alphaTab packte verschiedene Angaben in dieselbe Zeile, solange sie sich nicht überschneiden. So standen
+ *    die Akkorde einer Notenzeile auf verschiedenen Höhen ("Losing My Religion": Anschlagzeichen aus Takt 37 in der
+ *    Höhe des Akkords aus Takt 38, "G" aus Takt 40 in der Höhe von "CHORUS" aus Takt 41), und auf demselben Schlag
+ *    lagen Abschnitts- und Akkordname übereinander ("Junge", Takt 1).
+ *    Folge: In Zeilen mit vielen verschiedenen Angaben werden die Noten etwas höher.
+ *    Bei alphaTab ist das Überdecken auf demselben Schlag bekannt (Issue #2786, Duplikat von #2010) und mit PR #2750
+ *    ("skyline based effect placement") im Entwicklungszweig neu gelöst, erscheint mit 1.9. Mit 1.9 prüfen, ob die
+ *    Akkorde dann auf einer Höhe stehen.
+ * 2. Liedtext unter den Tabs: Beim Liedtext (LyricsEffectInfo, minifiziert lo) in der Liste der Effekte der Tab-Zeile
+ *    ("new wu([{effect:new lo,mode:yh.SharedTop}") steht "mode:yh.SharedBottom" statt "mode:yh.SharedTop". Der Text
+ *    steht so unter den Tabs statt darüber, wie in Guitar Pro; in "Noten + Tabs" damit unter der ganzen Spur. In
+ *    "Noten" (ohne Tabs) steht er unter den Noten.
+ *    Ohne diese Änderung steht der Text wieder über den Tabs, sonst geht nichts verloren.
+ * 3. Abstand der Angaben unter der Zeile davor statt danach: In bS() des Effekt-Containers (EffectBandContainer, das
+ *    Feld pS ist "oben") werden die Angaben über bzw. unter einer Zeile gestapelt, mit effectBandPaddingBottom nach
+ *    jeder. Geändert: "this.pS||(e+=s)," vor "i.shared.y=e" und "e+=i.shared.height+(this.pS?s:0)" statt "+s".
+ *    Unter der Zeile kommt der Abstand so vor jede Angabe: Der Text klebt nicht an der E-Saite und hat darunter
+ *    keinen überflüssigen Abstand (die Zeilen in "Noten" mit nur "Gesang" standen sonst weit auseinander). Über der
+ *    Zeile bleibt alles wie in alphaTab.
+ *    Ohne diese Änderung klebt der Text wieder an der Zeile darüber.
+ * 4. Zeilenumbrüche im Liedtext nicht zeichnen: In createNewGlyph() des Liedtexts (minifiziert
+ *    "createNewGlyph(t,e){return new co(0,0,e.lyrics,…") steht "e.lyrics.map(l=>l&&l.replace(/\n/g,""))" statt
+ *    "e.lyrics". Ein Zeilenumbruch im Liedtext steht als "\n" am Ende der letzten Silbe einer Zeile (siehe README
+ *    "Text und Akkorde"); gezeichnet wird die Silbe ohne ihn.
+ *    Ohne diese Änderung zeichnet der Browser den Umbruch als Leerzeichen: nicht zu sehen, die Silbe steht aber gut
+ *    1 px weiter links (sie wird mittig unter die Note gesetzt und ist breiter).
+ * 5. Betonung über den Tabs: Direkt hinter der Klasse des Plektrumzeichens (PickStrokeEffectInfo, minifiziert
+ *    "class _o extends xh{get notationElement(){return F.EffectPickStroke}…") stehen die neuen Klassen GbAccentGlyph
+ *    (das Akzentzeichen ">" der Notenschrift, _t.ArticAccentAbove, so groß wie das Plektrumzeichen) und
+ *    GbAccentEffectInfo (ein Zeichen an jedem Schlag mit einer betonten Note, eigene Zeile "gitarrenbuch-accent").
+ *    In der Liste der Effekte der Tab-Zeile (wie bei 2.) steht hinter "{effect:new _o,mode:yh.OwnedTop}" der Eintrag
+ *    "{effect:new GbAccentEffectInfo,mode:yh.OwnedTop,shouldCreate:t=>!t.showStandardNotation}".
+ *    GbAccentGlyph macht seine Zeile halb so hoch wie das Zeichen und rückt es nach oben (doLayout():
+ *    "this.offsetY=0,this.height*=.5"): So steht die Betonung näher unter dem Plektrumzeichen als mit dem üblichen
+ *    Abstand einer eigenen Zeile.
+ *    Grund: alphaTab zeichnet die Betonung nur als Teil der Note im Notensystem; in der Ansicht "Tabs" fehlte sie
+ *    (wichtig für Strumming, z. B. "D.DuduDu" aus README "Rhythmus ableiten"). Wie bei den Fingersätzen gilt der
+ *    Eintrag nur ohne Noten, in "Noten + Tabs" steht die Betonung also nicht doppelt.
+ *    Ohne diese Änderung fehlt die Betonung in der Ansicht "Tabs" wieder, sonst geht nichts verloren. Starke Betonung
+ *    gibt es im Gitarrenbuch nicht (der Import macht sie zur einfachen, cleanImportedScore()). */
 /*!
 * alphaTab v1.8.4 (, build 34)
 *

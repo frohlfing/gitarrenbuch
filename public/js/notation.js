@@ -1,5 +1,5 @@
 /**
- * Noten: Spuren und Abspielreihenfolge, Lesen und Schreiben (alphaTex, Guitar Pro), Bearbeiten, Transponieren.
+ * Noten lesen und schreiben, Bearbeiten, Transponieren
  */
 
 import {
@@ -37,7 +37,7 @@ import {resolveConflicts} from './conflicts.js';
 // --------------------------------------------------------------------------------------------------------------------
 
 /**
- * Spielfolge der Takte: in welcher Reihenfolge die Takte eines Songs gespielt werden, mit Wiederholungen,
+ * Spielfolge der Takte: In welcher Reihenfolge die Takte eines Songs gespielt werden, mit Wiederholungen,
  * Volta-Klammern und (wenn gewünscht) Sprungzeichen.
  */
 
@@ -396,7 +396,9 @@ export function lyricsTrack(score) {
 }
 
 /**
- * Spur, die die Akkorde trägt: die mit den meisten Akkorden (bei Gleichstand die vordere).
+ * Spur, die die Akkorde trägt: die mit den meisten Akkorden (bei Gleichstand die vordere). Wie bei lyricsTrack() wird
+ * die Wahl (Dialog "Spuren") nicht eigens gespeichert: Eine zweite Angabe, etwa in song.json, könnte den Noten
+ * widersprechen.
  * @param {Score} score Noten
  * @returns {?Track} null, wenn der Song keine Akkorde hat
  */
@@ -772,7 +774,8 @@ export const TRACK_BALANCE = 8;
 
 /**
  * Gleiche Lautstärke für alle: jede Spur TRACK_VOLUME und TRACK_BALANCE, jeder Schlag forte, ohne Lautstärke- und
- * Panorama-Automationen. Akzente und Ghost Notes bleiben.
+ * Panorama-Automationen. Akzente und Ghost Notes bleiben (Spielweise). Wie laut etwas klingt, regelt allein der Mixer;
+ * bei gleicher Einstellung sind alle Songs und Spuren gleich laut. Dynamikzeichen werden deshalb nirgends gezeigt.
  * @param {AlphaTabModule} alphaTab alphaTab-Modul
  * @param {Score} score Noten, werden geändert
  * @returns {void}
@@ -1214,7 +1217,10 @@ export function applyRecordingTempo(alphaTab, midi, points) {
  * aus Guitar Pro (die Zeilen setzt der Player, rowBreaks()); keine Griffbilder in den Noten (die stehen oben auf der
  * Seite); keine Fingerangaben an den Noten (Greif- und Anschlagshand); ein Auftakt, der als kurzer Takt mit eigener
  * Taktart oder mit Pausen am Anfang notiert ist, wird zum Auftakt in der Taktart des Songs (isImplicitAnacrusis(),
- * setAnacrusis()); Tempi ganzzahlig, ohne Wechsel auf dasselbe Tempo (removeRedundantTempos()).
+ * setAnacrusis()); mit Audiospur ein Sync-Punkt in Takt 1 und an jedem Tempowechsel (completeSyncPoints()); Tempi
+ * ganzzahlig und sichtbar, ohne Wechsel auf dasselbe Tempo (removeRedundantTempos()). Titel, Interpret und die
+ * übrigen Angaben kommen nach song.json und werden in den Noten geleert (readGpFile()), die eingebettete Audiospur
+ * löst der Server heraus (audio.mp3), ihre Sync-Punkte bleiben im alphaTex.
  * Alles andere bleibt wie in der Datei: Tonart und
  * Vorzeichen, Spurnamen, Capo je Spur. Was von der Konvention abweicht (ein Capo, Akkorde und Text in einer Spur …),
  * löst danach resolveConflicts() in conflicts.js.
@@ -1253,7 +1259,24 @@ function cleanImportedScore(alphaTab, score, library) {
         }
     }
     if (isImplicitAnacrusis(score)) setAnacrusis(alphaTab, score, true);
-    for (const mb of score.masterBars) for (const a of mb.tempoAutomations) a.value = roundTempo(a.value);
+    // Erst die Sync-Punkte ergänzen, dann runden: Mit einem Sync-Punkt an jedem Tempowechsel ändert das Runden die
+    // Wiedergabe mit Audiospur nicht mehr.
+    completeSyncPoints(alphaTab, score);
+    // Tempi sind im Gitarrenbuch ganzzahlig und immer zu sehen: Ein verstecktes Tempo (alphaTex "hide") gilt trotzdem,
+    // in der Partitur sähe man es nur nicht (der Sync-Editor nennt es "in der Partitur angegeben").
+    score.tempo = roundTempo(score.tempo);
+    for (const mb of score.masterBars) {
+        for (const a of mb.tempoAutomations) {
+            a.value = roundTempo(a.value);
+            a.isVisible = true;
+        }
+    }
+    const tempoType = alphaTab.model.AutomationType.Tempo;
+    for (const track of score.tracks) for (const staff of track.staves) for (const bar of staff.bars) {
+        for (const voice of bar.voices) for (const beat of voice.beats) {
+            for (const a of beat.automations) if (a.type === tempoType) a.value = roundTempo(a.value);
+        }
+    }
     removeRedundantTempos(score);
 }
 
@@ -1430,8 +1453,8 @@ export async function exportGpFile(song, tex, audio) {
  * danach schreibt der Editor es als alphaTex und liest es neu ein (so stimmen alle abgeleiteten Werte wie Indizes,
  * Verkettungen und Abspielzeiten wieder). Ohne DOM.
  *
- * Saiten zählen wie in alphaTab: 1 = tiefste Saite. Bearbeitet wird nur die erste Stimme eines Takts (mehrstimmige
- * Songs gibt es nicht, siehe docs/Editor.md).
+ * Saiten zählen wie in alphaTab: 1 = tiefste Saite. Bearbeitet wird nur die erste Stimme eines Takts (kein Song des
+ * Gitarrenbuchs nutzt mehrere Stimmen, deshalb gibt es dafür kein Bedienelement).
  */
 
 /** Notenwerte von lang nach kurz, wie alphaTab sie zählt (1 = Ganze, 32 = Zweiunddreißigstel). */
@@ -2275,6 +2298,35 @@ export function syncTempoBar(alphaTab, score, index) {
 }
 
 /**
+ * Ergänzt fehlende Sync-Punkte beim Import (nur mit Audiospur, also wenn die Noten Sync-Punkte haben): einen am Anfang
+ * von Takt 1 und einen am Anfang jedes Takts mit Tempowechsel (syncTempoBar()). Gesetzt wird jeder an die Stelle, an
+ * der die Wiedergabe den Takt jetzt schon erwartet; am Klang ändert sich also nichts. Danach hängt die Wiedergabe nicht
+ * mehr am Verhältnis der notierten Tempi (siehe syncTempoBar()), und das Runden der Tempi verschiebt nichts. Vor Takt 1
+ * gilt das Tempo des ersten Abschnitts rückwärts (syncedAudioMs()), auch ein negativer Wert ist möglich (die
+ * Audiospur setzt erst nach dem Taktanfang ein).
+ * @param {AlphaTabModule} alphaTab alphaTab-Modul
+ * @param {Score} score Noten (Sync-Punkte werden ergänzt)
+ * @returns {number} Anzahl der gesetzten Sync-Punkte
+ */
+export function completeSyncPoints(alphaTab, score) {
+    const synced = playbackSyncPoints(alphaTab, score);
+    if (!synced.length) return 0;
+    let added = 0;
+    const points = score.exportFlatSyncPoints();
+    if (!points.some(p => p.barIndex === 0 && p.barOccurence === 0 && p.barPosition === 0)) {
+        points.push({
+            barIndex: 0, barOccurence: 0, barPosition: 0, millisecondOffset: Math.round(syncedAudioMs(synced, 0)),
+        });
+        score.applyFlatSyncPoints(sortSyncPoints(points));
+        added++;
+    }
+    for (const mb of score.masterBars) {
+        if (mb.index > 0 && mb.tempoAutomations.length) added += syncTempoBar(alphaTab, score, mb.index);
+    }
+    return added;
+}
+
+/**
  * Rundet ein Tempo auf eine ganze Zahl (so stehen Tempi in den Noten).
  * @param {number} bpm Tempo in Vierteln je Minute
  * @returns {number}
@@ -2843,6 +2895,8 @@ function pickupBeats(track, beats, syllables, start) {
  *   die Schläge seiner Silben (in der Reihenfolge der Silben ohne "_")
  */
 export function setLyricsText(track, text, sections) {
+    // Schläge mit angeschlagener Note (nicht nur übergebunden). Ein Schlag, der schon eine Silbe hat, zählt auch als
+    // Pause mit: alphaTab speichert und zeichnet Silben auch dort (r.4{lyrics "Ak-"}), sonst ginge sie verloren.
     const beats = track.staves[0].bars.flatMap(bar => bar.voices[0]?.beats ?? [])
         .filter(b => (b.notes.length && !b.notes.every(n => n.isTieDestination)) || b.lyrics?.[0]?.trim());
     const time = beat => beat.voice.bar.masterBar.start + beat.playbackStart;
@@ -3905,7 +3959,9 @@ export function setTrackProgram(alphaTab, track, program) {
 const programRange = (a, b) => Array.from({length: b - a + 1}, (_, i) => a + i);
 
 /**
- * Die Instrumente, die eine Spur haben kann (docs/Instrumente.md), in der Reihenfolge der Auswahlliste.
+ * Die Instrumente, die eine Spur haben kann (docs/Instrumente.md), in der Reihenfolge der Auswahlliste. Ein Instrument
+ * legt nur den Klang fest (General-MIDI-Programm); die Notenlage ist für alle gleich (TAB_NOTATION). Gewählt wird es im
+ * Dialog "Spuren", beim Import ordnet der Konfliktlöser jeder Spur eines zu und macht Spuren ohne Saiten zu Tab.
  * @type {Instrument[]}
  */
 export const INSTRUMENTS = [
@@ -3998,8 +4054,9 @@ export function instrumentOf(track) {
 }
 
 /**
- * Notenlage jeder Spur (displayTranspositionPitch): wie Gitarre eine Oktave höher als klingend, gleich welches
- * Instrument, denn jede Spur ist Gitarren-Tab.
+ * Notenlage jeder Spur (displayTranspositionPitch, in alphaTex \displaytranspose, bei Guitar Pro "Oktave"): wie Gitarre
+ * eine Oktave höher als klingend, gleich welches Instrument, denn jede Spur ist Gitarren-Tab mit dem Tonraum des
+ * Griffbretts.
  */
 export const TAB_NOTATION = -12;
 

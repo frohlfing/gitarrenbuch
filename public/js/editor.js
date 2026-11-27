@@ -1,6 +1,5 @@
 /**
- * Bearbeitungsmodus der Liedansicht: Werkzeugleiste und Panels, Panel "Liedtext", Maus und Cursor, Felder,
- * Tastenkürzel.
+ * Bearbeitungsmodus: Toolbar und Panels, Maus und Cursor, Tastenkürzel.
  */
 
 import {
@@ -224,8 +223,10 @@ function entryBar(entry) {
  * Tastenkürzel des Bearbeitungsmodus. Übernommen aus Guitar Pro 8
  * (https://www.guitar-pro.com/docs/gp8/appendix/shortcuts), soweit der Editor die Funktion hat und der Browser die
  * Taste nicht selbst belegt (Strg+T, F5, Strg+Tab, Strg+W und Strg+N sind es: F5 lädt die Seite neu, F8 klappt das untere
- * Panel ein und aus, die Taktart steht im Panel "Am Cursor"). Die Übersicht öffnet der Knopf "?" in der Werkzeugleiste
- * bzw. die Taste "?" (siehe editor.js).
+ * Panel ein und aus, die Taktart steht im Panel "Am Cursor"). Weitere Abweichungen von Guitar Pro: F4 klappt das rechte
+ * Panel, F8 das untere (in Guitar Pro die Gesamtansicht). Strg+D und Strg+U (Anschlagpfeile) belegt der Browser auch
+ * (Lesezeichen, Quelltext); im Bearbeitungsmodus fängt keyCommand() sie ab. Die Übersicht öffnet der Knopf "?" in der
+ * Werkzeugleiste bzw. die Taste "?".
  */
 
 /**
@@ -356,12 +357,16 @@ export function openShortcutHelp() {
  * (boundsLookup von alphaTab): Sie reicht genau von der obersten bis zur untersten Saite. Ohne Tabs (Ansicht
  * "Noten") gibt es nur die Spalte des Schlags.
  *
- * Aufbau (docs/Editor.md): Die Werkzeugleiste (Speichern, Rückgängig, Tonart, Capo …, Hilfe, ✕) ist im Modus die
- * einzige feste Leiste und enthält, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning). Links steht, was am Cursor hängt
- * (Notenwerte, Effekte, Schlag; vom Takt Abschnitt, Taktart und Tempo), unten, was sich über den Song erstreckt (Spuren, Leadsheet, Liedtext, Audio mit dem Sync-Editor)
- * samt Statuszeile. Die Panels lassen sich einklappen; auf schmalen
- * Bildschirmen sind die seitlichen anfangs eingeklappt und legen sich ausgeklappt über die Noten. Abspielen geht
- * weiter.
+ * Aufbau: Die Werkzeugleiste (Speichern, Rückgängig, Tonart, Capo …, Hilfe, ✕) ist im Modus die einzige feste Leiste
+ * und enthält, was am ganzen Song hängt (Tonart, Shuffle, Capo, Tuning), dazu die Knöpfe der Dialoge (Spuren,
+ * Leadsheet, Transponieren, Verlauf …). Links steht, was am Cursor hängt (Notenwerte, Effekte, Schlag; vom Takt
+ * Abschnitt, Taktart und Tempo), rechts der Liedtext, unten Audio mit dem Sync-Editor samt Statuszeile. Die Panels
+ * lassen sich einklappen; auf schmalen Bildschirmen sind die seitlichen anfangs eingeklappt und legen sich ausgeklappt
+ * über die Noten. Abspielen geht weiter.
+ *
+ * Konflikte (Abweichungen von der Form des Gitarrenbuchs, conflicts.js) zeigt der Editor nicht an: Der Import löst sie,
+ * und keine Bearbeitung erzeugt neue. Ein Akkord bzw. eine Silbe am Cursor kommt deshalb immer in die Akkord- bzw.
+ * Textspur; beginnt dort an der Stelle kein Schlag, wird der klingende geteilt und angebunden (klingt gleich).
  */
 
 /**
@@ -371,6 +376,7 @@ export function openShortcutHelp() {
  * @property {string} sheet Angaben für das Leadsheet (NoteEditor.sheetJson())
  * @property {EditPosition} pos Cursor
  * @property {number[]} tracks gezeigte Spuren
+ * @property {string} label was der Schritt geändert hat, z. B. "Takt 12 geändert" (Tooltip von Rückgängig/Wiederholen)
  */
 
 /**
@@ -479,6 +485,18 @@ let brushKinds = BRUSH_KINDS.map(([key]) => key);
 /** So viele Schritte hält "Rückgängig". */
 const UNDO_MAX = 200;
 
+/**
+ * Hinweis für "Rückgängig" zu einer Änderung an ausgewählten Schlägen, z. B. "6 Schläge in Takt 3–5 geändert".
+ * @param {Beat[]} beats Schläge (in der Reihenfolge der Noten)
+ * @param {string} [what] was mit ihnen geschah
+ * @returns {string}
+ */
+function beatsLabel(beats, what = 'geändert') {
+    const first = beats[0].voice.bar.index + 1;
+    const last = beats[beats.length - 1].voice.bar.index + 1;
+    return `${beats.length} Schläge in Takt ${first === last ? first : `${first}–${last}`} ${what}`;
+}
+
 /** Innerhalb dieser Zeit (ms) ergeben zwei Ziffern einen zweistelligen Bund ("1", "2" = 12). */
 const DIGIT_MS = 1000;
 
@@ -555,7 +573,13 @@ const NOTE_NAMES = {1: 'Ganze', 2: 'Halbe', 4: 'Viertel', 8: 'Achtel', 16: 'Sech
 /**
  * Knöpfe am Cursor (linkes Panel unter "Note"), in Gruppen: [Überschrift, [Symbol (HTML), Name mit Tastenkürzel
  * (SHORTCUTS), Befehl (NoteEditor.run())]]. Unter "Effekt" folgt die Reihe "Einfügen, löschen" (insertToolsHtml()).
- * Was aus Guitar Pro nicht übernommen wird, steht in docs/Editor.md.
+ *
+ * Nicht aus Guitar Pro übernommen (kein Knopf, aber was ein Song davon hat, bleibt beim Bearbeiten erhalten, denn
+ * alphaTex speichert es): Fermate, Dynamik, Staccato, Let Ring, Palm Mute, Legato, Slap, Vorschlagsnoten, Einblenden,
+ * Balken und Notenhals (setzt alphaTab selbst) und weitere, die kein Song verwendet (Flageolett, Tapping, Triller …).
+ * Wiederholungszeichen, Volta-Klammern, Sprünge und Takt-Wiederholungszeichen gibt es nur ausgeschrieben (der Import
+ * schreibt sie aus). Statt der Triolen-Feelings von Guitar Pro gibt es nur Shuffle (Werkzeugleiste), statt "Dead
+ * Note" heißt es "Saite dämpfen".
  * @type {[string, [string, string, string][]][]}
  */
 const EFFECTS = [
@@ -778,6 +802,15 @@ export class NoteEditor {
         /** @type {UndoStep[]} */
         this.redoStack = [];
         /**
+         * Takt des letzten Schritts aus dem linken Panel ("Spur|Takt"): Weitere Änderungen dort im selben Takt gehören
+         * zu diesem Schritt (spart Speicher, jeder Schritt hält den ganzen Text); null, wenn der letzte Schritt anders
+         * entstand.
+         * @type {?string}
+         */
+        this.mergeKey = null;
+        /** Ob die laufende Änderung aus dem linken Panel "Am Cursor" kommt (Klick oder Feld, siehe onClick). */
+        this.panelEdit = false;
+        /**
          * Cursor.
          * @type {EditPosition}
          */
@@ -929,18 +962,17 @@ export class NoteEditor {
     /**
      * Ändert nur die Angaben für das Leadsheet (Patterns, Tab-Stellen), als ein Schritt für "Rückgängig".
      * @param {function(import('./sheet.js').Sheet): *} fn Änderung; darf die Angaben direkt ändern
+     * @param {string} [label] was sich geändert hat (Tooltip von Rückgängig)
      * @returns {void}
      */
-    changeSheet(fn) {
+    changeSheet(fn, label = 'Leadsheet geändert') {
         const before = this.sheetJson();
         fn(this.sheet);
         if (this.sheetJson() === before) {
             this.leadsheetTab.renderList();
             return;
         }
-        this.undoStack.push(this.snapshot(before));
-        if (this.undoStack.length > UNDO_MAX) this.undoStack.shift();
-        this.redoStack = [];
+        this.pushUndo(this.snapshot(before), label);
         this.player.setBarsPerRow(this.sheet.barsPerRow);
         this.updateState();
         this.leadsheetTab.render();
@@ -989,7 +1021,7 @@ export class NoteEditor {
 
         this.onClick = e => {
             const target = /** @type {HTMLElement} */ (e.target);
-            this.handleClick(target, e.altKey);
+            this.fromPanel(target, () => this.handleClick(target, e.altKey));
             // Ein mit der Maus gedrückter Knopf gibt den Fokus wieder ab: Sonst zeichnet der Browser beim nächsten Tastendruck
             // (z. B. "-" für länger) einen Fokusrahmen um ihn. Mit der Tastatur (detail 0) bleibt der Fokus.
             if (e.detail) target.closest('button')?.blur();
@@ -1019,7 +1051,10 @@ export class NoteEditor {
         const loop = this.player.el.loop;
         if (this.player.api.isLooping) loop.click();
         loop.title = LOOP_TITLE;
-        this.onFieldChange = e => this.applyField(/** @type {HTMLInputElement} */ (e.target));
+        this.onFieldChange = e => {
+            const input = /** @type {HTMLInputElement} */ (e.target);
+            this.fromPanel(input, () => this.applyField(input));
+        };
         this.part('edit-left').addEventListener('change', this.onFieldChange);
         this.part('edit-toolbar').addEventListener('change', this.onFieldChange);
         this.onFieldEnter = e => this.leaveFieldOnEnter(e);
@@ -1204,7 +1239,7 @@ export class NoteEditor {
             'anacrusis')}<input type="text" data-song="ts" list="esongSignatures" placeholder="4/4"
           aria-label="Taktart" title="Taktart ab diesem Takt bis zum nächsten Wechsel"><datalist id="esongSignatures">${
             TIME_SIGNATURES.map(t => `<option value="${t}">`).join('')}</datalist><span class="efield-row">${
-            num(20, 300, 'data-song="tempo" aria-label="Tempo" title="Tempo ab diesem Takt bis zum nächsten Wechsel"')} BPM
+            num(20, 300, 'step="1" data-song="tempo" aria-label="Tempo" title="Tempo ab diesem Takt bis zum nächsten Wechsel"')} BPM
           <span class="etool-keyhint etool-tempohint" data-tempo-hint hidden>!</span></span></span>`)}
         ${field('Abschnitt (Umschalt+Einfg)', `<span class="eclearable"><input type="text" data-bar="section"
           list="ebarSections" placeholder="z. B. Verse"><button type="button" class="eclear" data-clear-section
@@ -1709,10 +1744,12 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             lyricsReflow: () => void this.applyLyrics({reflow: true}),
             syllableFromLeft: () => this.pullSyllable(-1),
             syllableFromRight: () => this.pullSyllable(1),
-            insertBar: () => this.change(() => edit.insertBar(at, this.score, this.pos.bar), {pos: {beat: 0}}),
+            insertBar: () => this.change(() => edit.insertBar(at, this.score, this.pos.bar),
+                {pos: {beat: 0}, label: `Takt vor Takt ${this.pos.bar + 1} eingefügt`}),
             insertBarAfter: () => this.change(() => edit.insertBar(at, this.score, this.pos.bar + 1),
-                {pos: {bar: this.pos.bar + 1, beat: 0}}),
-            deleteBar: () => this.change(() => edit.deleteBar(this.score, this.pos.bar), {pos: {beat: 0}}),
+                {pos: {bar: this.pos.bar + 1, beat: 0}, label: `Takt nach Takt ${this.pos.bar + 1} eingefügt`}),
+            deleteBar: () => this.change(() => edit.deleteBar(this.score, this.pos.bar),
+                {pos: {beat: 0}, label: `Takt ${this.pos.bar + 1} gelöscht`}),
             lastBar: () => this.moveTo({bar: this.score.masterBars.length - 1, beat: 0}),
             bend: () => this.change(beat => edit.cycleBend(at, note(beat))),
             stringUp: () => this.moveNoteString(string, string + 1),
@@ -1738,7 +1775,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             tripletFeel: () => {
                 const on = this.score.masterBars[0].tripletFeel === at.model.TripletFeel.NoTripletFeel;
                 this.change(() => edit.setTripletFeel(this.score, 0,
-                    on ? at.model.TripletFeel.Triplet8th : at.model.TripletFeel.NoTripletFeel, true));
+                    on ? at.model.TripletFeel.Triplet8th : at.model.TripletFeel.NoTripletFeel, true),
+                {label: on ? 'Shuffle eingeschaltet' : 'Shuffle ausgeschaltet'});
                 this.toast(on ? 'Triolen-Feeling: Achtel (Shuffle)' : 'Triolen-Feeling: kein');
             },
             keySignature: () => /** @type {HTMLElement} */ (this.part('edit-toolbar').querySelector('[data-song="key"]')).focus(),
@@ -1749,20 +1787,22 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             tracks: () => this.openTracksDialog(),
             leadsheet: () => this.openLeadsheetDialog(),
             trackUp: () => this.changeTracks(score => edit.moveTrack(score, Number(el.dataset.track), -1),
-                Number(el.dataset.track), -1),
+                Number(el.dataset.track), -1, 'Spur verschoben'),
             trackDown: () => this.changeTracks(score => edit.moveTrack(score, Number(el.dataset.track), 1),
-                Number(el.dataset.track), 1),
+                Number(el.dataset.track), 1, 'Spur verschoben'),
             trackDelete: () => {
                 const track = this.score.tracks[Number(el.dataset.track)];
                 if (!confirm(`Spur "${trackName(track)}" löschen?`)) return;
-                this.changeTracks(score => edit.deleteTrack(score, track.index), track.index, 0);
+                this.changeTracks(score => edit.deleteTrack(score, track.index), track.index, 0,
+                    `Spur „${trackName(track)}“ gelöscht`);
             },
             addTrack: () => this.changeTracks(score => edit.addTrack(at, score, `Gitarre ${score.tracks.length + 1}`),
-                this.score.tracks.length, 0),
+                this.score.tracks.length, 0, 'Spur hinzugefügt'),
             trackDuplicate: () => {
                 const index = Number(el.dataset.track);
                 // Aus dem alphaTex gelesen statt aus dem Modell kopiert: So ist die Kopie vollständig und unabhängig.
-                this.changeTracks(score => edit.duplicateTrack(t => parseScore(at, t), this.tex, score, index), index + 1, 0);
+                this.changeTracks(score => edit.duplicateTrack(t => parseScore(at, t), this.tex, score, index), index + 1, 0,
+                    'Spur kopiert');
                 this.toast(`Kopie „${trackName(this.score.tracks[index + 1])}“ angelegt, ohne Akkorde und Text.`);
             },
             trackRhythm: () => new RhythmDialog(this, Number(el.dataset.track)).open(),
@@ -1807,7 +1847,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         if (selected.length) {
             const from = this.beatSelection.from;
             this.beatSelection = null;
-            this.change(() => selected.forEach(b => edit.deleteBeat(b)), {pos: {bar: from.bar, beat: from.beat}});
+            this.change(() => selected.forEach(b => edit.deleteBeat(b)),
+                {pos: {bar: from.bar, beat: from.beat}, label: beatsLabel(selected, 'gelöscht')});
             this.toast(`${selected.length} ${selected.length === 1 ? 'Schlag' : 'Schläge'} gelöscht.`);
             return;
         }
@@ -1860,7 +1901,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             } else {
                 for (const beat of beats) fn(beat);
             }
-        });
+        }, {label: beatsLabel(beats)});
         this.toast(`${beats.length} Schläge geändert.`);
     }
 
@@ -1882,7 +1923,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         const on = cursor ? !cursor[prop] : !notes.every(n => n[prop]);
         this.change(() => {
             for (const note of notes) note[prop] = on;
-        });
+        }, {label: beatsLabel(beats)});
         this.toast(`${beats.length} Schläge geändert.`);
     }
 
@@ -1922,7 +1963,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                     edit.toggleTie(at, beat, all[all.indexOf(beat) - 1] ?? null, string);
                 }
             }
-        });
+        }, {label: beatsLabel(beats)});
         this.toast(`${beats.length} Schläge geändert.`);
     }
 
@@ -2034,7 +2075,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             const staff = edit.editStaff(this.score, sel.track);
             this.change(() => {
                 for (let i = sel.from; i <= sel.to; i++) edit.clearBar(this.alphaTab, staff.bars[i]);
-            });
+            }, {label: `Takt ${sel.from + 1}${sel.to > sel.from ? `–${sel.to + 1}` : ''} ausgeschnitten`});
         }
         this.toast(`${count} ${count === 1 ? 'Takt' : 'Takte'} ${cut ? 'ausgeschnitten' : 'kopiert'}`);
     }
@@ -2200,7 +2241,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                         if (target && kind === 'lyrics') this.setSyllableOn(target, value);
                     }
                 });
-            });
+            }, {label: `Pinsel ab Takt ${masterBarAt(this.score, range.from).index + 1} übertragen`});
         } catch (e) {
             // Das Modell ist halb geändert: zurück auf den Stand davor.
             this.setTex(this.tex);
@@ -2311,7 +2352,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         let error = '';
         this.change(() => {
             error = edit.setAnacrusis(this.alphaTab, this.score, on);
-        }, {pos: {beat: 0}});
+        }, {pos: {beat: 0}, label: on ? 'Auftakt eingeschaltet' : 'Auftakt ausgeschaltet'});
         this.fillBarSignature();
         this.toast(error || (on ? 'Takt 1 ist jetzt ein Auftakt.' : 'Takt 1 ist wieder ein voller Takt.'));
     }
@@ -2329,7 +2370,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         this.change(() => {
             count = edit.pasteBars(this.alphaTab, t => parseScore(this.alphaTab, t), this.score, clipboard, this.pos.track,
                 this.pos.bar);
-        }, {pos: {beat: 0}});
+        }, {pos: {beat: 0}, label: `Takte ab Takt ${this.pos.bar + 1} eingefügt`});
         this.toast(`${count} ${count === 1 ? 'Takt' : 'Takte'} eingefügt`);
     }
 
@@ -2337,13 +2378,12 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
      * Übernimmt einen neuen Stand als einen Schritt für "Rückgängig" (für Änderungen, die ein neues Modell liefern).
      * @param {string} tex alphaTex
      * @param {?string} [sheet] neue Angaben für das Leadsheet (wie sheetJson()), wenn sich die Takte verschoben haben
+     * @param {string} [label] was sich geändert hat (Tooltip von Rückgängig)
      * @returns {void}
      */
-    commitTex(tex, sheet = null) {
+    commitTex(tex, sheet = null, label = 'Noten geändert') {
         if (tex === this.tex && (sheet === null || sheet === this.sheetJson())) return;
-        this.undoStack.push(this.snapshot());
-        if (this.undoStack.length > UNDO_MAX) this.undoStack.shift();
-        this.redoStack = [];
+        this.pushUndo(this.snapshot(), label);
         if (sheet !== null) this.setSheet(sheet);
         this.setTex(tex);
     }
@@ -2355,14 +2395,15 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
      * @param {function(Score): *} fn Änderung an den Noten
      * @param {number} index betroffene Spur (beim Hinzufügen: Index der neuen)
      * @param {number} step Verschiebung (-1, +1), 0 beim Löschen bzw. Hinzufügen
+     * @param {string} [label] was sich geändert hat (Tooltip von Rückgängig)
      * @returns {void}
      */
-    changeTracks(fn, index, step) {
+    changeTracks(fn, index, step, label = 'Spuren geändert') {
         // Die gewählte Spur für Akkorde bzw. Text ohne Inhalt (contentChoice) hängt am Index; nach dem Umbau neu wählen.
         this.contentChoice = {chords: null, lyrics: null};
         const before = this.score.tracks.length;
         const shown = new Set(this.trackIndexes);
-        this.change(() => fn(this.score));
+        this.change(() => fn(this.score), {label});
         const after = this.score.tracks.length;
         /** @type {function(number): ?number} alter Index → neuer Index */
         let map = i => i;
@@ -2575,7 +2616,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                 const beat = staff?.bars[bar]?.voices[0]?.beats[0];
                 if (beat) this.setChordName(beat, name);
             }
-        });
+        }, {label: 'Akkorde bereinigt'});
         const parts = [];
         if (plan.repeated.length) parts.push(`${plan.repeated.length} doppelte entfernt`);
         if (plan.missing.length) parts.push(`${plan.missing.length} am Abschnittsanfang gesetzt`);
@@ -2646,7 +2687,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                 const current = this.score.tracks[index].staves[0];
                 const chosen = chordNoteProblems(current, library).filter(p => keys.has(`${p.name}|${p.sounds}`));
                 count = replaceChordNotes(this.alphaTab, current, chosen);
-            });
+            }, {label: 'Griffe ersetzt'});
             this.toast(`${count} ${count === 1 ? 'Schlag' : 'Schläge'} mit dem Griff des Akkords ersetzt.`);
         });
     }
@@ -2839,7 +2880,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             let result = shift;
             this.change(() => {
                 result = edit.moveContent(this.alphaTab, this.score, kind, index, mode);
-            });
+            }, {label: `${chords ? 'Akkorde' : 'Liedtext'} nach ${name} verschoben`});
             this.toast(`${chords ? 'Akkorde' : 'Liedtext'} jetzt in ${name}`
                 + (result.split ? `; ${result.split} ${result.split === 1 ? 'Schlag' : 'Schläge'} geteilt` : '')
                 + (result.shifted ? `; ${result.shifted} auf den Schlag davor gesetzt` : '') + '.');
@@ -2975,7 +3016,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                 sounding.splice(sounding.filter(e => e.tick <= at).length, 0, {tick: at, name: simple});
             }
             normalizeChords(this.alphaTab, this.score, library);
-        });
+        }, {label: 'Akkorde aus Chord-Datei übernommen'});
         this.fillLyrics();
         this.chordFileReport(file.name, text, applied, result, named.length);
     }
@@ -3179,7 +3220,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             const target = overwrite ? index : null;
             this.changeTracks(score => {
                 result = edit.deriveMelodyTrack(at, t => parseScore(at, t), this.tex, score, index, target);
-            }, target ?? this.score.tracks.length, 0);
+            }, target ?? this.score.tracks.length, 0, 'Melodie abgeleitet');
             if (result && samples) {
                 try {
                     const melody = this.score.tracks[target ?? this.score.tracks.length - 1];
@@ -3253,7 +3294,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             this.changeTracks(score => {
                     result = edit.importTrack(this.alphaTab, score, parse().tracks[index], from, at);
                 },
-                this.score.tracks.length, 0);
+                this.score.tracks.length, 0, 'Spur aus Guitar-Pro-Datei übernommen');
             const misfit = result.misfit.length ? `; Länge passt nicht zur Taktart in Takt `
                 + `${result.misfit.slice(0, 8).map(i => i + 1).join(', ')}${result.misfit.length > 8 ? ' …' : ''}` : '';
             this.toast(`Spur „${trackName(this.score.tracks.at(-1))}“ übernommen: ${result.bars} Takte`
@@ -3636,9 +3677,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     syncEdited(merge = false) {
         const tex = this.writeTex();
         if (tex === this.tex) return;
-        if (!merge || !this.undoStack.length) this.undoStack.push(this.snapshot());
-        if (this.undoStack.length > UNDO_MAX) this.undoStack.shift();
-        this.redoStack = [];
+        if (merge && this.undoStack.length) this.redoStack = [];
+        else this.pushUndo(this.snapshot(), 'Sync-Punkte geändert');
         this.tex = tex;
         this.updateState();
         this.fillSongFields();
@@ -3647,14 +3687,20 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     /**
      * Ändert den Schlag am Cursor (oder die Noten) und übernimmt das Ergebnis: als alphaTex schreiben, neu einlesen,
      * zeichnen. Der Stand davor kommt auf "Rückgängig". Ändert sich nichts, bleibt alles, wie es war.
+     *
+     * Ohne label ist es eine Änderung am Takt des Cursors ("Takt 12 geändert"). Kommt sie aus dem linken Panel, gehört
+     * sie zum letzten Schritt, wenn der ebenfalls aus dem linken Panel im selben Takt kam (pushUndo()). Änderungen über
+     * mehrere Takte oder am ganzen Song geben ein label mit und sind immer ein eigener Schritt.
      * @param {function(Beat): *} fn Änderung am Schlag; das Modell darf sie direkt ändern
-     * @param {{merge?: boolean, pos?: Object}} [options] merge: mit dem letzten Schritt zusammenfassen (zweite Ziffer
-     *   eines Bunds); pos: Cursor danach (Teile von EditPosition)
+     * @param {{merge?: boolean, pos?: Object, label?: string}} [options] merge: mit dem letzten Schritt zusammenfassen
+     *   (zweite Ziffer eines Bunds); pos: Cursor danach (Teile von EditPosition); label: was sich geändert hat
+     *   (Tooltip von Rückgängig)
      * @returns {void}
      */
-    change(fn, {merge = false, pos = null} = {}) {
+    change(fn, {merge = false, pos = null, label = ''} = {}) {
         const beat = this.score ? edit.beatAt(this.score, this.pos) : null;
         if (!beat) return;
+        const {track, bar} = this.pos;
         // Tab-Stellen (Angaben für das Leadsheet) hängen am Index der Takte und am Namen der Spur. Die Änderung arbeitet am Modell,
         // eingefügte Takte sind neue, gelöschte fehlen danach, die übrigen Takte und Spuren bleiben dieselben Objekte: So
         // lassen sich neuer Index und Name finden.
@@ -3670,22 +3716,66 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             this.setTex(this.tex);
             return;
         }
-        if (!merge) {
-            this.undoStack.push(this.snapshot(sheetBefore));
-            if (this.undoStack.length > UNDO_MAX) this.undoStack.shift();
-            this.redoStack = [];
+        if (merge && this.undoStack.length) this.redoStack = [];
+        else if (label) this.pushUndo(this.snapshot(sheetBefore), label);
+        else {
+            this.pushUndo(this.snapshot(sheetBefore), `Takt ${bar + 1} geändert`,
+                this.panelEdit ? `${track}|${bar}` : null);
         }
         if (pos) this.pos = {...this.pos, ...pos};
         this.setTex(tex);
     }
 
     /**
+     * Legt einen Schritt auf "Rückgängig" (höchstens UNDO_MAX) und leert "Wiederholen". Mit key und demselben key wie
+     * beim letzten Schritt entsteht kein neuer: Die Änderung gehört zum letzten, der den Stand vor der ersten hält.
+     * @param {UndoStep} step Stand vor der Änderung (snapshot())
+     * @param {string} label was sich geändert hat
+     * @param {?string} [key] Kennung zum Zusammenfassen ("Spur|Takt" aus dem linken Panel), null für keine
+     * @returns {void}
+     */
+    pushUndo(step, label, key = null) {
+        if (!key || key !== this.mergeKey || !this.undoStack.length) {
+            this.undoStack.push({...step, label});
+            if (this.undoStack.length > UNDO_MAX) this.undoStack.shift();
+        }
+        this.mergeKey = key;
+        this.redoStack = [];
+    }
+
+    /**
+     * Führt eine Eingabe aus und merkt dabei, ob sie aus dem linken Panel "Am Cursor" kommt (für das Zusammenfassen in
+     * change()).
+     * @param {HTMLElement} target Element der Eingabe
+     * @param {function(): void} fn Eingabe ausführen
+     * @returns {void}
+     */
+    fromPanel(target, fn) {
+        this.panelEdit = !!target.closest('.edit-left');
+        try {
+            fn();
+        } finally {
+            this.panelEdit = false;
+        }
+    }
+
+    /**
+     * Leert "Rückgängig" und "Wiederholen" (nach dem Speichern: Der gespeicherte Stand ist der neue Anfang).
+     * @returns {void}
+     */
+    clearUndo() {
+        this.undoStack = [];
+        this.redoStack = [];
+        this.mergeKey = null;
+    }
+
+    /**
      * Stand für "Rückgängig" bzw. "Wiederholen": Text, Angaben für das Leadsheet, Cursor und gezeigte Spuren.
      * @param {string} [sheet] Angaben für das Leadsheet (sheetJson()), wenn sie schon geändert sind: der Stand davor
-     * @returns {UndoStep}
+     * @returns {UndoStep} label ist leer, das setzt pushUndo() bzw. undo()
      */
     snapshot(sheet = this.sheetJson()) {
-        return {tex: this.tex, sheet, pos: {...this.pos}, tracks: [...this.trackIndexes]};
+        return {tex: this.tex, sheet, pos: {...this.pos}, tracks: [...this.trackIndexes], label: ''};
     }
 
     /**
@@ -3700,7 +3790,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             this.toast(from === this.undoStack ? 'Nichts rückgängig zu machen' : 'Nichts zu wiederholen');
             return;
         }
-        to.push(this.snapshot());
+        // Der Stand jetzt geht mit demselben Hinweis auf den anderen Stapel ("Wiederholen: Takt 12 geändert").
+        to.push({...this.snapshot(), label: step.label});
+        this.mergeKey = null;
         this.pos = step.pos;
         this.trackIndexes = step.tracks;
         this.digit = null;
@@ -3860,8 +3952,14 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         pressed('fadeOut', beat.fade === this.alphaTab.model.FadeType.FadeOut);
         pressed('accent', beat.notes.some(n => n.accentuated));
         const toolbar = this.part('edit-toolbar');
-        toolbar.querySelector('[data-cmd="undo"]').disabled = !this.undoStack.length;
-        toolbar.querySelector('[data-cmd="redo"]').disabled = !this.redoStack.length;
+        // Tooltip mit dem Hinweis des Schritts, z. B. "Rückgängig: Takt 12 geändert (Strg+Z)".
+        for (const [cmd, stack, name, key] of /** @type {[string, UndoStep[], string, string][]} */ ([
+            ['undo', this.undoStack, 'Rückgängig', 'Strg+Z'], ['redo', this.redoStack, 'Wiederholen', 'Strg+Y']])) {
+            const button = /** @type {HTMLButtonElement} */ (toolbar.querySelector(`[data-cmd="${cmd}"]`));
+            const label = stack.at(-1)?.label;
+            button.disabled = !stack.length;
+            button.title = label ? `${name}: ${label} (${key})` : `${name} (${key})`;
+        }
         const save = /** @type {HTMLButtonElement} */ (toolbar.querySelector('[data-cmd="save"]'));
         save.classList.toggle('ebtn-dirty', this.dirty);
         save.disabled = !this.dirty;
@@ -3933,6 +4031,9 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                 this.wipAtLoad = [...this.sheet.wip];
             }
             this.saved = true;
+            // Gespeichert ist der neue Anfang: Die Schritte davor brauchen nur noch Speicher (frühere Fassungen stehen im
+            // Verlauf).
+            this.clearUndo();
             this.onSaved(song);
             this.updateState();
             this.toast('Gespeichert');
@@ -4415,7 +4516,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         count = Number.isInteger(count) && count > 0 ? count : 0;
         this.changeSheet(sheet => {
             sheet.barsPerRow = count;
-        });
+        }, 'Takte pro Zeile geändert');
         this.fillField(this.part('edit-toolbar'), '[data-per-row]', count || '');
     }
 
@@ -4599,7 +4700,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                 this.toast('Dieser Stand ist der jetzige.');
                 return;
             }
-            this.commitTex(tex, sheet);
+            this.commitTex(tex, sheet, 'Fassung aus dem Verlauf geladen');
             this.toast('Stand geladen (noch nicht gespeichert; Strg+Z macht es rückgängig).');
         } catch (err) {
             this.toast(`Der Stand ließ sich nicht laden: ${err.message}`);
@@ -4633,8 +4734,10 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
     }
 
     /**
-     * Dialog für einen Akkord: Name und Griff zusammen. Namen, Vorschläge, Reihenfolge der Griffe und Warnung: docs/Akkorddialog.md.
-     * "Übernehmen" setzt den Akkord an den Schlag am Cursor; hat der Name im Song schon einen Griff, gilt der neue für alle Stellen.
+     * Dialog für einen Akkord: Name und Griff zusammen. Die Namensvorschläge kommen nur aus den Regeln der Akkordtheorie
+     * (suggestChordNames()), nie aus dem Song oder dem Katalog. Ein neuer Name trägt den ersten seiner Griffe ins Feld ein
+     * (candidates()); das Griffbild zeigt immer den Griff im Feld. "Übernehmen" gibt es nur mit bekanntem Namen und einem
+     * Griff, der dazu passt. "Übernehmen" setzt den Akkord an den Schlag am Cursor; hat der Name im Song schon einen Griff, gilt der neue für alle Stellen.
      * In den Katalog kommt er mit dem Speichern des Songs (der Katalog baut sich aus den Songs auf).
      * @param {boolean} current Akkord am Cursor ändern (sein Name und Griff stehen vorbelegt), sonst ein neuer
      * @returns {Promise<void>}
@@ -4722,9 +4825,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             return [...counts].sort((a, b) => b[1] - a[1] || top(a[0]) - top(b[0]) || a[0].localeCompare(b[0])).map(([grip]) => grip);
         };
         /**
-         * Griffe, die zum Namen passen, in der Reihenfolge von docs/Akkorddialog.md, Abschnitt 2: der Katalog (catalogGrips()), die
-         * berechneten Griffe der Priorität 1 und 2, zum Auffüllen der ersten Reihe (GRIPS_PER_ROW) die der Priorität 3 und 4; höchstens
-         * vier Reihen.
+         * Griffe, die zum Namen passen, in dieser Reihenfolge: der Katalog (catalogGrips()), die berechneten Griffe der Priorität 1
+         * und 2 (findGrips()), zum Auffüllen der ersten Reihe (GRIPS_PER_ROW) die der Priorität 3, dann 4; höchstens vier Reihen.
          * @returns {string[]}
          */
         const candidates = () => {
@@ -5165,7 +5267,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         const before = this.tex;
         // Vor dem Neuzeichnen: Mit zu langem Text füllt fillLyrics() das Feld nicht neu (ohne Fokus, z. B. beim Import).
         this.lyricsOverflow = result.left > 0;
-        this.change(() => edit.copyLyrics(baseTrack, this.score.tracks[index]), {merge: this.lyricsTyping});
+        this.change(() => edit.copyLyrics(baseTrack, this.score.tracks[index]),
+            {merge: this.lyricsTyping, label: 'Liedtext geändert'});
         // Erst wenn sich etwas geändert hat, gibt es den Schritt, an den sich weiteres Schreiben anhängt.
         if (this.tex !== before && !this.lyricsTyping) {
             this.lyricsTyping = true;
@@ -5363,14 +5466,19 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
                         edit.setTempo(at, this.score, bar, null);
                         break;
                     }
-                    const bpm = edit.roundTempo(Number(value));
-                    if (!(bpm > 0)) break;
+                    // Tempi sind ganzzahlig (roundTempo()); eine Eingabe wie "120,5" gilt nicht, das Feld zeigt danach
+                    // wieder das bisherige Tempo.
+                    if (!/^\d+$/.test(value) || !(Number(value) > 0)) {
+                        this.toast('Tempo als ganze Zahl angeben, z. B. 120.');
+                        break;
+                    }
+                    const bpm = Number(value);
                     const same = bar > 0 && edit.roundTempo(edit.tempoAt(this.score, bar - 1)) === bpm;
                     edit.setTempo(at, this.score, bar, same ? null : bpm);
                     break;
                 }
             }
-        });
+        }, {label: input.dataset.song === 'key' ? 'Tonart geändert' : ''});
         this.fillSongFields();
     }
 
@@ -5398,7 +5506,7 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
         let result = null;
         this.change(() => {
             result = applyRetune(this.alphaTab, this.score, change, library);
-        });
+        }, {label: 'Transponiert'});
         if (!result) return;
         const parts = [];
         if (change.semitones) parts.push(`${result.notes} Noten um ${change.semitones > 0 ? '+' : '−'}${Math.abs(change.semitones)} Halbtöne verschoben`);
@@ -5420,7 +5528,8 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             this.toast(check.problems[0]);
             return;
         }
-        this.change(() => retime(this.alphaTab, this.score, plan), {pos: {bar: 0, beat: 0}});
+        this.change(() => retime(this.alphaTab, this.score, plan),
+            {pos: {bar: 0, beat: 0}, label: 'Metrum umgeschrieben'});
         this.toast(`Umgerechnet: ${this.score.masterBars.length} Takte${check.ties
             ? `, ${check.ties} Schläge angebunden` : ''}.`);
     }
@@ -5444,11 +5553,13 @@ mir_zu setzt zwei Wörter auf einen Schlag. [Verse] usw. sind die Abschnitte."><
             }
             this.change(() => {
                 track.name = track.shortName = value;
-            });
+            }, {label: 'Spur umbenannt'});
         } else if (field === 'instrument') {
             // Klang und Notenlage zusammen (docs/Instrumente.md).
             const instrument = edit.instrumentByKey(value);
-            if (instrument) this.change(() => edit.setInstrument(this.alphaTab, track, instrument));
+            if (instrument) {
+                this.change(() => edit.setInstrument(this.alphaTab, track, instrument), {label: 'Instrument geändert'});
+            }
         }
     }
 

@@ -897,7 +897,7 @@ export class RhythmDialog {
             // Abgeleitete Akkorde zuerst in die Quellspur; der Rhythmus nimmt sie dann mit (applyRhythm()).
             if (derived) lost = ed.placeSongChords(score, score.tracks[this.index], derived.chords, derived.grips);
             result = applyRhythm(ed.alphaTab, ed.tex, score, this.index, this.rows, library, target);
-        }, target ?? 0, 0);
+        }, target ?? 0, 0, 'Rhythmus abgeleitet');
         if (!result) return;
         const name = trackName(ed.score.tracks[target ?? 0]);
         const message = (target === null ? `Spur „${name}“ als erste Spur angelegt` : `Spur „${name}“ überschrieben`)
