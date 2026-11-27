@@ -1,202 +1,303 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Instrumente (Test)</title>
-<!--
-  Hörprobe aller 128 General-MIDI-Instrumente - Hilfsmittel; gehört nicht zur Anwendung.
-  Das SoundFont des Gitarrenbuchs liegt in vendor/alphatab/soundfont/sonivox.sf2.
--->
-<style>
-  body{font:15px/1.4 system-ui, sans-serif; margin:0; padding:1rem 1rem 6rem; max-width:60rem; margin-inline:auto; color:#222;}
-  h1{font-size:1.3rem; margin:.2rem 0 .8rem;}
-  h2{font-size:1rem; margin:1.4rem 0 .3rem; padding-bottom:.2rem; border-bottom:1px solid #ccc;}
-  .bar{position:sticky; top:0; background:#fff; padding:.6rem 0; border-bottom:1px solid #ccc; display:flex; flex-wrap:wrap; gap:.4rem 1.2rem; align-items:center; z-index:2;}
-  .bar label{display:inline-flex; gap:.3rem; align-items:center; cursor:pointer;}
-  #status{color:#666; min-width:12rem;}
-  ul{list-style:none; margin:0; padding:0;}
-  li{display:flex; align-items:center; gap:.6rem; padding:.2rem 0;}
-  li .no{width:2.2rem; text-align:right; color:#888; font-variant-numeric:tabular-nums;}
-  li .name{flex:1;}
-  li{flex-wrap:wrap;}
-  li .songs{flex:0 0 100%; margin-left:2.8rem; font-size:.8rem; color:#555;}
-  li .songs:empty{display:none;}
-  li.playing{background:#fff3d6;}
-  button{font:inherit; padding:.15rem .7rem; border:1px solid #999; border-radius:5px; background:#f6f6f6; cursor:pointer;}
-  button:disabled{opacity:.5; cursor:default;}
-  textarea{width:100%; height:6rem; margin-top:1.5rem; font:inherit;}
-</style>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1" name="viewport">
+    <title>Instrumente (Test)</title>
+    <!--
+      Hörprobe aller 128 General-MIDI-Instrumente - Hilfsmittel; gehört nicht zur Anwendung.
+      Das SoundFont des Gitarrenbuchs liegt in vendor/alphatab/soundfont/sonivox.sf2.
+    -->
+    <style>
+        body {
+            font: 15px/1.4 system-ui, sans-serif;
+            margin: 0;
+            padding: 1rem 1rem 6rem;
+            max-width: 60rem;
+            margin-inline: auto;
+            color: #222;
+        }
+
+        h1 {
+            font-size: 1.3rem;
+            margin: .2rem 0 .8rem;
+        }
+
+        h2 {
+            font-size: 1rem;
+            margin: 1.4rem 0 .3rem;
+            padding-bottom: .2rem;
+            border-bottom: 1px solid #ccc;
+        }
+
+        .bar {
+            position: sticky;
+            top: 0;
+            background: #fff;
+            padding: .6rem 0;
+            border-bottom: 1px solid #ccc;
+            display: flex;
+            flex-wrap: wrap;
+            gap: .4rem 1.2rem;
+            align-items: center;
+            z-index: 2;
+        }
+
+        .bar label {
+            display: inline-flex;
+            gap: .3rem;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        #status {
+            color: #666;
+            min-width: 12rem;
+        }
+
+        ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        li {
+            display: flex;
+            align-items: center;
+            gap: .6rem;
+            padding: .2rem 0;
+        }
+
+        li .no {
+            width: 2.2rem;
+            text-align: right;
+            color: #888;
+            font-variant-numeric: tabular-nums;
+        }
+
+        li .name {
+            flex: 1;
+        }
+
+        li {
+            flex-wrap: wrap;
+        }
+
+        li .songs {
+            flex: 0 0 100%;
+            margin-left: 2.8rem;
+            font-size: .8rem;
+            color: #555;
+        }
+
+        li .songs:empty {
+            display: none;
+        }
+
+        li.playing {
+            background: #fff3d6;
+        }
+
+        button {
+            font: inherit;
+            padding: .15rem .7rem;
+            border: 1px solid #999;
+            border-radius: 5px;
+            background: #f6f6f6;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: .5;
+            cursor: default;
+        }
+
+        textarea {
+            width: 100%;
+            height: 6rem;
+            margin-top: 1.5rem;
+            font: inherit;
+        }
+    </style>
 </head>
 <body>
 <h1>Instrumente (Test)</h1>
 <div class="bar">
   <span>Phrase:
-    <label><input type="radio" name="phrase" value="melody" checked> Melodie</label>
-    <label><input type="radio" name="phrase" value="vocal"> Gesangslage (D3–C5)</label>
-    <label><input type="radio" name="phrase" value="chord"> Akkord</label>
-    <label><input type="radio" name="phrase" value="low"> Tief</label>
+    <label><input checked name="phrase" type="radio" value="melody"> Melodie</label>
+    <label><input name="phrase" type="radio" value="vocal"> Gesangslage (D3–C5)</label>
+    <label><input name="phrase" type="radio" value="chord"> Akkord</label>
+    <label><input name="phrase" type="radio" value="low"> Tief</label>
   </span>
-  <label>Tempo <input type="range" id="tempo" min="60" max="160" value="100"> <span id="tempoValue">100</span></label>
-  <button type="button" id="stop">Stopp</button>
-  <span id="status">Klänge werden geladen …</span>
+    <label>Tempo <input id="tempo" max="160" min="60" type="range" value="100"> <span id="tempoValue">100</span></label>
+    <button id="stop" type="button">Stopp</button>
+    <span id="status">Klänge werden geladen …</span>
 </div>
 <div id="list"></div>
 <h2>Meine Auswahl</h2>
 <p>Häkchen setzen, hier steht die Liste (Nummer = MIDI-Programm).</p>
-<textarea id="picked" aria-label="Meine Auswahl" readonly></textarea>
+<textarea aria-label="Meine Auswahl" id="picked" readonly></textarea>
 <div id="at" style="position:absolute; left:-9999px; top:0; width:800px;"></div>
 
 <script type="module">
-import * as alphaTabRuntime from '../vendor/alphatab/alphaTab.mjs';
+    import * as alphaTabRuntime from '../vendor/alphatab/alphaTab.mjs';
 
-/** alphaTab mit den Typen aus types/alphatab.d.ts. */
-const alphaTab = /** @type {typeof import('../../types/alphatab')} */ (/** @type {unknown} */ (alphaTabRuntime));
+    /** alphaTab mit den Typen aus types/alphatab.d.ts. */
+    const alphaTab = /** @type {typeof import('../../types/alphatab')} */ (/** @type {unknown} */ (alphaTabRuntime));
 
-/** Deutsche Namen der 128 General-MIDI-Instrumente wie in docs/Instrumente.md, Index = MIDI-Programm (0 bis 127). */
-const INSTRUMENT_NAMES = [
-  'Akustischer Flügel', 'Helles Klavier', 'Elektrischer Flügel', 'Honky-Tonk-Klavier', 'E-Piano 1', 'E-Piano 2',
-  'Cembalo', 'Clavinet', 'Celesta', 'Glockenspiel', 'Spieluhr', 'Vibraphon', 'Marimba', 'Xylophon', 'Röhrenglocken',
-  'Hackbrett', 'Zugriegelorgel', 'Perkussive Orgel', 'Rockorgel', 'Kirchenorgel', 'Harmonium', 'Akkordeon',
-  'Mundharmonika', 'Bandoneon', 'Konzertgitarre (Nylon)', 'Westerngitarre (Stahl)', 'E-Gitarre (Jazz)',
-  'E-Gitarre (clean)', 'E-Gitarre (gedämpft)', 'E-Gitarre (Overdrive)', 'E-Gitarre (Distortion)',
-  'Gitarren-Flageolett', 'Kontrabass (akustisch)', 'E-Bass (Finger)', 'E-Bass (Plektrum)', 'Bundloser Bass',
-  'Slap-Bass 1', 'Slap-Bass 2', 'Synth-Bass 1', 'Synth-Bass 2', 'Violine', 'Bratsche', 'Cello', 'Kontrabass',
-  'Streicher-Tremolo', 'Streicher-Pizzicato', 'Konzertharfe', 'Pauke', 'Streicherensemble 1', 'Streicherensemble 2',
-  'Synth-Streicher 1', 'Synth-Streicher 2', 'Chor „Aah“', 'Stimme „Ooh“', 'Synth-Stimme', 'Orchesterschlag',
-  'Trompete', 'Posaune', 'Tuba', 'Gedämpfte Trompete', 'Waldhorn', 'Blechbläsersatz', 'Synth-Blech 1',
-  'Synth-Blech 2', 'Sopransaxophon', 'Altsaxophon', 'Tenorsaxophon', 'Baritonsaxophon', 'Oboe', 'Englischhorn',
-  'Fagott', 'Klarinette', 'Piccoloflöte', 'Querflöte', 'Blockflöte', 'Panflöte', 'Flaschenblasen', 'Shakuhachi',
-  'Pfeifen', 'Okarina', 'Lead 1 (Rechteck)', 'Lead 2 (Sägezahn)', 'Lead 3 (Dampforgel)', 'Lead 4 (Chiff)',
-  'Lead 5 (Charang)', 'Lead 6 (Stimme)', 'Lead 7 (Quinten)', 'Lead 8 (Bass und Lead)', 'Pad 1 (New Age)',
-  'Pad 2 (warm)', 'Pad 3 (Polysynth)', 'Pad 4 (Chor)', 'Pad 5 (gestrichen)', 'Pad 6 (metallisch)', 'Pad 7 (Halo)',
-  'Pad 8 (Sweep)', 'FX 1 (Regen)', 'FX 2 (Soundtrack)', 'FX 3 (Kristall)', 'FX 4 (Atmosphäre)', 'FX 5 (Helligkeit)',
-  'FX 6 (Kobolde)', 'FX 7 (Echos)', 'FX 8 (Science-Fiction)', 'Sitar', 'Banjo', 'Shamisen', 'Koto', 'Kalimba',
-  'Dudelsack', 'Fiedel', 'Shehnai', 'Glöckchen', 'Agogo', 'Steeldrums', 'Holzblock', 'Taiko-Trommel',
-  'Melodisches Tom', 'Synth-Trommel', 'Rückwärts-Becken', 'Bundgeräusch der Gitarre', 'Atemgeräusch',
-  'Meeresrauschen', 'Vogelgezwitscher', 'Telefonklingeln', 'Hubschrauber', 'Applaus', 'Schuss'
-];
+    /** Deutsche Namen der 128 General-MIDI-Instrumente wie in docs/Instrumente.md, Index = MIDI-Programm (0 bis 127). */
+    const INSTRUMENT_NAMES = [
+        'Akustischer Flügel', 'Helles Klavier', 'Elektrischer Flügel', 'Honky-Tonk-Klavier', 'E-Piano 1', 'E-Piano 2',
+        'Cembalo', 'Clavinet', 'Celesta', 'Glockenspiel', 'Spieluhr', 'Vibraphon', 'Marimba', 'Xylophon', 'Röhrenglocken',
+        'Hackbrett', 'Zugriegelorgel', 'Perkussive Orgel', 'Rockorgel', 'Kirchenorgel', 'Harmonium', 'Akkordeon',
+        'Mundharmonika', 'Bandoneon', 'Konzertgitarre (Nylon)', 'Westerngitarre (Stahl)', 'E-Gitarre (Jazz)',
+        'E-Gitarre (clean)', 'E-Gitarre (gedämpft)', 'E-Gitarre (Overdrive)', 'E-Gitarre (Distortion)',
+        'Gitarren-Flageolett', 'Kontrabass (akustisch)', 'E-Bass (Finger)', 'E-Bass (Plektrum)', 'Bundloser Bass',
+        'Slap-Bass 1', 'Slap-Bass 2', 'Synth-Bass 1', 'Synth-Bass 2', 'Violine', 'Bratsche', 'Cello', 'Kontrabass',
+        'Streicher-Tremolo', 'Streicher-Pizzicato', 'Konzertharfe', 'Pauke', 'Streicherensemble 1', 'Streicherensemble 2',
+        'Synth-Streicher 1', 'Synth-Streicher 2', 'Chor „Aah“', 'Stimme „Ooh“', 'Synth-Stimme', 'Orchesterschlag',
+        'Trompete', 'Posaune', 'Tuba', 'Gedämpfte Trompete', 'Waldhorn', 'Blechbläsersatz', 'Synth-Blech 1',
+        'Synth-Blech 2', 'Sopransaxophon', 'Altsaxophon', 'Tenorsaxophon', 'Baritonsaxophon', 'Oboe', 'Englischhorn',
+        'Fagott', 'Klarinette', 'Piccoloflöte', 'Querflöte', 'Blockflöte', 'Panflöte', 'Flaschenblasen', 'Shakuhachi',
+        'Pfeifen', 'Okarina', 'Lead 1 (Rechteck)', 'Lead 2 (Sägezahn)', 'Lead 3 (Dampforgel)', 'Lead 4 (Chiff)',
+        'Lead 5 (Charang)', 'Lead 6 (Stimme)', 'Lead 7 (Quinten)', 'Lead 8 (Bass und Lead)', 'Pad 1 (New Age)',
+        'Pad 2 (warm)', 'Pad 3 (Polysynth)', 'Pad 4 (Chor)', 'Pad 5 (gestrichen)', 'Pad 6 (metallisch)', 'Pad 7 (Halo)',
+        'Pad 8 (Sweep)', 'FX 1 (Regen)', 'FX 2 (Soundtrack)', 'FX 3 (Kristall)', 'FX 4 (Atmosphäre)', 'FX 5 (Helligkeit)',
+        'FX 6 (Kobolde)', 'FX 7 (Echos)', 'FX 8 (Science-Fiction)', 'Sitar', 'Banjo', 'Shamisen', 'Koto', 'Kalimba',
+        'Dudelsack', 'Fiedel', 'Shehnai', 'Glöckchen', 'Agogo', 'Steeldrums', 'Holzblock', 'Taiko-Trommel',
+        'Melodisches Tom', 'Synth-Trommel', 'Rückwärts-Becken', 'Bundgeräusch der Gitarre', 'Atemgeräusch',
+        'Meeresrauschen', 'Vogelgezwitscher', 'Telefonklingeln', 'Hubschrauber', 'Applaus', 'Schuss'
+    ];
 
-/** Familien der General-MIDI-Programme, je acht Instrumente in Folge (Namen: INSTRUMENT_NAMES). */
-const FAMILIES = ['Klavier', 'Chromatische Perkussion', 'Orgel', 'Gitarre', 'Bass', 'Streicher', 'Ensemble',
-  'Blechbläser', 'Rohrblatt', 'Flöten', 'Synth Lead', 'Synth Pad', 'Synth-Effekte', 'Ethnisch', 'Perkussion', 'Geräusche'];
+    /** Familien der General-MIDI-Programme, je acht Instrumente in Folge (Namen: INSTRUMENT_NAMES). */
+    const FAMILIES = ['Klavier', 'Chromatische Perkussion', 'Orgel', 'Gitarre', 'Bass', 'Streicher', 'Ensemble',
+        'Blechbläser', 'Rohrblatt', 'Flöten', 'Synth Lead', 'Synth Pad', 'Synth-Effekte', 'Ethnisch', 'Perkussion', 'Geräusche'];
 
-/** Tonfolgen in alphaTex (Notenzeile, ohne Gitarrensaiten); der Akkord ist C-Dur. */
-const PHRASES = {
-  melody: 'C4.4 E4.4 G4.4 C5.4 | G4.4 E4.4 (C4 E4 G4).2 |',
-  vocal: 'D3.4 E3.4 D3.4 E3.4 | A3.4 C4.4 G4.4 C5.4 |',
-  chord: '(C4 E4 G4).2 (F4 A4 C5).2 | (G3 B3 D4 G4).2 (C4 E4 G4 C5).2 |',
-  low: 'E2.4 A2.4 D3.4 G3.4 | E3.4 C3.4 (C3 G3 C4).2 |',
-};
+    /** Tonfolgen in alphaTex (Notenzeile, ohne Gitarrensaiten); der Akkord ist C-Dur. */
+    const PHRASES = {
+        melody: 'C4.4 E4.4 G4.4 C5.4 | G4.4 E4.4 (C4 E4 G4).2 |',
+        vocal: 'D3.4 E3.4 D3.4 E3.4 | A3.4 C4.4 G4.4 C5.4 |',
+        chord: '(C4 E4 G4).2 (F4 A4 C5).2 | (G3 B3 D4 G4).2 (C4 E4 G4 C5).2 |',
+        low: 'E2.4 A2.4 D3.4 G3.4 | E3.4 C3.4 (C3 G3 C4).2 |',
+    };
 
-const byId = id => document.getElementById(id);
-const status = byId('status');
-/** Instrument, das nach dem Laden des MIDI spielen soll; null, wenn nichts ansteht. */
-let pending = null;
-/** Zeile des Instruments, das gewählt wurde bzw. gerade spielt. */
-let playingRow = null;
+    const byId = id => document.getElementById(id);
+    const status = byId('status');
+    /** Instrument, das nach dem Laden des MIDI spielen soll; null, wenn nichts ansteht. */
+    let pending = null;
+    /** Zeile des Instruments, das gewählt wurde bzw. gerade spielt. */
+    let playingRow = null;
 
-const api = new alphaTab.AlphaTabApi(byId('at'), {
-  core: {fontDirectory: new URL('../vendor/alphatab/font/', import.meta.url).href},
-  display: {layoutMode: alphaTab.LayoutMode.Page},
-  player: {
-    playerMode: alphaTab.PlayerMode.EnabledSynthesizer,
-    // Die Noten sind unsichtbar: kein Mitscrollen zum Cursor (sonst springt die Seite beim Abspielen nach unten).
-    scrollMode: alphaTab.ScrollMode.Off,
-    enableCursor: false,
-    enableAnimatedBeatCursor: false,
-    soundFont: new URL('../vendor/alphatab/soundfont/sonivox.sf2', import.meta.url).href,
-  },
-});
-api.soundFontLoad.on(e => { status.textContent = `Klänge werden geladen … ${Math.round(e.loaded / e.total * 100)} %`; });
-api.playerReady.on(() => {
-  if(pending !== null){
-    pending = null;
-    api.play();
-  }
-});
-api.playerStateChanged.on(e => {
-  const playing = e.state === alphaTab.synth.PlayerState.Playing;
-  playingRow?.classList.toggle('playing', playing);
-  status.textContent = playing ? 'Spielt …' : 'Bereit';
-});
-api.error.on(err => { status.textContent = 'Fehler: ' + (err.message || err); });
+    const api = new alphaTab.AlphaTabApi(byId('at'), {
+        core: {fontDirectory: new URL('../vendor/alphatab/font/', import.meta.url).href},
+        display: {layoutMode: alphaTab.LayoutMode.Page},
+        player: {
+            playerMode: alphaTab.PlayerMode.EnabledSynthesizer,
+            // Die Noten sind unsichtbar: kein Mitscrollen zum Cursor (sonst springt die Seite beim Abspielen nach unten).
+            scrollMode: alphaTab.ScrollMode.Off,
+            enableCursor: false,
+            enableAnimatedBeatCursor: false,
+            soundFont: new URL('../vendor/alphatab/soundfont/sonivox.sf2', import.meta.url).href,
+        },
+    });
+    api.soundFontLoad.on(e => {
+        status.textContent = `Klänge werden geladen … ${Math.round(e.loaded / e.total * 100)} %`;
+    });
+    api.playerReady.on(() => {
+        if (pending !== null) {
+            pending = null;
+            api.play();
+        }
+    });
+    api.playerStateChanged.on(e => {
+        const playing = e.state === alphaTab.synth.PlayerState.Playing;
+        playingRow?.classList.toggle('playing', playing);
+        status.textContent = playing ? 'Spielt …' : 'Bereit';
+    });
+    api.error.on(err => {
+        status.textContent = 'Fehler: ' + (err.message || err);
+    });
 
-/**
- * Spielt die gewählte Phrase mit einem Instrument.
- * @param {number} program MIDI-Programm 0 bis 127
- * @param {HTMLElement} row Zeile des Instruments
- */
-function play(program, row){
-  const phrase = document.querySelector('input[name="phrase"]:checked').value;
-  api.stop();
-  playingRow?.classList.remove('playing');
-  playingRow = row;
-  pending = program;
-  status.textContent = 'Lädt …';
-  api.tex(`\\tempo ${byId('tempo').value} \\ts 4 4 \\track "Test" \\instrument ${program} \\staff{score} . ${PHRASES[phrase]}`);
-}
+    /**
+     * Spielt die gewählte Phrase mit einem Instrument.
+     * @param {number} program MIDI-Programm 0 bis 127
+     * @param {HTMLElement} row Zeile des Instruments
+     */
+    function play(program, row) {
+        const phrase = document.querySelector('input[name="phrase"]:checked').value;
+        api.stop();
+        playingRow?.classList.remove('playing');
+        playingRow = row;
+        pending = program;
+        status.textContent = 'Lädt …';
+        api.tex(`\\tempo ${byId('tempo').value} \\ts 4 4 \\track "Test" \\instrument ${program} \\staff{score} . ${PHRASES[phrase]}`);
+    }
 
-/** Zeichnet die Liste aller Instrumente. */
-function renderList(){
-  byId('list').innerHTML = FAMILIES.map((family, f) => `<h2>${f * 8} – ${f * 8 + 7}: ${family}</h2><ul>${
-    INSTRUMENT_NAMES.slice(f * 8, f * 8 + 8).map((name, i) => {
-      const program = f * 8 + i;
-      return `<li data-program="${program}">
+    /** Zeichnet die Liste aller Instrumente. */
+    function renderList() {
+        byId('list').innerHTML = FAMILIES.map((family, f) => `<h2>${f * 8} – ${f * 8 + 7}: ${family}</h2><ul>${
+            INSTRUMENT_NAMES.slice(f * 8, f * 8 + 8).map((name, i) => {
+                const program = f * 8 + i;
+                return `<li data-program="${program}">
         <input type="checkbox" aria-label="${name} übernehmen"><span class="no">${program}</span>
         <span class="name">${name}</span><button type="button">▶ Anhören</button><span class="songs"></span></li>`;
-    }).join('')}</ul>`).join('');
-}
-
-/** Schreibt die angehakten Instrumente in das Textfeld unten. */
-function showPicked(){
-  byId('picked').value = [...document.querySelectorAll('li input:checked')].map(c => {
-    const li = c.closest('li');
-    return `${li.dataset.program} ${li.querySelector('.name').textContent}`;
-  }).join(',\n');
-}
-
-renderList();
-
-/** So viele Spuren nennt die Zeile eines Instruments höchstens. */
-const SHOWN = 6;
-
-/**
- * Sucht in allen Songs, welche Spur welches Programm nutzt, und schreibt es unter die Instrumente. Gelesen werden die
- * Programme der Spuren; Instrumentwechsel mitten im Song zählen nicht.
- */
-async function showUsage(){
-  const api = '../api/';
-  const {songs} = await (await fetch(api + 'songs.php')).json();
-  /** @type {Map<number, string[]>} */
-  const usage = new Map();
-  for(const [k, song] of songs.entries()){
-    status.textContent = `Songs werden gelesen … ${k + 1} / ${songs.length}`;
-    const res = await fetch(`${api}score.php?slug=${encodeURIComponent(song.slug)}`);
-    if(!res.ok) continue;
-    const score = alphaTab.importer.ScoreLoader.loadAlphaTex(await res.text());
-    for(const track of score.tracks){
-      const list = usage.get(track.playbackInfo.program) ?? [];
-      list.push(`${song.artist ? song.artist + ' – ' : ''}${song.title} (${track.name})`);
-      usage.set(track.playbackInfo.program, list);
+            }).join('')}</ul>`).join('');
     }
-  }
-  for(const [program, list] of usage){
-    const el = document.querySelector(`li[data-program="${program}"] .songs`);
-    el.textContent = `Verwendet in ${list.length} ${list.length === 1 ? 'Spur' : 'Spuren'}: ${list.slice(0, SHOWN).join('; ')}${
-      list.length > SHOWN ? ` … und ${list.length - SHOWN} weitere (Mouseover: alle)` : ''}`;
-    el.title = list.join('\n');
-  }
-  status.textContent = 'Bereit';
-}
-showUsage().catch(err => { status.textContent = 'Songs nicht gelesen: ' + err.message; });
-byId('list').addEventListener('click', e => {
-  const li = e.target.closest('li');
-  if(li && e.target.tagName === 'BUTTON') play(Number(li.dataset.program), li);
-});
-byId('list').addEventListener('change', showPicked);
-byId('stop').addEventListener('click', () => api.stop());
-byId('tempo').addEventListener('input', () => { byId('tempoValue').textContent = byId('tempo').value; });
+
+    /** Schreibt die angehakten Instrumente in das Textfeld unten. */
+    function showPicked() {
+        byId('picked').value = [...document.querySelectorAll('li input:checked')].map(c => {
+            const li = c.closest('li');
+            return `${li.dataset.program} ${li.querySelector('.name').textContent}`;
+        }).join(',\n');
+    }
+
+    renderList();
+
+    /** So viele Spuren nennt die Zeile eines Instruments höchstens. */
+    const SHOWN = 6;
+
+    /**
+     * Sucht in allen Songs, welche Spur welches Programm nutzt, und schreibt es unter die Instrumente. Gelesen werden die
+     * Programme der Spuren; Instrumentwechsel mitten im Song zählen nicht.
+     */
+    async function showUsage() {
+        const api = '../api/';
+        const {songs} = await (await fetch(api + 'songs.php')).json();
+        /** @type {Map<number, string[]>} */
+        const usage = new Map();
+        for (const [k, song] of songs.entries()) {
+            status.textContent = `Songs werden gelesen … ${k + 1} / ${songs.length}`;
+            const res = await fetch(`${api}score.php?slug=${encodeURIComponent(song.slug)}`);
+            if (!res.ok) continue;
+            const score = alphaTab.importer.ScoreLoader.loadAlphaTex(await res.text());
+            for (const track of score.tracks) {
+                const list = usage.get(track.playbackInfo.program) ?? [];
+                list.push(`${song.artist ? song.artist + ' – ' : ''}${song.title} (${track.name})`);
+                usage.set(track.playbackInfo.program, list);
+            }
+        }
+        for (const [program, list] of usage) {
+            const el = document.querySelector(`li[data-program="${program}"] .songs`);
+            el.textContent = `Verwendet in ${list.length} ${list.length === 1 ? 'Spur' : 'Spuren'}: ${list.slice(0, SHOWN).join('; ')}${
+                list.length > SHOWN ? ` … und ${list.length - SHOWN} weitere (Mouseover: alle)` : ''}`;
+            el.title = list.join('\n');
+        }
+        status.textContent = 'Bereit';
+    }
+
+    showUsage().catch(err => {
+        status.textContent = 'Songs nicht gelesen: ' + err.message;
+    });
+    byId('list').addEventListener('click', e => {
+        const li = e.target.closest('li');
+        if (li && e.target.tagName === 'BUTTON') play(Number(li.dataset.program), li);
+    });
+    byId('list').addEventListener('change', showPicked);
+    byId('stop').addEventListener('click', () => api.stop());
+    byId('tempo').addEventListener('input', () => {
+        byId('tempoValue').textContent = byId('tempo').value;
+    });
 </script>
 </body>
 </html>

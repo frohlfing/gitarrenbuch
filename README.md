@@ -59,18 +59,18 @@ Die Partitur (Noten und Tabs) wird mit [alphaTab](https://alphatab.net) angezeig
    Unter Hetzner-Webspace:
    - GD ist standardmäßig aktiviert. Falls nicht, kann dies per KonsoleH eingerichtet werden.
 
-7. **yt-dlp, Deno und ffmpeg** für `bin/audio.php` (holt die Audiospur von YouTube). Sie laufen nur lokal auf dem
+7. **yt-dlp, Deno und ffmpeg** für `bin/fetchaudio.php` (holt die Audiospur von YouTube). Sie laufen nur lokal auf dem
    Windows-Rechner, nicht auf dem Server, und müssen im `PATH` liegen:
    - yt-dlp: `yt-dlp.exe` aus dem offiziellen Release
      (`https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe`), z. B. nach `C:\Program Files\yt-dlp`.
-     YouTube ändert sich häufig; aktualisiert wird mit `php bin/audio.php --update` (ruft `yt-dlp -U` auf).
+     YouTube ändert sich häufig; aktualisiert wird mit `php bin/fetchaudio.php --update` (ruft `yt-dlp -U` auf).
    - Deno: `deno.exe` aus `https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip`,
      am besten neben `yt-dlp.exe`. yt-dlp braucht eine JavaScript-Laufzeit, um die Download-Adressen von YouTube zu
      entschlüsseln; ohne sie warnt es, und Formate fehlen. Node ginge auch, aber erst in neueren Versionen als 20.9.
    - ffmpeg (mit ffprobe): z. B. nach `C:\Program Files\ffmpeg\bin`.
      
 8. **alphaTab** für die Partitur. Liegt fertig unter `public/vendor/alphatab/` (1.8.4 aus npm, siehe `VERSION.txt`).   
-   **ACHTUNG:** `alphaTab.core.mjs` wurde angepasst (siehe Kommentar ganz oben in der Datei). Bei einem Update von 
+   **ACHTUNG:** `alphaTab.core.mjs` ist angepasst (siehe Kommentar ganz oben in der Datei). Bei einem Update von 
    alphaTab prüfen, ob die Änderungen noch nötig sind, und sie sonst neu einfügen.
 
 ### Lokalen Testserver unter XAMPP (Windows) einrichten
@@ -151,7 +151,6 @@ Die Partitur (Noten und Tabs) wird mit [alphaTab](https://alphatab.net) angezeig
 ```
 gitarrenbuch/                         # Projektroot
  ├── data/                            # Außerhalb des Document Root, kein direkter Browser-Zugriff möglich
- │    ├── chords.json                 # Akkordkatalog (wird von public/api/lib/chords.php automatisch aktualisiert)
  │    ├── patterns.json               # Pattern-Katalog
  │    ├── songs/                      # Ein Unterordner pro Song
  │    │    └── <slug>/                # Slug aus Interpret + Titel, z. B. "bob-marley-three-little-birds"
@@ -162,26 +161,26 @@ gitarrenbuch/                         # Projektroot
  │    │         ├── cover.jpg         # Albumcover (500 px)
  │    │         ├── upload/           # Hochgeladenes Rohmaterial (GP-, ChordPro-, Textdateien, PDFs)
  │    │         └── history/          # Speicherhistorie (Backup beim Speichern)
- │    └── backup/                     # Nur lokal: Die von bin/audio.php heruntergeladenen YouTube-Dateien
+ │    └── backup/                     # Nur lokal: Die von bin/fetchaudio.php heruntergeladenen YouTube-Dateien
  ├── bin/                             # Skripte für die Kommandozeile (lokal, php bin/…)
- │    ├── audio.php                   # YouTube → audio.mp3, lädt per API auf den Server hoch (läuft lokal)
- │    └── build_audio_portable.cmd    # audio.php samt PHP, yt-dlp, Deno und ffmpeg als Paket
+ │    ├── build_fetchaudio_portable.cmd # fetchaudio.php samt PHP, yt-dlp, Deno und ffmpeg als Paket
+ │    └── fetchaudio.php              # YouTube → audio.mp3, lädt per API auf den Server hoch (läuft lokal)
  ├── docs/                            # Projektdokumentation (Markdown)
  ├── public/                          # Document Root
  │    ├── api/                        # API-Endpunkte
  │    │    ├── lib/                   # Gemeinsam genutzte Hilfsfunktionen der API-Endpunkte
- │    │    │    ├── chords.php        # Akkordkatalog (die Akkorde der Songs)
- │    │    │    ├── cover.php         # Cover suchen, übernehmen, speichern
+ │    │    │    ├── chordcatalog.php  # Akkord-Katalog (die Akkorde der Songs)
+ │    │    │    ├── coverstore.php    # Cover suchen, übernehmen, speichern
  │    │    │    ├── crud.php          # Read/Write/Rename/Delete-Logik + Validierung
  │    │    │    ├── fetch.php         # http_get(): curl, sonst file_get_contents()-Fallback
  │    │    │    ├── file_store.php    # Noten und Rohmaterial ablegen, Dateien mit ETag ausliefern
  │    │    │    ├── gp_file.php       # GP-Format erkennen, Audiospur herauslösen
  │    │    │    ├── http.php          # JSON-Response-Helper, Token-Prüfung
  │    │    │    ├── slug.php          # slugify() + Eindeutigkeits-Check
- │    │    │    ├── uploads.php       # Uploads (Quelle und Beschreibung, Direktlink laden)
- │    │    │    └── youtube.php       # Video-ID, Titel und Länge eines YouTube-Videos
+ │    │    │    ├── uploadstore.php   # Uploads (Quelle und Beschreibung, Direktlink laden)
+ │    │    │    └── youtubeinfo.php   # Video-ID, Titel und Länge eines YouTube-Videos
  │    │    ├── audio.php              # audio.mp3 ausliefern
- │    │    ├── chords.php             # Akkordkatalog ausliefern
+ │    │    ├── chords.php             # Akkord-Katalog ausliefern
  │    │    ├── cover.php              # Cover ausliefern, suchen, übernehmen, hochladen, entfernen
  │    │    ├── import.php             # Neuen Song mit Noten anlegen
  │    │    ├── leadsheet.php          # Angaben für das Leadsheet
@@ -194,33 +193,71 @@ gitarrenbuch/                         # Projektroot
  │    │    ├── info.php               # phpinfo()
  │    │    ├── instruments.html       # Hörprobe aller 128 General-MIDI-Instrumente mit dem SoundFont
  │    │    └── prioritaeten.html      # Vergleicht Einteilungen der Griffe in Prioritäten
+ │    ├── css/                        # Stylesheets, je Seite eins
+ │    │    ├── base.css               # Farben, Schrift, Knöpfe, Formulare, Overlay, Dialoge, Menüs, Reiter
+ │    │    ├── editor.css             # Bearbeitungsseite und seine Dialoge (erst mit dem Stift geladen)
+ │    │    ├── overview.css           # Übersichtsseite mit Akkord-Katalog, Pattern-Katalog und Griffbrett
+ │    │    └── player.css             # Player und alles, was von dort erreichbar ist (Stammdaten, Leadsheet, Druck)
  │    ├── js/                         # ES-Module des Frontends (ohne Bundler, von app.js importiert)
- │    │    ├── base.js                # API-Zugriff, Akkorde und Griffe, Griffbilder (SVG), Griffbrett, Symbole, Marken
- │    │    ├── chordcheck.js          # Funktion "Bereinigen/Griffe prüfen"
- │    │    ├── chorddetect.js         # Akkorde aus einer Spur und der Audiospur ableiten
- │    │    ├── chordfile.js           # Liedtext und Akkorde aus einer Chord-Datei lesen
- │    │    ├── chordgrips.js          # Sucht passende Griffe zu einem Akkordnamen 
- │    │    ├── chordtheory.js         # Zerlegt einen Akkordnamen in seine Töne (Regeln aus docs/Musiktheorie.md)
- │    │    ├── conflicts.js           # Konfliktlöser für den Importer (Regeln im Kopf der Datei)
- │    │    ├── editor.js              # Bearbeitungsmodus: Toolbar, Panels, Maus und Cursor, Tastenkürzel
- │    │    ├── library.js             # Kachelübersicht, Formulare (Song, Import, Cover, Text), Overlay
- │    │    ├── notation.js            # Noten lesen und schreiben, Bearbeiten, Transponieren
- │    │    ├── pitchdetect.js         # Tonhöhe der Melodie aus der Audiospur erkennen (für Dialog "Melodie ableiten")
- │    │    ├── playback.js            # Player, Mixer mit Audiospur, Sync-Editor
- │    │    ├── rhythmdialog.js        # Dialog "Rhythmus ableiten"
- │    │    ├── rhythmhint.js          # Regelwerk für Rhythmushinweis-Generierung
- │    │    ├── sheet.js               # Leadsheet-Generator
- │    │    ├── textview.js            # Ansicht "Text & Akkorde"
- │    │    ├── timingdialog.js        # Dialog "Metrum umschreiben"
- │    │    ├── transposedialog.js     # Dialog "Transponieren"
- │    │    └── uploads.js             # Dialog "Uploads"
+ │    │    ├── lib/                   # Ohne DOM (darf nur lib/ importieren)
+ │    │    │    ├── api.js            # Zugriff auf die API, Token, Marken der Übersichtsseite
+ │    │    │    ├── chordcheck.js     # Funktion "Bereinigen/Griffe prüfen"
+ │    │    │    ├── chorddetect.js    # Akkorde aus einer Spur und der Audiospur ableiten
+ │    │    │    ├── chordfile.js      # Liedtext und Akkorde aus einer Chord-Datei lesen
+ │    │    │    ├── chordgrips.js     # Sucht passende Griffe zu einem Akkordnamen
+ │    │    │    ├── chords.js         # Akkorde und Griffe, Transponieren von Namen und Tonarten, Tonart-Erkennung
+ │    │    │    ├── chordtheory.js    # Zerlegt einen Akkordnamen in seine Töne (Regeln aus docs/Musiktheorie.md)
+ │    │    │    ├── conflicts.js      # Konfliktlöser für den Importer (Regeln im Kopf der Datei)
+ │    │    │    ├── format.js         # HTML maskieren, Zeiten formatieren
+ │    │    │    ├── notation.js       # Noten lesen und schreiben, Bearbeiten, Transponieren
+ │    │    │    ├── patterns.js       # Strumming und Picking Patterns
+ │    │    │    ├── pitchdetect.js    # Tonhöhe der Melodie aus der Audiospur erkennen
+ │    │    │    ├── rhythmhint.js     # Regelwerk für Rhythmushinweis-Generierung
+ │    │    │    ├── sheetmodel.js     # Angaben für das Leadsheet (score.json), Abschnitte der Noten
+ │    │    │    ├── songs.js          # Bestand aller Songs im Browser (SONGS), Stammdaten ändern
+ │    │    │    └── textmodel.js      # Inhalt der Ansicht "Text & Akkorde"
+ │    │    ├── ui/                    # Bausteine der Oberfläche (darf lib/ und ui/ importieren)
+ │    │    │    ├── chorddiagram.js   # Griffbilder (SVG)
+ │    │    │    ├── credit.js         # Hinweis auf alphaTab mit Logo
+ │    │    │    ├── fbdiagram.js      # Griffbrett als SVG (fretboard diagram)
+ │    │    │    ├── form.js           # Helfer für Formulare in Dialogen
+ │    │    │    ├── icons.js          # Symbole (SVG) und Zeichen der Notenschrift
+ │    │    │    ├── overlay.js        # Overlay für alle Dialoge: öffnen, stapeln, schließen
+ │    │    │    ├── sheetview.js      # Leadsheet-Generator (HTML), Einpassen, Drucken, Tabs von alphaTab
+ │    │    │    └── textview.js       # Ansicht "Text & Akkorde" als HTML
+ │    │    ├── pages/                 # Alle Seiten (darf alles importieren)
+ │    │    │    ├── editor.js         # Bearbeitungsseite: Toolbar, Panels, Maus, Cursor, Tastenkürzel (nachgeladen)
+ │    │    │    ├── overview.js       # Übersichtsseite: Kachelraster, Suche, Filter, Sortierung
+ │    │    │    └── player.js         # Playerseite: Mixer mit Audiospur, Sync-Editor (nachgeladen)
+ │    │    └── dialogs/               # Alle Dialoge (werden beim Öffnen nachgeladen; darf alles importieren)
+ │    │         ├── brush.js          # "Kopieren" (Pinsel)
+ │    │         ├── chord.js          # "Akkord" (Name und Griff)
+ │    │         ├── chordcatalog.js   # "Akkorde" (Menü ☰ der Übersichtsseite): Akkord-Katalog
+ │    │         ├── cover.js          # "Cover" (aus den Stammdaten)
+ │    │         ├── display.js        # "Darstellung" (Player)
+ │    │         ├── fretboard.js      # "Griffbrett" (Menü ☰ der Übersichtsseite)
+ │    │         ├── gripcheck.js      # "Griffe prüfen" (Menü Bereinigen)
+ │    │         ├── history.js        # "Verlauf"
+ │    │         ├── import.js         # "Song importieren"
+ │    │         ├── leadsheet.js      # "Leadsheet" mit Pattern-Katalog und Abschnittsvergleich
+ │    │         ├── melody.js         # "Melodie ableiten"
+ │    │         ├── movecontent.js    # "Akkorde/Liedtext nach …" (Spuren)
+ │    │         ├── patterncatalog.js # "Patterns" (Menü ☰ der Übersichtsseite): Pattern-Katalog
+ │    │         ├── rhythm.js         # "Rhythmus ableiten"
+ │    │         ├── save.js           # "Speichern", "Änderungen speichern?", "Speichern nicht möglich"
+ │    │         ├── shortcuts.js      # "Tastenkürzel"
+ │    │         ├── songform.js       # "Stammdaten" bzw. "Neuer Song"
+ │    │         ├── timing.js         # "Metrum umschreiben"
+ │    │         ├── trackimport.js    # "Spur aus Guitar-Pro-Datei importieren"
+ │    │         ├── tracks.js         # "Spuren"
+ │    │         ├── transpose.js      # "Transponieren"
+ │    │         └── uploads.js        # "Uploads"
  │    ├── vendor/                     # JS-Bibliotheken von anderen Autoren
  │    │    ├── alphatab/              # alphaTab 1.8.4 (MPL-2.0), alphaTab.core.mjs angepasst, s. Kommentar in Datei
  │    │    ├── qrcode/                # QR-Codes für das Leadsheet (MIT)
  │    │    └── signalsmith/           # Zeitdehnung der Audiospur im Mixer (MIT)
  │    ├── .htaccess                   # Apache Zugriffsschutz
  │    ├── .htaccess.example           # Vorlage für Apache Zugriffsschutz
- │    ├── app.css                     # CSS-Styles für das Frontend
  │    ├── app.js                      # Einstieg des Frontends
  │    ├── favicon.svg                 # Browser-Tab-Icon (Gitarre)
  │    └── index.html                  # Frontend (lädt/schreibt ausschließlich über /api/*)
@@ -264,12 +301,12 @@ abdeckt.
 | DELETE  | `/api/songs.php?slug=xyz`             | Song samt Ordner (Rohmaterial inklusive) löschen                                                                                            |
 | POST    | `/api/import.php`                     | Neuen Song anlegen (`multipart/form-data`: `meta` = JSON wie bei PUT `songs.php`, `score` = alphaTex, `file` = Original-GP-Datei, optional) |
 | GET     | `/api/score.php?slug=xyz`             | Noten `score.atex` ausliefern (für alphaTab)                                                                                                |
-| GET     | `/api/score.php?slug=xyz&history=1`   | Liste der früheren Fassungen der Noten (id, time, size), die neueste zuerst (Knopf "Verlauf" im Bearbeitungsmodus)                          |
+| GET     | `/api/score.php?slug=xyz&history=1`   | Liste der früheren Fassungen der Noten (id, time, size), die neueste zuerst (Knopf "Verlauf" auf der Bearbeitungsseite)                          |
 | GET     | `/api/score.php?slug=xyz&version=ID`  | Ein früherer Stand als alphaTex (id aus der Liste)                                                                                          |
 | DELETE  | `/api/score.php?slug=xyz&version=ID`  | Einen früheren Stand löschen (Noten und Angaben für das Leadsheet); Antwort: die übrigen                                                    |
-| PUT     | `/api/score.php?slug=xyz`             | Noten ersetzen (Body: alphaTex als `text/plain`; Bearbeitungsmodus), alte Fassung nach `history/`. Nur für Songs mit Noten                  |
+| PUT     | `/api/score.php?slug=xyz`             | Noten ersetzen (Body: alphaTex als `text/plain`; Bearbeitungsseite), alte Fassung nach `history/`. Nur für Songs mit Noten                  |
 | GET     | `/api/audio.php?slug=xyz`             | Audiospur `audio.mp3` ausliefern                                                                                                            |
-| PUT     | `/api/audio.php?slug=xyz`             | Audiospur ersetzen (Body: die MP3 als `audio/mpeg`; nutzt `bin/audio.php`)                                                                  |
+| PUT     | `/api/audio.php?slug=xyz`             | Audiospur ersetzen (Body: die MP3 als `audio/mpeg`; nutzt `bin/fetchaudio.php`)                                                                  |
 | GET     | `/api/cover.php?slug=xyz`             | Cover `cover.jpg` ausliefern                                                                                                                |
 | GET     | `/api/cover.php?artist=…&title=…`     | Cover bei Deezer und iTunes suchen (`{"results": [...]}`, Deezer zuerst)                                                                    |
 | PUT     | `/api/cover.php?slug=xyz`             | Cover aus der Suche übernehmen (Body: `{"url": "…"}`, nur Bildserver von Deezer und iTunes)                                                 |
@@ -333,13 +370,13 @@ Dokumentation siehe https://alphatab.net/docs/alphatex/syntax.
   Album, Text, Musik, Copyright, Tab-Autor, Anweisungen).
 - `notes`: Notizen der Stammdaten, Freitext (Standard: `null`).
 - `sources`: Herkunft des Rohmaterials (`youtube`, `https://www.youtube.com/watch?v=<ID>`).
-  Ändert sich die Adresse, wird `audio.mp3` entfernt, damit audio.php die Änderung erkennt und eine neue audio.mp3 
+  Ändert sich die Adresse, wird `audio.mp3` entfernt, damit bin/fetchaudio.php die Änderung erkennt und eine neue audio.mp3 
   erzeugt. Wird sie nur gelöscht, bleibt die Audiospur stehen (Standard: `{}`).
 - `youtubeSeconds`: Länge des YouTube-Clips in Sekunden. Das Formular ermittelt sie nur, wenn sich die Adresse ändert
   (Standard: `null`, immer ohne YouTube-Quelle).
 - `slug`: Name des Songordners. Ändern sich Interpret oder Titel, wird der Ordner umbenannt.
 - `created`, `updated`: Zeitpunkt des Anlegens und der letzten Änderung (ISO 8601).
-- `favorite`: `true`, wenn der Song Favorit ist (siehe "Übersicht") (Standard: fehlt, kein Favorit).
+- `favorite`: `true`, wenn der Song Favorit ist (siehe "Übersichtsseite") (Standard: fehlt, kein Favorit).
 - `level`: Einstufung `"can"`, `"practice"` oder `"cannot"` (kann ich, übe ich gerade, kann ich nicht) (Standard:
   fehlt, nicht eingestuft).
 - `trackDefaults`: Vorgaben für "Spur anzeigen" und "Lautsprecher aus" je Spur in der Reihenfolge der Spuren. 
@@ -414,15 +451,22 @@ Die Regeln zu den Feldern (Pflichtfelder, Wertebereiche) stehen in `public/api/l
 
 ### Ladevorgang
 
-1. **Statische Assets**: `favicon.svg`, `app.css` und `app.js`. `app.js` ist ein ES-Modul und importiert die Module
-   aus `js/`. Alle tragen einen Versionszähler (`?v=…`) gegen alte Fassungen im Browser-Cache.
+1. **Statische Assets**: `favicon.svg`, die Stylesheets `css/base.css`, `css/overview.css` und `css/player.css`
+   (`css/editor.css` erst mit dem Stift) und `app.js`. `app.js` ist ein ES-Modul und importiert die Module
+   aus `js/`. Alle tragen einen Versionszähler (`?v=…`) gegen alte Fassungen im Browser-Cache; für die Module unter
+   `js/` hängt ihn die Import-Map in `index.html` an (ein neues Modul dort eintragen).
 2. **`GET api/songs.php`** lädt alle Songs. Das ist der einzige Request beim Start; schlägt er fehl, erscheint eine
    Fehlermeldung.
-3. Beim Rendern der Übersicht bekommt jeder Song mit Cover ein `<img src="api/cover.php?slug=…&v=…" loading="lazy">`. 
+3. Beim Rendern der Übersichtsseite bekommt jeder Song mit Cover ein `<img src="api/cover.php?slug=…&v=…" loading="lazy">`. 
    Dadurch fordert der Browser die Covers an, aber wegen `loading="lazy"` nur die, die tatsächlich (nahe) im sichtbaren 
    Viewport liegen; der Rest folgt erst beim Scrollen. 
 4. Beim Öffnen eines Songs folgen `GET api/score.php` (die Noten als alphaTex), alphaTab, die Notenschrift und der 
    SoundFont (Lazy Loading).
+5. Die Übersichtsseite lädt nur, was sie braucht (rund 190 KB JavaScript). Player und Noten (`pages/player.js`,
+   `lib/notation.js`) kommen erst mit dem ersten Song, die Bearbeitungsseite (`pages/editor.js`) lädt erst der Stift,
+   die Dialoge in `dialogs/` erst ihr Knopf (`import()`). Ein Modul lädt der Browser je Seitenaufruf nur einmal.
+   Regel für die Ordner: `lib/` importiert nur `lib/`, `ui/` nur `lib/` und `ui/`; `pages/` und `dialogs/` dürfen
+   alles.
 
 ### Zugriffsschutz 
 
@@ -443,7 +487,7 @@ a) der Server das gespeicherte Token ablehnt (401) – dann wird es automatisch 
 b) du es manuell löschst, z. B. in den Browser-DevTools mit `localStorage.removeItem('gitarrenbuch_api_token')` oder
    über "Website-Daten löschen".
 
-### Startseite / Übersichtsseite
+### Übersichtsseite
 
 #### Importer
 
@@ -453,7 +497,7 @@ Der normale Weg zu einem neuen Song:
    ausgewählt (GP3 bis GP8, z. B. von [Ultimate Guitar](https://www.ultimate-guitar.com/explore?type[]=Pro), Tabs
    vom Typ "Guitar Pro" über "Download"). Die Seite des Tabs lässt sich gleich als "Quelle für Guitar-Pro-Datei"
    eintragen und wird mit gespeichert.
-2. **Audio hinzufügen**: YouTube-URL im Bearbeitungsmodus im unteren Panel "Audio" eintragen, dann lokal `bin/audio.php`
+2. **Audio hinzufügen**: YouTube-URL auf der Bearbeitungsseite im unteren Panel "Audio" eintragen, dann lokal `bin/fetchaudio.php`
    starten (siehe "Audio von YouTube").
 3. **Bearbeiten und spielen.**
 
@@ -512,7 +556,7 @@ Reihenfolge, steht im Kopf von `conflicts.js` und bei `cleanImportedScore()`.
 - **Ein Akkord ist Name plus Griff, je Name ein Griff:** Passen beide nicht zusammen, gewinnt der Name, denn ein Griff
   allein ist mehrdeutig (`x02210` ist Am, aber auch C6/A). Unbekannte Namen werden aus dem Griff bestimmt oder
   vereinfacht. Zwei Griffe desselben Akkords heißen z. B. "G" und "G*". Jede Spur hat je Akkordname ein Griffbild,
-  den Standardgriff des Akkordkatalogs; nur Akkorde, die der Katalog nicht kennt, behalten ihren Griff aus der Datei.
+  den Standardgriff des Akkord-Katalogs; nur Akkorde, die der Katalog nicht kennt, behalten ihren Griff aus der Datei.
 - **Triolen-Feeling nur als Shuffle:** Achtel-Varianten werden Shuffle, Sechzehntel-Varianten fallen weg.
 - **Volle Takte:** Zu kurze Takte werden mit Pausen aufgefüllt, zu lange gekürzt.
 - **Gleiche Lautstärke:** Alle Spuren sind gleich laut, ohne Dynamik und Automationen; den Rest regelt der Mixer.
@@ -563,7 +607,7 @@ tragen Notennamen oder Intervalle und sind je Intervall eingefärbt; Klammern fa
 
 Die Ansicht dientss dazu, das Griffbrett kennenzulernen.
 
-### Playermodus
+### Playerseite
 
 #### Bildschirmsperre deaktivieren
 
@@ -591,7 +635,7 @@ Die API gibt es nur über HTTPS (oder `localhost`); ohne sie bleibt der Bildschi
 #### Stammdaten-Dialog
 
 Die Stammdaten sind Titel, Interpret, Cover, Genre, Bewertung, Baustelle und Notizen; hier lässt sich der Song auch
-löschen. Tonart, Capo, Tempo und Tuning stehen in den Noten und werden im Bearbeitungsmodus geändert. Nur beim
+löschen. Tonart, Capo, Tempo und Tuning stehen in den Noten und werden auf der Bearbeitungsseite geändert. Nur beim
 Anlegen eines Songs fragt der Dialog sie ab und legt damit leere Noten an. Ändern sich Titel oder Interpret, ändert
 sich auch der Slug.
 
@@ -606,17 +650,17 @@ der Audiospur samt Sync-Punkten. So lässt sich der Song in Guitar Pro öffnen u
 
 #### Leadsheet drucken
 
-Gedruckt wird das Leadsheet so, wie es im Leadsheet-Dialog des Bearbeitungsmodus eingerichtet ist, auch als PDF.
+Gedruckt wird das Leadsheet so, wie es im Leadsheet-Dialog der Bearbeitungsseite eingerichtet ist, auch als PDF.
 
-### Bearbeitungsmodus
+### Bearbeitungsseite
 
-Der Bearbeitungsmodus ist erst ab 1080 px Fensterbreite vorgesehen (kleiner Laptop, Surface, Tablet quer), denn neben
+Die Bearbeitungsseite ist erst ab 1080 px Fensterbreite vorgesehen (kleiner Laptop, Surface, Tablet quer), denn neben
 den Noten brauchen die Panels links, rechts und unten Platz. Geöffnet wird er mit dem Stift oben rechts neben ✕;
 für Tablet hochkant oder Handy ist der Stift ausgeblendet.
 
 #### Rückgängig und Wiederholen (Toolbar)
 
-Jede Änderung im Bearbeitungsmodus ist ein Schritt für "Rückgängig" (Strg+Z) und "Wiederholen" (Strg+Y), auch die
+Jede Änderung auf der Bearbeitungsseite ist ein Schritt für "Rückgängig" (Strg+Z) und "Wiederholen" (Strg+Y), auch die
 aus Dialogen (Transponieren, Spuren, Leadsheet, Sync-Editor, Laden einer früheren Fassung aus dem Verlauf). Ein Schritt
 merkt sich den ganzen Stand davor: die Noten als alphaTex-Text, die Angaben für das Leadsheet, den Cursor und die
 gezeigten Spuren. Rückgängig liest diesen Text einfach wieder ein; eine eigene Umkehrung je Änderung gibt es nicht.
@@ -661,7 +705,7 @@ Eigene Cover gehören nicht dazu: Hochgeladen wird nur die im Browser verkleiner
 #### Transponieren-Dialog (Toolbar)
 
 Transponieren ändert die Noten selbst; eine eigene Tonhöhe je Song wird nicht gespeichert. Der Dialog im
-Bearbeitungsmodus hat drei Eingaben:
+Bearbeitungsseite hat drei Eingaben:
 
 - **Halbtöne** verschieben alles: Noten, Tabs, Akkordnamen samt Griffen und die Tonart. Aus C wird bei +2 ein D.
 - **Capo** ändert die Noten und die Tonart. Tabs, Akkordnamen und Griffe bleiben.
@@ -675,11 +719,11 @@ Der Dialog schlägt das Capo vor, bei dem die Akkorde am leichtesten zu greifen 
 den gegenläufigen Halbtönen (der Klang bleibt) und bewertet je Akkord den besten Griff:
 
 - Kosten = Lage · 0,8 + Spanne · 0,5 + Finger · 0,6, dazu +3 bei Barré und +2, wenn der Griff nicht Priorität 1 hat
-  (siehe "Akkorddialog"); ohne Griff 14.
+  (siehe "Akkord-Dialog"); ohne Griff 14.
 - Die Kosten werden nach Häufigkeit des Akkords im Song gewichtet und gemittelt; das Capo mit den geringsten Kosten
   gewinnt. Ist das aktuelle Capo schon am leichtesten, entfällt der Vorschlag.
 
-Die Audiospur bleibt, wie sie ist. Klingt der Song danach anders, zeigt der Dialog den Befehl, mit dem `bin/audio.php`
+Die Audiospur bleibt, wie sie ist. Klingt der Song danach anders, zeigt der Dialog den Befehl, mit dem `bin/fetchaudio.php`
 sie passend verschiebt.
 
 #### Metrum-Dialog (Toolbar)
@@ -706,7 +750,7 @@ ableiten (siehe "Rhythmus ableiten" und "Melodie ableiten", im nachfolgenden Kap
 Aus den Anschlägen einer Spur entsteht eine Begleitspur mit Strumming. Der Dialog zeigt dazu alle Rhythmen des Songs 
 nach Häufigkeit und wo sie vorkommen. Man kann diese zusammenfassen und ändern.
 
-##### Akkorde mit Hilfe der Audiospur korrigieren
+##### Akkorde mithilfe der Audiospur korrigieren
 
 Mit "Akkorde aus den Tönen der Spur bestimmen" leitet der Dialog die Akkorde des ganzen Songs neu ab; sie ersetzen beim
 Übernehmen die bisherigen. Der Schalter darunter nimmt zusätzlich die Audiospur dazu. Er geht nur, wenn die Audiospur
@@ -732,14 +776,14 @@ abgelehnt, in der meist nur ein Ton klingt (z. B. die Melodie): Aus Melodietöne
    steht keiner.
 
 Die Akkorde bekommen ihre Griffe so: Akkorde, die der Song schon hat, behalten ihren Griff; neue bekommen den ersten
-aus dem Akkordkatalog, sonst den ersten berechneten (siehe "Akkord-Dialog"). Mehrstimmige Begleitspuren trafen in den
+aus dem Akkord-Katalog, sonst den ersten berechneten (siehe "Akkord-Dialog"). Mehrstimmige Begleitspuren trafen in den
 Proben 90 bis 100 % der Akkorde (je Viertel).
 
 #### "Melodie ableiten"-Dialog (Toolbar/Spuren-Dialog)
 
 Die höchsten Töne mit Liedtext werden zur Melodiespur.
 
-##### Tonhöhe mit Hilfe der Audiospur korrigieren
+##### Tonhöhe mithilfe der Audiospur korrigieren
 
 Der Rhythmus der Melodie kommt aus den Noten (eine Silbe je Note), die Tonhöhe jeder Silbe aus dem Gesang in der
 Aufnahme. Der Schalter geht nur, wenn die Audiospur Sync-Punkte hat. Gerechnet wird im Browser, in reinem JavaScript
@@ -801,16 +845,18 @@ Takt mit der Taktart, die zu seiner Länge passt (z. B. 1/4).
 
 #### Akkord-Dialog (linker Panel "Am Cursor")
 
-Im Bearbeitungsmodus setzt man einen Akkord im Akkorddialog. Man tippt den Namen, und der Dialog liest ihn nach den
+Auf der Bearbeitungsseite setzt man einen Akkord im Akkord-Dialog. Man tippt den Namen, und der Dialog liest ihn nach den
 Regeln der Musiktheorie (`docs/Musiktheorie.md`): Er zerlegt ihn in seine Töne ("F#m7": F# A C# E) und schlägt die
 Griffe vor, die genau diese Töne spielen. Einen unbekannten Namen kann man nicht übernehmen. Passt der Griff im Feld
 nicht zum Namen, warnt der Dialog und nennt, wie der Griff klingt.
 
 Die Vorschläge kommen in dieser Reihenfolge:
 
-1. **Aus dem Akkordkatalog:** die Griffe, die die Songs für diesen Namen spielen, der häufigste zuerst. Der Katalog
-   baut sich aus den Songs von allein auf (nur Standard-Tuning).
-2. **Berechnet, nach Priorität:**
+1. **Aus dem Song:** der Griff, den der Song für diesen Namen schon hat.
+2. **Aus dem Akkord-Katalog:** die Griffe, die die Songs für diesen Namen spielen, der häufigste zuerst. Der Katalog
+   wird bei jedem Aufruf aus den Noten aller Songs gezählt (nur Standard-Tuning, rund 20 ms) und bis zum nächsten
+   Speichern im Browser gehalten.
+3. **Berechnet, nach Priorität:**
     1. Grundstellung (die tiefste gespielte Saite spielt den Grundton bzw. den Basston), aufsteigend und bis zur e-Saite
        durchschlagbar, mindestens vier Saiten
     2. Grundstellung und aufsteigend, ohne Lücke, aber die e-Saite schweigt oder es klingen weniger als vier Saiten
@@ -828,7 +874,7 @@ Findet sich so keiner, lockert die Suche die Bedingungen schrittweise; zu jedem 
 
 Text, Akkorde und Abschnitte stehen in den Noten: Silben und Akkorde hängen an den Schlägen, Abschnitte sind Marker an 
 den Takten, ein Zeilenumbruch ist ein `\n` am Ende der letzten Silbe einer Zeile. Der Liedtext-Editor im 
-Bearbeitungsmodus zeigt diesen Text als Fließtext mit Abschnittszeilen (`[Verse]`).  
+Bearbeitungsseite zeigt diesen Text als Fließtext mit Abschnittszeilen (`[Verse]`).  
 
 ##### Liedtext auf die Schläge verteilen
 
@@ -870,7 +916,7 @@ und das Feld zeigt wieder den Text der Noten.
 
 ##### Chord-Datei importieren
 
-Solange der Text im Lied-Editor leer ist, kann der Text und die Akkorde einer hochgeladenen ChordPro-Datei, oder einer 
+Solange der Text im Liedtext-Editor leer ist, kann der Text und die Akkorde einer hochgeladenen ChordPro-Datei, oder einer 
 Textdatei im Format "Akkorde über Text", importtiert werden (über den Button "Chord-Datei importieren" ). Zugeordnet 
 wird, soweit die Datei die Angaben hat:
 
@@ -921,14 +967,14 @@ schneller oder langsamer.
 
 ## Audio von YouTube bereitstellen
 
-`bin/audio.php` läuft lokal, holt die Audiospur der Songs mit YouTube-URL (noch ohne `audio.mp3`), wandelt sie um und
+`bin/fetchaudio.php` läuft lokal, holt die Audiospur der Songs mit YouTube-URL (noch ohne `audio.mp3`), wandelt sie um und
 lädt sie per `PUT api/audio.php` hoch. Ablauf, Optionen, Transponieren der Audiospur und das Verhalten bei einem
-anderen Clip stehen im Kopf von `bin/audio.php` und in `php bin/audio.php --help`; das portable Paket für einen anderen
-PC baut `bin/build_audio_portable.cmd` (Beschreibung im Kopf der Datei).
+anderen Clip stehen im Kopf von `bin/fetchaudio.php` und in `php bin/fetchaudio.php --help`; das portable Paket für einen anderen
+PC baut `bin/build_fetchaudio_portable.cmd` (Beschreibung im Kopf der Datei).
 
 ```
-php bin/audio.php --password=… --dry-run    # nur zeigen, was zu tun ist
-php bin/audio.php --password=…              # holen, umwandeln, hochladen
+php bin/fetchaudio.php --password=… --dry-run    # nur zeigen, was zu tun ist
+php bin/fetchaudio.php --password=…              # holen, umwandeln, hochladen
 ```
 
 ## Offene Punkte
@@ -971,8 +1017,8 @@ der Datei), unverändert; das Leadsheet zeichnet damit die QR-Codes der Links.
 Unter `public/vendor/signalsmith/` liegt `SignalsmithStretch.mjs` aus signalsmith-stretch 1.3.2 (Signalsmith Audio, 
 MIT, Lizenztext in `LICENSE` dort), unverändert; der Mixer dehnt damit die Audiospur ohne Tonhöhenänderung.
 
-Dazu im Code die Pfade der Symbole "directions_run" (`js/playback.js`, `RUN_ICON`), "edit" (`app.js`) sowie "save",
-"undo" und "redo" (`js/base.js`) aus Google Material Icons (Apache 2.0). Die übrigen Symbole in `js/base.js` sind
+Dazu im Code die Pfade der Symbole "directions_run" (`js/pages/player.js`, `RUN_ICON`), "edit" (`app.js`) sowie "save",
+"undo" und "redo" (`js/ui/icons.js`) aus Google Material Icons (Apache 2.0). Die übrigen Symbole in `js/ui/icons.js` sind
 selbst gezeichnet.
 
 Alle Lizenzen sind mit der GPL-3.0 vereinbar: Die MPL-2.0 erlaubt die Verbindung mit der GPL ausdrücklich

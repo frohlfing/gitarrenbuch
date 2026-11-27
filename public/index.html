@@ -7,20 +7,23 @@
     <title>Gitarrenbuch</title>
     <link href="favicon.svg?4" rel="icon" type="image/svg+xml">
     <!-- Versionszähler: nur hier erhöhen, bei jedem Hochladen mit geänderten Dateien, damit Browser keine alten Fassungen
-         aus dem Cache nehmen. Er gilt für app.css, app.js und alle Module unter js/ (Import-Map am Ende der Seite). -->
+         aus dem Cache nehmen. Er gilt für die Stylesheets unter css/, app.js und alle Module unter js/ (Import-Map am Ende der Seite). -->
     <script>
-        const VERSION = '20261128v';
-        document.write(`<link rel="stylesheet" href="app.css?v=${VERSION}">`);
+        const VERSION = '20261129x';
+        // css/editor.css lädt erst die Bearbeitungsseite (openNoteEditor() in app.js).
+        for (const stylesheet of ['base', 'overview', 'player']) {
+            document.write(`<link rel="stylesheet" href="css/${stylesheet}.css?v=${VERSION}">`);
+        }
     </script>
 </head>
 <body>
 
-<div id="libraryView">
+<div id="overviewView">
     <header>
-        <div class="lib-menu">
-            <button aria-expanded="false" aria-label="Menü" class="tbtn" id="libMenuBtn" type="button">&#9776;</button>
-            <div class="menu" hidden id="libMenu">
-                <button data-page="chords" title="Alle Griffbilder des Akkordkatalogs" type="button">Akkorde</button>
+        <div class="overview-menu">
+            <button aria-expanded="false" aria-label="Menü" class="tbtn" id="overviewMenuBtn" type="button">&#9776;</button>
+            <div class="menu" hidden id="overviewMenu">
+                <button data-page="chords" title="Alle Griffbilder des Akkord-Katalogs" type="button">Akkorde</button>
                 <button data-page="patterns" title="Strumming und Picking Patterns" type="button">Patterns</button>
                 <button data-page="fretboard" title="Griffbrett mit Tönen, Akkorden und Tonleitern" type="button">
                     Griffbrett
@@ -62,7 +65,7 @@
 <main hidden id="songView"></main>
 
 <div class="overlay" id="overlay">
-    <div class="sheet" id="sheet"></div>
+    <div class="dialog" id="dialog"></div>
 </div>
 
 <script>
@@ -88,10 +91,22 @@
      Ein neues Modul hier eintragen, sonst lädt es ohne Zähler (und nach einer Änderung womöglich aus dem Cache). -->
 <script>
     {
-        const modules = ['base', 'chordcheck', 'chorddetect', 'chordfile', 'chordgrips', 'chordtheory', 'editor',
-            'library', 'notation',
-            'pitchdetect', 'playback', 'conflicts', 'rhythmdialog', 'rhythmhint', 'sheet', 'textview', 'timingdialog',
-            'transposedialog', 'uploads'];
+        // Pfade unter js/ ohne ".js"; die Ordner (lib, ui, pages, dialogs) gehören zum Namen.
+        const modules = [
+            'dialogs/brush', 'dialogs/chord', 'dialogs/chordcatalog', 'dialogs/cover', 'dialogs/display',
+            'dialogs/fretboard', 'dialogs/gripcheck', 'dialogs/history', 'dialogs/import', 'dialogs/leadsheet',
+            'dialogs/melody', 'dialogs/movecontent', 'dialogs/patterncatalog', 'dialogs/rhythm', 'dialogs/save',
+            'dialogs/shortcuts', 'dialogs/songform', 'dialogs/timing', 'dialogs/trackimport', 'dialogs/tracks',
+            'dialogs/transpose', 'dialogs/uploads',
+            'lib/api', 'lib/chordcheck', 'lib/chorddetect', 'lib/chordfile', 'lib/chordgrips', 'lib/chords',
+            'lib/chordtheory', 'lib/conflicts', 'lib/format', 'lib/notation', 'lib/patterns', 'lib/pitchdetect',
+            'lib/rhythmhint', 'lib/sheetmodel', 'lib/songs', 'lib/textmodel',
+            'pages/editor', 'pages/overview', 'pages/player',
+            'ui/chorddiagram', 'ui/credit', 'ui/fbdiagram', 'ui/form', 'ui/icons', 'ui/overlay',
+            'ui/sheetview', 'ui/textview'
+        ];
+        // Die Schlüssel löst der Browser zur vollen Adresse auf; so treffen sie jede Schreibweise im Import (./x.js,
+        // ../lib/x.js).
         const imports = Object.fromEntries(modules.map(m => [`./js/${m}.js`, `./js/${m}.js?v=${VERSION}`]));
         document.write(`<script type="importmap">${JSON.stringify({imports})}<\/script>`
             + `<script type="module" src="app.js?v=${VERSION}"><\/script>`);

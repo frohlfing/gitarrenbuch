@@ -2,7 +2,7 @@
 
 require_once __DIR__ . '/crud.php';
 require_once __DIR__ . '/gp_file.php';
-require_once __DIR__ . '/uploads.php';
+require_once __DIR__ . '/uploadstore.php';
 
 /** Eine hochgeladene Datei ist ungültig (geprüft am Inhalt, nicht an der Endung), z. B. keine GP-Datei. */
 class FileValidationException extends RuntimeException
@@ -11,7 +11,6 @@ class FileValidationException extends RuntimeException
 
 /**
  * Sucht einen freien Dateinamen, damit Rohmaterial nie überschrieben wird.
- *
  * @param string $dir Zielordner
  * @param string $baseName Dateiname ohne Endung
  * @param string $ext Endung ohne Punkt
@@ -29,11 +28,10 @@ function unique_filename(string $dir, string $baseName, string $ext): string
 }
 
 /**
- * Legt eine hochgeladene Datei als Rohmaterial unter data/songs/<slug>/upload/ ab (siehe upload_dir()). Liegt dort schon
- * eine Datei mit gleichem Inhalt (MD5), wird nichts abgelegt. Ist der Name belegt, wird ein Zähler angehängt (siehe
- * unique_filename()): Im Upload-Ordner wird nie etwas überschrieben oder verändert.
- *
- * @param string $slug Lied, zu dem die Datei gehört (der Ordner muss existieren)
+ * Legt eine hochgeladene Datei als Rohmaterial unter data/songs/<slug>/upload/ ab (siehe upload_dir()). Liegt dort
+ * schon eine Datei mit gleichem Inhalt (MD5), wird nichts abgelegt. Ist der Name belegt, wird ein Zähler angehängt
+ * (siehe unique_filename()): Im Upload-Ordner wird nie etwas überschrieben oder verändert.
+ * @param string $slug Song, zu dem die Datei gehört (der Ordner muss existieren)
  * @param string $localPath lokale Datei; wird nur gelesen
  * @param string $originalName ursprünglicher Dateiname, daraus wird der Name im Upload-Ordner gebildet
  * @param string|null $ext Endung ohne Punkt, sonst die des ursprünglichen Namens (z. B. nach Erkennung am Inhalt)
@@ -63,14 +61,12 @@ function store_original(string $slug, string $localPath, string $originalName, ?
 
 /**
  * Höchstgröße der Noten (score.atex). Die größten Songs im Archiv kommen auf rund 300 KB.
- *
  * @var int Bytes
  */
 const SCORE_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
- * Höchstlänge der Notiz beim Speichern, was sich geändert hat (siehe history_note(); NOTE_MAX in js/editor.js).
- *
+ * Höchstlänge der Notiz beim Speichern, was sich geändert hat (siehe history_note(); NOTE_MAX in js/pages/editor.js).
  * @var int Zeichen
  */
 const NOTE_MAX = 200;
@@ -78,7 +74,6 @@ const NOTE_MAX = 200;
 /**
  * Prüft Noten im Format alphaTex, bevor sie gespeichert werden. Den Inhalt selbst kann nur alphaTab im Browser
  * auswerten; geprüft werden deshalb nur Größe und dass es Text in UTF-8 ist.
- *
  * @param string $tex Noten als alphaTex
  * @return void
  * @throws FileValidationException wenn die Noten leer, zu groß oder kein Text sind
@@ -99,19 +94,18 @@ function validate_score(string $tex): void
 }
 
 /**
- * Speichert die Noten eines neuen Lieds als score.atex, beim Import zusammen mit der Original-GP-Datei: Diese
+ * Speichert die Noten eines neuen Songs als score.atex, beim Import zusammen mit der Original-GP-Datei: Diese
  * kommt unverändert als Rohmaterial in den Upload-Ordner (siehe store_original()), eine eingebettete Audiospur wird zu
  * audio.mp3 (siehe extract_gp_audio()). Die Noten wandelt der Browser vorher mit alphaTab um, ohne Titel, Interpret
- * und die übrigen Angaben (die stehen nur in song.json). Nur einmal je Lied möglich: Gibt es schon Noten, wird
+ * und die übrigen Angaben (die stehen nur in song.json). Nur einmal je Song möglich: Gibt es schon Noten, wird
  * abgelehnt.
- *
- * @param string $slug Lied, zu dem die Noten gehören
+ * @param string $slug Song, zu dem die Noten gehören
  * @param string $tex Noten als alphaTex
  * @param string|null $gpPath lokale Original-GP-Datei; wird nur gelesen, Aufräumen bleibt Sache des Aufrufers.
  *                            null, wenn die Noten im Formular entstanden sind
  * @param string $gpName ursprünglicher Dateiname der GP-Datei, daraus wird der Name im Upload-Ordner gebildet
  * @param string $gpSource Quelle der GP-Datei (meist die Seite des Tabs), wird beim Upload festgehalten
- * @return array das aktualisierte Lied
+ * @return array der aktualisierte Song
  * @throws FileValidationException|NotFoundException|ConflictException|RuntimeException
  */
 function store_new_score(
@@ -150,7 +144,6 @@ function store_new_score(
 
 /**
  * Muster einer Kennung im Verlauf: "score-" und der Zeitpunkt des Speicherns, z. B. "score-20261031-224255".
- *
  * @var string
  */
 const HISTORY_ID_PATTERN = '/^score-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d+)?$/';
@@ -158,8 +151,7 @@ const HISTORY_ID_PATTERN = '/^score-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(
 /**
  * Kennung der aktuellen Fassung im Verlauf: die neueste Notiz ohne Noten daneben (siehe keep_score_history()). Ohne
  * eine (importierte Noten, noch nie gespeichert) der Zeitpunkt der letzten Änderung von score.atex.
- *
- * @param string $slug Slug des Lieds
+ * @param string $slug Slug des Songs
  * @return string Kennung, z. B. "score-20261031-224255"
  */
 function current_history_id(string $slug): string
@@ -176,13 +168,12 @@ function current_history_id(string $slug): string
 }
 
 /**
- * Legt beim Speichern die bisherige Fassung in den Verlauf (im Bearbeitungsmodus der Knopf "Verlauf", siehe
+ * Legt beim Speichern die bisherige Fassung in den Verlauf (auf der Bearbeitungsseite der Knopf "Verlauf", siehe
  * list_score_history()). Jede Fassung heißt history/score-<Zeitpunkt ihres Speicherns>: .txt ist die Notiz dazu (was
  * sich geändert hat), .atex und .json sind score.atex und score.json unverändert. Die aktuelle Fassung hat nur die
  * .txt; beim nächsten Speichern kommen ihre Noten dazu, und die neue Fassung bekommt ihre .txt. Es bleiben die letzten
  * SCORE_HISTORY_KEEP früheren Fassungen.
- *
- * @param string $slug Slug des Lieds (score.atex muss existieren)
+ * @param string $slug Slug des Songs (score.atex muss existieren)
  * @param string $note was sich ändert (history_note()), leer = keine Notiz
  * @return void
  * @throws RuntimeException wenn history/ nicht angelegt oder eine Datei nicht geschrieben werden kann
@@ -219,10 +210,9 @@ function keep_score_history(string $slug, string $note = ''): void
 }
 
 /**
- * Listet den Verlauf eines Lieds (siehe keep_score_history()): zuerst die aktuelle Fassung, dann die früheren, die
+ * Listet den Verlauf eines Songs (siehe keep_score_history()): zuerst die aktuelle Fassung, dann die früheren, die
  * neueste zuerst.
- *
- * @param string $slug Slug des Lieds
+ * @param string $slug Slug des Songs
  * @return array[] je Fassung id (z. B. "score-20261031-224255"), time (gespeichert, "2026-10-31 22:42:55"), size
  *                 (Bytes), note (was sich beim Speichern geändert hat, leer ohne) und current (aktuelle Fassung, weder
  *                 zu laden noch zu löschen)
@@ -253,7 +243,6 @@ function list_score_history(string $slug): array
 
 /**
  * Notiz für den Verlauf aus der Anfrage (Parameter note): eine Zeile, höchstens NOTE_MAX Zeichen.
- *
  * @return string leer ohne Notiz
  */
 function history_note(): string
@@ -264,8 +253,7 @@ function history_note(): string
 
 /**
  * Pfad einer aufgehobenen Fassung der Noten.
- *
- * @param string $slug Slug des Lieds
+ * @param string $slug Slug des Songs
  * @param string $id Kennung aus list_score_history()
  * @return string Pfad der Datei
  * @throws NotFoundException wenn es die Fassung nicht gibt (auch bei einer Kennung, die keine ist)
@@ -281,8 +269,7 @@ function score_history_path(string $slug, string $id): string
 
 /**
  * Angaben für das Leadsheet eines aufgehobenen Stands (siehe keep_score_history()).
- *
- * @param string $slug Slug des Lieds
+ * @param string $slug Slug des Songs
  * @param string $id Kennung aus list_score_history()
  * @return array die Angaben von damals (score.json), leer ohne
  * @throws NotFoundException wenn es den Stand nicht gibt
@@ -296,8 +283,7 @@ function score_history_leadsheet(string $slug, string $id): array
 
 /**
  * Löscht einen aufgehobenen Stand (Noten, Angaben für das Leadsheet und Notiz).
- *
- * @param string $slug Slug des Lieds
+ * @param string $slug Slug des Songs
  * @param string $id Kennung aus list_score_history()
  * @return void
  * @throws NotFoundException wenn es den Stand nicht gibt
@@ -313,15 +299,14 @@ function delete_score_history(string $slug, string $id): void
 }
 
 /**
- * Ersetzt die Noten eines Lieds (score.atex), z. B. aus dem Sync-Editor oder dem Editor. Nur für Lieder, die schon
+ * Ersetzt die Noten eines Songs (score.atex), z. B. aus dem Sync-Editor oder dem Editor. Nur für Songs, die schon
  * Noten haben; neue Noten kommen über store_new_score(). Die bisherige Fassung kommt vorher nach history/ (siehe
  * keep_score_history()). Geschrieben wird erst daneben und dann umbenannt, damit nie eine halbe Datei
  * entsteht.
- *
- * @param string $slug Slug des Lieds
+ * @param string $slug Slug des Songs
  * @param string $tex Noten als alphaTex
  * @param string $note was sich ändert (steht im Verlauf beim bisherigen Stand), leer = keine Notiz
- * @return array das aktualisierte Lied
+ * @return array der aktualisierte Song
  * @throws FileValidationException|NotFoundException|RuntimeException
  */
 function store_score(string $slug, string $tex, string $note = ''): array
@@ -347,7 +332,6 @@ function store_score(string $slug, string $tex, string $note = ''): array
  * Liefert eine Datei aus data/ mit ETag aus (beantwortet unveränderte Anfragen mit 304) und beendet das Skript.
  * "private": Die Seite ist per Basic Auth geschützt, Proxys dürfen die Antwort nicht für andere zwischenspeichern.
  * "no-cache": Der Browser darf cachen, muss aber jedes Mal nachfragen, weil sich die Datei beim Speichern ändert.
- *
  * @param string $path auszuliefernde Datei
  * @param string $mime Content-Type der Antwort
  * @return never
@@ -368,12 +352,11 @@ function send_file(string $path, string $mime): never
 }
 
 /**
- * Legt eine MP3 als audio.mp3 eines Lieds ab (ersetzt eine vorhandene). Geprüft wird nur der Anfang der Datei
- * (ID3-Kopf oder MP3-Frame); Länge und Qualität bestimmt bin/audio.php beim Umwandeln.
- *
- * @param string $slug Slug des Lieds
+ * Legt eine MP3 als audio.mp3 eines Songs ab (ersetzt eine vorhandene). Geprüft wird nur der Anfang der Datei
+ * (ID3-Kopf oder MP3-Frame); Länge und Qualität bestimmt bin/fetchaudio.php beim Umwandeln.
+ * @param string $slug Slug des Songs
  * @param string $localPath lokale MP3-Datei; wird nur gelesen, Aufräumen bleibt Sache des Aufrufers
- * @return array das aktualisierte Lied
+ * @return array der aktualisierte Song
  * @throws FileValidationException|NotFoundException|RuntimeException
  */
 function store_audio(string $slug, string $localPath): array

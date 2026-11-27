@@ -12,7 +12,7 @@ Der Konfliktlöser ordnet beim Import jeder Spur ein Instrument zu (Spalte "Prog
 Tooltip gedacht.
 
 Umgesetzt in `INSTRUMENTS`, `instrumentOf()`, `setInstrument()`, `notationPitch()`, `toGuitarTab()` und
-`normalizeTuningOctave()` (`public/js/notation.js`), im Dialog "Spuren" (`public/js/editor.js`) und im Konfliktlöser (`public/js/conflicts.js`, Schritte "Spur ohne Saiten",
+`normalizeTuningOctave()` (`public/js/lib/notation.js`), im Dialog "Spuren" (`public/js/pages/editor.js`) und im Konfliktlöser (`public/js/lib/conflicts.js`, Schritte "Spur ohne Saiten",
 "Tuning in falscher Oktave" und "Instrument und Notenlage").
 
 ## Die Liste
@@ -64,7 +64,7 @@ Umgesetzt in `INSTRUMENTS`, `instrumentOf()`, `setInstrument()`, `notationPitch(
    kein Datenverlust: Noten, Tabs und Akkorde bleiben, nur die Wiedergabe klingt nach dem Instrument der Liste; im Protokoll steht er als normale
    Änderung (z. B. "Spur „Trompete“: Trompete (vorher Klang 57)").
 
-## Analyse der Guitar-Pro-Dateien (20.11.2026)
+## Analyse der Guitar-Pro-Dateien
 
 31 Originaldateien in den Upload-Ordnern, 140 Spuren in 30 Songs:
 

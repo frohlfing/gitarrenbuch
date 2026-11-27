@@ -1,24 +1,16 @@
 <?php
 
 /**
- * Noten eines Lieds (score.atex, für alphaTab): ausliefern und ersetzen.
- * Ausliefern über die API ist nötig, weil DATA_DIR bewusst außerhalb des Document Root liegt.
+ * Noten eines Songs (score.atex) ausliefern und ersetzen; data/ liegt außerhalb des Document Root.
  *
- * GET /api/score.php?slug=xyz   -> alphaTex als text/plain (UTF-8), 404, falls Lied oder Datei fehlt. Kein Token nötig.
- * GET /api/score.php?slug=xyz&history=1
- *                               -> JSON-Liste der aufgehobenen Fassungen, die neueste zuerst: id, time, size, note (siehe
- *                                  list_score_history()). Kein Token nötig.
- * GET /api/score.php?slug=xyz&version=<id>
- *                               -> alphaTex dieser Fassung (id aus der Liste) als text/plain, 404, falls es sie nicht gibt.
- * DELETE /api/score.php?slug=xyz&version=<id>
- *                               -> löscht diesen Stand (Noten und Angaben für das Leadsheet). Antwort: die Liste wie
- *                                  mit history=1. Token nötig.
- * PUT /api/score.php?slug=xyz   -> ersetzt score.atex. Body: alphaTex (text/plain, UTF-8), höchstens SCORE_MAX_BYTES.
- *                                  Antwort: das aktualisierte Lied. Token nötig. Nur für Lieder, die schon Noten
- *                                  haben (neue Noten kommen mit dem Import bzw. dem Gerüst über api/import.php). Der
- *                                  bisherige Stand kommt in den Verlauf, mit &note=… samt Notiz, was sich ändert.
- *
- * Token wird per Header X-API-Token erwartet (siehe api/lib/http.php: require_token()).
+ * GET    /api/score.php?slug=xyz               -> alphaTex (text/plain)
+ * GET    /api/score.php?slug=xyz&history=1     -> Verlauf: [{id, time, size, note}], neueste zuerst
+ * GET    /api/score.php?slug=xyz&version=<id>  -> alphaTex dieses Stands
+ * DELETE /api/score.php?slug=xyz&version=<id>  -> löscht den Stand (Noten und Leadsheet); Antwort: der Verlauf.
+ *                                                 Token nötig.
+ * PUT    /api/score.php?slug=xyz               -> ersetzt score.atex (höchstens SCORE_MAX_BYTES), nur für Songs mit
+ *                                                 Noten; der bisherige Stand kommt in den Verlauf (&note=…). Antwort:
+ *                                                 der Song. Token nötig.
  */
 
 require_once __DIR__ . '/../../config.php';

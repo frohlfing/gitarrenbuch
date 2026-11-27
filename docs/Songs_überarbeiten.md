@@ -2,13 +2,13 @@
 
 Was je Song noch zu kontrollieren ist, nach Interpret sortiert.
 
-- **Längen prüfen:** gemessen am 27.10.2026. „Noten“ ist die Spieldauer im eigenen Tempo, „Sync-Ende“ die Stelle in
+- **Längen prüfen:** „Noten“ ist die Spieldauer im eigenen Tempo, „Sync-Ende“ die Stelle in
   der Audiospur, an der die Noten laut Sync-Punkten enden. Aufgeführt sind Abweichungen ab 10 Sekunden; kurz
   anhören, ob Intro, Outro oder Wiederholungen in den Noten fehlen.
 - **Sync-Versatz:** Die `audio.mp3` von YouTube beginnt nicht genau dort, wo die Spur aus der GP-Datei begann. Im
   Sync-Editor ohne ausgewählten Marker im Feld „Spur“ alle Sync-Punkte verschieben, bis Synth und Audiospur zusammen
-  klingen. „Gemessen“ ist nur ein Startwert (bei Three Little Birds und Geboren um zu leben lag er genau um das
-  Doppelte daneben); maßgeblich ist das Gehör.
+  klingen. „Gemessen“ ist nur ein Startwert (er kann um das Doppelte
+  danebenliegen); maßgeblich ist das Gehör.
 - **Unterschiede im Wortlaut:** Noten → Leadsheet. Nicht aufgeführt sind reine Schreibweisen (fehlende Leerzeichen,
   „V2:“ vor den Strophen, Griffbilder am Zeilenende, Silbentrennung wie „z-ombie“).
 - **Keine GP-Quelle:** keine Datei im Upload-Ordner, die Noten sind nicht gegen ein Original zu prüfen.
@@ -183,7 +183,7 @@ Was je Song noch zu kontrollieren ist, nach Interpret sortiert.
 - Keine GP-Quelle.
 
 ## Traditional – Drunken Sailor
-- Sync-Punkt in Takt 1 prüfen (der erste lag in Takt 3; Takt 1–2 haben jetzt sichtbar 120 BPM, ab Takt 3 stehen 123).
+- Sync-Punkt in Takt 1 prüfen: Takt 1–2 stehen mit 120 BPM, ab Takt 3 mit 123 BPM.
 
 ## Traditional – Easy Slow Delta Blues
 - Keine GP-Quelle.
@@ -210,4 +210,4 @@ Was je Song noch zu kontrollieren ist, nach Interpret sortiert.
 ## Unheilig – Geboren um zu leben
 - Längen prüfen (MP3 14 s länger, Sync endet früh).
 - Sync-Punkte um −160 ms verschieben (nach Gehör ermittelt, noch nicht übernommen; gemessen −321 ms).
-- Capo 7 prüfen (per Skript eingetragen; die Tonspur in der importierten GP-Datei war um 5 Halbtöne erhöht).
+- Capo 7 prüfen (die Tonspur der GP-Datei ist um 5 Halbtöne erhöht).

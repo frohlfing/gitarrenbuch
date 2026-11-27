@@ -1,68 +1,72 @@
 /**
- * Einstieg des Frontends: Routing zwischen Liederliste (#/) und Liedansicht (#/song/<slug>); Akkorde, Patterns und
- * Griffbrett öffnen aus dem Menü der Liederliste als Dialog. Die eigentliche Arbeit steckt in den ES-Modulen unter js/.
+ * Einstieg des Frontends: Routing zwischen Übersichtsseite (#/) und Playerseite (#/song/<slug>); Akkorde, Patterns und
+ * Griffbrett öffnen aus dem Menü der Übersichtsseite als Dialog. Die eigentliche Arbeit steckt in den ES-Modulen unter
+ * js/.
  */
 
-import {
-    chordDiagramSvg,
-    coverUrl,
-    escapeHtml,
-    fretboardSvg,
-    loadAudio,
-    loadChordLibrary,
-    loadLeadsheet,
-    loadPatterns,
-    loadScoreText,
-    NOTE_LABELS,
-    structureOf,
-    STRUCTURES,
-    svgIcon,
-} from './js/base.js';
-import {NoteEditor} from './js/editor.js';
-import {
-    closeOverlay,
-    findSong,
-    initLibrary,
-    openImportForm,
-    openOverlay,
-    openSongForm,
-    storeSong,
-} from './js/library.js';
-import {describeScoreInfo, exportGpFile, loadAlphaTab} from './js/notation.js';
-import {Player, SCALES} from './js/playback.js';
-import {patternGridHtml, printSongLeadsheet, TECHNIQUES} from './js/sheet.js';
+import {coverUrl, loadAudio, loadLeadsheet, loadScoreText} from './js/lib/api.js';
+import {escapeHtml} from './js/lib/format.js';
+import {svgIcon} from './js/ui/icons.js';
+import {findSong, storeSong} from './js/lib/songs.js';
+import {initOverlay} from './js/ui/overlay.js';
+import {initOverview} from './js/pages/overview.js';
+// Player, Noten (notation.js, alphaTab) und Leadsheet lädt erst, wer sie braucht (import()): Die Übersichtsseite kommt
+// ohne sie aus und steht so schneller da. Ein Modul lädt der Browser je Seitenaufruf nur einmal.
 
-/** @typedef {import('./js/base.js').Song} Song */
-/** @typedef {import('./js/notation.js').ScoreInfo} ScoreInfo */
+/** @typedef {import('./js/lib/api.js').Song} Song */
+/** @typedef {import('./js/lib/notation.js').ScoreInfo} ScoreInfo */
+/** @typedef {import('./js/pages/player.js').Player} Player */
 
-/** Bereich der Liederliste. */
-const libraryView = document.getElementById('libraryView');
-/** Bereich der Liedansicht. */
+/** Bereich der Übersichtsseite. */
+const overviewView = document.getElementById('overviewView');
+
+/** Bereich der Playerseite. */
 const songView = document.getElementById('songView');
+
 /** Button „+ Neuer Song“: öffnet den Import-Dialog (dort auch „Manuell“). */
 const newSongBtn = document.getElementById('newSongBtn');
 
 /**
- * Player der geöffneten Liedansicht, null in der Liste.
+ * Player der geöffneten Playerseite, null in der Liste.
  * @type {?Player}
  */
 let player = null;
 
 /**
- * Bearbeitungsmodus der Liedansicht, null, wenn er aus ist.
- * @type {?NoteEditor}
+ * Bearbeitungsseite der Playerseite, null, wenn er aus ist.
+ * @type {?import('./js/pages/editor.js').NoteEditor}
  */
 let noteEditor = null;
 
-/** Hash der Liederliste (die Seiten sind Hash-Pfade, keine Sprungmarken). */
-const LIST_HASH = '#/';
-/** Hash der Seite mit den Griffbildern. */
-
-/** Hash der Seite mit dem Griffbrett. */
+/** Ob der Editor gerade geladen wird (openNoteEditor()), damit ein zweiter Klick ihn nicht doppelt öffnet. */
+let editorLoading = false;
 
 /**
- * Hash der Liedansicht.
- * @param {string} slug Slug des Lieds
+ * Lädt ein Stylesheet aus css/ nach (einmal je Seitenaufruf), mit dem Versionszähler aus index.html. Fertig ist es,
+ * wenn der Browser es geladen hat; so erscheint nichts kurz ohne seine Stile.
+ * @param {string} name Name ohne Endung, z. B. "editor"
+ * @returns {Promise<void>}
+ */
+function loadStylesheet(name) {
+    const href = `css/${name}.css?v=${encodeURIComponent(typeof VERSION === 'string' ? VERSION : '')}`;
+    if (document.querySelector(`link[data-stylesheet="${name}"]`)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = href;
+        link.dataset.stylesheet = name;
+        link.onload = () => resolve();
+        link.onerror = () => reject(new Error(`Stylesheet ${name} nicht geladen`));
+        document.head.append(link);
+    });
+}
+
+/** Hash der Übersichtsseite (die Seiten sind Hash-Pfade, keine Sprungmarken). */
+const OVERVIEW_HASH = '#/';
+
+/**
+ * Hash der Playerseite.
+ * @param {string} slug Slug des Songs
  * @returns {string} z. B. "#/song/bob-marley-three-little-birds"
  */
 function songHash(slug) {
@@ -70,17 +74,18 @@ function songHash(slug) {
 }
 
 /**
- * Zeigt die Liederliste und beendet einen laufenden Player.
+ * Zeigt die Übersichtsseite und beendet einen laufenden Player.
  * @returns {void}
  */
-function showLibrary() {
+function showOverview() {
+    songRequest++;
     leaveSong();
-    libraryView.hidden = false;
+    overviewView.hidden = false;
     document.title = 'Gitarrenbuch';
 }
 
 /**
- * Beendet die Liedansicht (Player, Bearbeitungsmodus) und leert sie.
+ * Beendet die Playerseite (Player, Bearbeitungsseite) und leert sie.
  * @returns {void}
  */
 function leaveSong() {
@@ -93,177 +98,31 @@ function leaveSong() {
 }
 
 /**
- * Akkordname zum Anzeigen: Der Katalog schreibt klein ("f#m", "d/f#").
- * @param {string} key Schlüssel des Katalogs
- * @returns {string} z. B. "F#m", "D/F#"
- */
-function chordDisplayName(key) {
-    return key.replace(/^[a-h]|\/[a-h]/g, s => s.toUpperCase());
-}
-
-/**
- * Zeigt alle Griffbilder des Akkordkatalogs, je Akkord der häufigste Griff zuerst; zum Ausdrucken gedacht.
- * @returns {Promise<void>}
- */
-async function showChordLibrary() {
-    openOverlay(`
-    <h2>Akkorde</h2>
-    <p class="ov-meta">Die Akkorde der Songs nach Grundton, häufigster Griff zuerst</p>
-    <div class="ov-tools">
-        <button class="btn" type="button" id="toggleChords">Alle zuklappen</button>
-        <button class="btn" type="button" id="printChords">Drucken</button>
-    </div>
-    <div class="chord-sheet" id="chordSheet"><p class="empty">wird geladen &hellip;</p></div>
-  `, false, false, true);
-    document.getElementById('printChords').addEventListener('click', () => window.print());
-    const sheet = document.getElementById('chordSheet');
-    const toggle = document.getElementById('toggleChords');
-    const groupsOf = () => [...sheet.querySelectorAll('details.chord-root')];
-    // Ist noch eine Gruppe offen, klappt der Button alle zu, sonst alle auf.
-    const updateToggle = () => {
-        toggle.textContent = groupsOf().some(d => d.open) ? 'Alle zuklappen' : 'Alle aufklappen';
-    };
-    toggle.addEventListener('click', () => {
-        const open = !groupsOf().some(d => d.open);
-        for (const group of groupsOf()) group.open = open;
-        updateToggle();
-    });
-    // "toggle" steigt nicht auf, deshalb in der Capture-Phase.
-    sheet.addEventListener('toggle', updateToggle, true);
-    try {
-        const library = await loadChordLibrary();
-        // Nach Grundton gruppieren; der Katalog ist schon nach Grundton sortiert.
-        /** @type {Map<string, string>} */
-        const groups = new Map();
-        for (const [key, grips] of Object.entries(library)) {
-            const name = chordDisplayName(key);
-            const root = name.match(/^[A-H][#b]?/)?.[0] ?? name;
-            groups.set(root, (groups.get(root) ?? '') + `
-        <section class="chord-group">
-          ${grips.map(grip => `
-            <figure>
-              ${chordDiagramSvg(name, grip)}
-              <figcaption>${escapeHtml(grip)}</figcaption>
-            </figure>`).join('')}
-        </section>`);
-        }
-        sheet.innerHTML = [...groups].map(([root, html]) => `
-      <details class="chord-root" open>
-        <summary>${escapeHtml(root)}</summary>
-        <div class="chord-root-list">${html}</div>
-      </details>`).join('') || '<p class="empty">Noch keine Akkorde: Sie erscheinen, sobald ein Song Noten mit Akkorden hat.</p>';
-    } catch (err) {
-        sheet.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
-    }
-}
-
-/**
- * Zeigt den Pattern-Katalog (Strumming und Picking Patterns) zum Ansehen und Drucken, analog zu den Griffbildern.
- * @returns {Promise<void>}
- */
-async function showPatternLibrary() {
-    openOverlay(`
-    <h2>Patterns</h2>
-    <p class="ov-meta">Strumming und Picking Patterns</p>
-    <div class="ov-tools">
-      <div class="controls pattern-filter" id="patternFilter" hidden>
-        <select id="patTsSel" aria-label="Nach Taktart filtern"><option value="">Alle Taktarten</option></select>
-        <select id="patGenreSel" aria-label="Nach Genre filtern"><option value="">Alle Genres</option></select>
-      </div>
-      <button class="btn" type="button" id="toggleChords">Alle zuklappen</button>
-      <button class="btn" type="button" id="printChords">Drucken</button>
-    </div>
-    <div class="chord-sheet" id="chordSheet"><p class="empty">wird geladen &hellip;</p></div>
-  `, false, false, true);
-    document.getElementById('printChords').addEventListener('click', () => window.print());
-    const sheet = document.getElementById('chordSheet');
-    const toggle = document.getElementById('toggleChords');
-    const groupsOf = () => [...sheet.querySelectorAll('details.chord-root')];
-    const updateToggle = () => {
-        toggle.textContent = groupsOf().some(d => d.open) ? 'Alle zuklappen' : 'Alle aufklappen';
-    };
-    toggle.addEventListener('click', () => {
-        const open = !groupsOf().some(d => d.open);
-        for (const group of groupsOf()) group.open = open;
-        updateToggle();
-    });
-    sheet.addEventListener('toggle', updateToggle, true);
-    try {
-        const {patterns: catalog, usage, genres: genresOf = {}} = await loadPatterns();
-        // Genre eines Patterns = Genre der Songs, die es verwenden; ungenutzte Patterns haben keines.
-        const patterns = catalog.map(p => ({...p, genres: genresOf[p.id] ?? []}));
-        // Filter: "Filter für Taktart und Genre"): nur Werte, die es im Katalog gibt.
-        const fill = (select, values, all) => {
-            select.innerHTML = `<option value="">${all}</option>` + values.map(v =>
-                `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
-        };
-        const tsSel = /** @type {HTMLSelectElement} */ (document.getElementById('patTsSel'));
-        const genreSel = /** @type {HTMLSelectElement} */ (document.getElementById('patGenreSel'));
-        fill(tsSel, [...new Set(patterns.map(p => p.timeSignature))].sort((a, b) => a.localeCompare(b, 'de', {numeric: true})),
-            'Alle Taktarten');
-        const genres = [...new Set(patterns.flatMap(p => p.genres ?? []))].sort((a, b) => a.localeCompare(b, 'de'));
-        fill(genreSel, genres, 'Alle Genres');
-        genreSel.hidden = !genres.length;
-        document.getElementById('patternFilter').hidden = false;
-        const draw = () => {
-            const shown = patterns.filter(p => (!tsSel.value || p.timeSignature === tsSel.value)
-                && (!genreSel.value || (p.genres ?? []).includes(genreSel.value)));
-            sheet.innerHTML = Object.entries(TECHNIQUES).map(([technique, label]) => {
-                const group = shown.filter(p => p.technique === technique)
-                    .sort((a, b) => a.timeSignature.localeCompare(b.timeSignature) || a.name.localeCompare(b.name));
-                if (!group.length) return '';
-                // Je Taktart und je Bauart eine Zeile, damit Patterns mit einer Zeile mehr (zweiter Bass beim Picking Pattern)
-                // nicht neben Patterns ohne stehen; in der Zeile gleich hohe Karten, das Raster unten, sodass Titel und
-                // Zählzeiten auf einer Höhe liegen. Strumming Patterns halten immer Platz für die Betonung frei.
-                /** @type {Map<string, import('./js/sheet.js').Pattern[]>} */
-                const byRow = new Map();
-                for (const p of group) {
-                    const key = `${p.timeSignature}|${technique === 'picking' && /q/i.test(p.steps ?? '')}`;
-                    byRow.set(key, [...(byRow.get(key) ?? []), p]);
-                }
-                return `
-          <details class="chord-root" open>
-            <summary>${escapeHtml(label)}s</summary>
-            ${[...byRow.values()].map(row => `<div class="chord-root-list pattern-list">${row.map(p => `
-              <section class="chord-group pattern-card">
-                <!-- Das Raster steht nur dabei, wenn es nicht der Normalfall (Achtel) ist. -->
-                <h3>${escapeHtml(p.name)}</h3>
-                <div class="pattern-meta">${escapeHtml(p.timeSignature)}${p.grid === 16 ? ' · Sechzehntel' : ''}${
-                    usage[p.id] ? ` · ${usage[p.id]} Song${usage[p.id] === 1 ? '' : 's'}` : ''}</div>
-                ${p.genres?.length ? `<div class="pattern-meta">${escapeHtml(p.genres.join(', '))}</div>` : ''}
-                ${patternGridHtml(p, false, true)}
-              </section>`).join('')}</div>`).join('')}
-          </details>`;
-            }).join('') || `<p class="empty">${patterns.length ? 'Kein Pattern passt zu diesem Filter.' : 'Der Katalog ist noch leer.'}</p>`;
-            updateToggle();
-        };
-        tsSel.addEventListener('change', draw);
-        genreSel.addEventListener('change', draw);
-        draw();
-    } catch (err) {
-        sheet.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
-    }
-}
-
-/**
- * Lädt eine vollständige Guitar-Pro-Datei des Lieds herunter (Noten, Angaben, Audiospur mit Sync-Punkten).
- * @param {Song} song Lied
+ * Lädt eine vollständige Guitar-Pro-Datei des Songs herunter (Noten, Angaben, Audiospur mit Sync-Punkten).
+ * @param {Song} song Song
  * @returns {Promise<void>}
  */
 async function downloadGpFile(song) {
     // Nacheinander statt mit Promise.all: Dort verliert die IDE die Typen der einzelnen Ergebnisse.
     const tex = await loadScoreText(song.slug);
     const audio = song.files.includes('audio') ? await loadAudio(song.slug) : null;
+    const {exportGpFile} = await import('./js/lib/notation.js');
     downloadFile(await exportGpFile(song, tex, audio));
 }
 
 /**
- * Druckt das Leadsheet des Lieds. Im Bearbeitungsmodus der Stand im Editor (auch ungespeichert), sonst der gespeicherte.
- * @param {Song} song Lied
+ * Druckt das Leadsheet des Songs. Auf der Bearbeitungsseite der Stand im Editor (auch ungespeichert), sonst der
+ * gespeicherte.
+ * @param {Song} song Song
  * @returns {Promise<void>}
  */
 async function printLeadsheetOf(song) {
     const head = {title: song.title, artist: song.artist};
+    // Beide Module laden gleichzeitig; erst danach wird gewartet.
+    const loadingNotation = import('./js/lib/notation.js');
+    const loadingSheetView = import('./js/ui/sheetview.js');
+    const {loadAlphaTab} = await loadingNotation;
+    const {printSongLeadsheet} = await loadingSheetView;
     const alphaTab = await loadAlphaTab();
     if (noteEditor?.score) {
         await printSongLeadsheet(alphaTab, noteEditor.tex, noteEditor.sheet, head);
@@ -288,14 +147,18 @@ function downloadFile(file) {
     URL.revokeObjectURL(link.href);
 }
 
+/** Zählt die Aufrufe von showSong(): Ist während des Ladens ein anderer Song (oder die Liste) dran, bricht er ab. */
+let songRequest = 0;
+
 /**
- * Zeigt die Liedansicht mit Kopfzeile, Menü und Noten.
- * @param {Song} song Lied
- * @returns {void}
+ * Zeigt die Playerseite mit Kopfzeile, Menü und Noten. Player und Notenfunktionen werden dafür erst hier geladen.
+ * @param {Song} song Song
+ * @returns {Promise<void>}
  */
-function showSong(song) {
+async function showSong(song) {
+    const request = ++songRequest;
     leaveSong();
-    libraryView.hidden = true;
+    overviewView.hidden = true;
     songView.hidden = false;
     document.title = `${song.title} – Gitarrenbuch`;
     window.scrollTo(0, 0);
@@ -303,39 +166,39 @@ function showSong(song) {
     // Lage der Bedienelemente:
     // - Kopf: Cover, daneben Titel, Interpret und eine Zeile Eckdaten, jede mit "…" gekürzt, wenn sie nicht passt.
     // - Streifen mit aktuellem Akkord, Griffbild und Patterns (füllt der Player): bleibt beim Scrollen stehen. Am PC
-    //   steht er rechts neben dem Kopf, und die ganze Zeile bleibt stehen (.songtop, app.css).
-    // - Schließen (zur Songliste): schwebt oben rechts, unauffällig halbtransparent, immer erreichbar.
+    //   steht er rechts neben dem Kopf, und die ganze Zeile bleibt stehen (.songtop, css/player.css).
+    // - Schließen (zur Übersichtsseite): schwebt oben rechts, unauffällig halbtransparent, immer erreichbar.
     // - Alles andere liegt unten in der Abspielleiste, auch das Menü (der Player stellt den Platz, el.menuWrap).
-    // - .songbar ist der Platz für die Werkzeugleiste des Bearbeitungsmodus (editor.js).
+    // - .songbar ist der Platz für die Werkzeugleiste der Bearbeitungsseite (editor.js).
     songView.innerHTML = `
-    <div class="songtop">
-      <div class="songhead">
-        ${song.files.includes('cover') ? `<img class="songhead-cover" src="${escapeHtml(coverUrl(song))}" alt="">` : ''}
-        <div class="songhead-text">
-          <h2 title="${escapeHtml(song.title)}">${escapeHtml(song.title)}</h2>
-          <div class="songhead-artist">${escapeHtml(song.artist ?? '')}</div>
-          <div class="songhead-info"><span id="songMeta"></span></div>
+        <div class="songtop">
+            <div class="songhead">
+                ${song.files.includes('cover') ? `<img class="songhead-cover" src="${escapeHtml(coverUrl(song))}" alt="">` : ''}
+                <div class="songhead-text">
+                    <h2 title="${escapeHtml(song.title)}">${escapeHtml(song.title)}</h2>
+                    <div class="songhead-artist">${escapeHtml(song.artist ?? '')}</div>
+                    <div class="songhead-info"><span id="songMeta"></span></div>
+                </div>
+            </div>
+            <div class="songstrip" id="songStrip" hidden></div>
         </div>
-      </div>
-      <div class="songstrip" id="songStrip" hidden></div>
-    </div>
-    <button class="song-edit" id="songEditBtn" type="button" aria-label="Bearbeiten"
-      title="Bearbeiten: Noten, Text, Akkorde, Spuren, Leadsheet, Audio">${svgIcon('edit')}</button>
-    <a class="song-close" href="${LIST_HASH}" aria-label="Zur Songliste" title="Zur Songliste">&#10005;</a>
-    <div class="songbar"></div>
-    <div id="playerRoot"></div>
-  `;
+        <button class="song-edit" id="songEditBtn" type="button" aria-label="Bearbeiten" title="Bearbeiten: Noten, Text, Akkorde, Spuren, Leadsheet, Audio">${svgIcon('edit')}</button>
+        <a class="song-close" href="${OVERVIEW_HASH}" aria-label="Zur Übersichtsseite" title="Zur Übersichtsseite">&#10005;</a>
+        <div class="songbar"></div>
+        <div id="playerRoot"></div>
+    `;
     // Menü: Knopf und Liste; der Player setzt beides in die Abspielleiste.
     const menuWrap = document.createElement('div');
     menuWrap.className = 'songbar-menu';
     menuWrap.innerHTML = `
-    <button class="tbtn" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
-    <div class="menu" id="menu" hidden>
-      <button type="button" id="songDataBtn">Stammdaten</button>
-      <button type="button" id="displayBtn">Darstellung</button>
-      <button type="button" id="exportBtn" title="Notation mit Audiospur als Guitar-Pro-Datei (.gp)">GP-Export</button>
-      <button type="button" id="leadsheetPrintBtn" title="Das Leadsheet drucken (auch als PDF)">Leadsheet drucken</button>
-    </div>`;
+        <button class="tbtn" id="menuBtn" type="button" aria-label="Menü" aria-expanded="false">&#8942;</button>
+        <div class="menu" id="menu" hidden>
+            <button type="button" id="songDataBtn">Stammdaten</button>
+            <button type="button" id="displayBtn">Darstellung</button>
+            <button type="button" id="exportBtn" title="Notation mit Audiospur als Guitar-Pro-Datei (.gp)">GP-Export</button>
+            <button type="button" id="leadsheetPrintBtn" title="Das Leadsheet drucken (auch als PDF)">Leadsheet drucken</button>
+        </div>
+    `;
     songView.querySelector('.songhead').append(menuWrap);
 
     const menu = document.getElementById('menu');
@@ -350,11 +213,12 @@ function showSong(song) {
 
     /**
      * Dialog "Stammdaten" aus dem Menü, darin auch "Song löschen". Ändert sich der Slug (Titel oder Interpret), gilt ab
-     * sofort der neue: für den Player (Speichern der Noten) und in der Adresszeile. Im Bearbeitungsmodus bleibt die
-     * Ansicht stehen (✕ zeigt den Song neu), sonst wird der Song gleich neu gezeigt.
-     * @returns {void}
+     * sofort der neue: für den Player (Speichern der Noten) und in der Adresszeile. Auf der Bearbeitungsseite bleibt
+     * die Ansicht stehen (✕ zeigt den Song neu), sonst wird der Song gleich neu gezeigt.
+     * @returns {Promise<void>}
      */
-    const openSongData = () => {
+    const openSongData = async () => {
+        const {openSongForm} = await import('./js/dialogs/songform.js');
         openSongForm(current(), saved => {
             if (saved.slug !== song.slug) {
                 if (player) player.slug = saved.slug;
@@ -363,12 +227,13 @@ function showSong(song) {
             song = saved;
             document.title = `${saved.title} – Gitarrenbuch`;
             if (noteEditor) songDataChanged = true;
-            else showSong(saved);
+            else void showSong(saved);
         }, () => {
-            location.hash = LIST_HASH;
+            location.hash = OVERVIEW_HASH;
         });
     };
-    /** Ob die Stammdaten im Bearbeitungsmodus geändert wurden (dann zeigt ✕ den Song neu). */
+
+    /** Ob die Stammdaten auf der Bearbeitungsseite geändert wurden (dann zeigt ✕ den Song neu). */
     let songDataChanged = false;
     document.getElementById('exportBtn').addEventListener('click', () => {
         setMenu(false);
@@ -380,11 +245,16 @@ function showSong(song) {
     });
 
     const root = document.getElementById('playerRoot');
+    const loadingPlayer = import('./js/pages/player.js');
+    const loadingNotation = import('./js/lib/notation.js');
+    const {Player} = await loadingPlayer;
+    const {describeScoreInfo} = await loadingNotation;
+    if (request !== songRequest) return;
     player = new Player(root, document.getElementById('songStrip'));
     // Das Menü gehört in die Abspielleiste.
     player.el.menuWrap.replaceWith(menuWrap);
     // Tonart, Capo usw. stehen nur in den Noten und kommen deshalb erst nach dem Laden in die Kopfzeile. Das Element
-    // wird vorab gemerkt: Ist bis dahin ein anderes Lied offen, landet die späte Antwort im alten, entfernten Element.
+    // wird vorab gemerkt: Ist bis dahin ein anderer Song offen, landet die späte Antwort im alten, entfernten Element.
     const metaEl = document.getElementById('songMeta');
     const showMeta = info => {
         metaEl.innerHTML = describeScoreInfo(info).join(' · ');
@@ -392,21 +262,22 @@ function showSong(song) {
     const songPlayer = player;
     document.getElementById('songDataBtn').addEventListener('click', () => {
         setMenu(false);
-        openSongData();
+        void openSongData();
     });
     document.getElementById('displayBtn').addEventListener('click', () => {
         setMenu(false);
-        openDisplayDialog(songPlayer);
+        void import('./js/dialogs/display.js').then(m => m.openDisplayDialog(songPlayer));
     });
     // Beim Öffnen gilt "Stammdaten gespeichert" als zurückgesetzt; ✕ zeigt den Song neu, wenn Noten oder Stammdaten
     // gespeichert wurden.
-    // In den Bearbeitungsmodus führt der Stift oben rechts neben ✕; im Modus ist er ausgeblendet, beendet wird mit dem ✕
-    // der Werkzeugleiste. Unter 1080 px Breite fehlt er, zum Bearbeiten braucht es Platz (app.css).
+    // Auf die Bearbeitungsseite führt der Stift oben rechts neben ✕; auf der Bearbeitungsseite ist er ausgeblendet,
+    // beendet wird mit dem ✕ der Werkzeugleiste. Unter 1080 px Breite fehlt er, zum Bearbeiten braucht es Platz
+    // (css/player.css).
     document.getElementById('songEditBtn').addEventListener('click', () => {
         setMenu(false);
         if (noteEditor) return;
         songDataChanged = false;
-        openNoteEditor(songPlayer, () => songDataChanged);
+        void openNoteEditor(songPlayer, () => songDataChanged);
     });
     songPlayer.load(song).then(info => {
         showMeta(info);
@@ -416,51 +287,33 @@ function showSong(song) {
 }
 
 /**
- * Dialog "Darstellung" aus dem Menü: Skalierung von Noten und Chords. Gilt für alle Songs; "Speichern" übernimmt sie
- * und merkt sie im Browser (localStorage, savePrefs() in playback.js), "Abbrechen" lässt alles, wie es war.
- * @param {Player} songPlayer Player der Liedansicht
- * @returns {void}
+ * Schaltet die Playerseite auf die Bearbeitungsseite (Werkzeugleiste und Panels, siehe js/pages/editor.js). Verlassen
+ * wird er mit ✕ (Bearbeiten beenden). Der Editor wird erst hier geladen (import()): Übersichtsseite und Player brauchen
+ * ihn nicht, und auf schmalen Bildschirmen gibt es ihn gar nicht. Wechselt man während des Ladens den Song, öffnet er
+ * nicht mehr.
+ * @param {Player} songPlayer Player der Playerseite
+ * @param {function(): boolean} songDataChanged ob die Stammdaten auf der Bearbeitungsseite gespeichert wurden
+ * @returns {Promise<void>}
  */
-function openDisplayDialog(songPlayer) {
-    const {scale} = songPlayer.display;
-    openOverlay(`
-    <h2>Darstellung</h2>
-    <div class="form-field">
-      <label for="displayScale">Skalierung</label>
-      <select id="displayScale">
-        ${SCALES.map(s => `<option value="${s}"${s === scale ? ' selected' : ''}>${Math.round(s * 100)} %</option>`)
-        .join('')}
-      </select>
-    </div>
-    <div class="struct-actions">
-      <button class="btn btn-primary" id="displayOk" type="button">Speichern</button>
-      <button class="btn" id="displayCancel" type="button">Abbrechen</button>
-    </div>
-  `, true);
-    document.getElementById('displayCancel').addEventListener('click', closeOverlay);
-    document.getElementById('displayOk').addEventListener('click', () => {
-        songPlayer.setDisplay({
-            scale: Number(/** @type {HTMLSelectElement} */ (document.getElementById('displayScale')).value),
-        });
-        closeOverlay();
-    });
-}
-
-/**
- * Schaltet die Liedansicht in den Bearbeitungsmodus (Werkzeugleiste und Panels, siehe js/editor.js). Verlassen
- * wird er mit ✕ (Bearbeiten beenden).
- * @param {Player} songPlayer Player der Liedansicht
- * @param {function(): boolean} songDataChanged ob die Stammdaten im Modus gespeichert wurden
- * @returns {void}
- */
-function openNoteEditor(songPlayer, songDataChanged) {
-    if (noteEditor || !songPlayer.api?.score) return;
+async function openNoteEditor(songPlayer, songDataChanged) {
+    if (noteEditor || editorLoading || !songPlayer.api?.score) return;
+    editorLoading = true;
+    let NoteEditor;
+    try {
+        const loadingEditor = import('./js/pages/editor.js');
+        const loadingStyle = loadStylesheet('editor');
+        ({NoteEditor} = await loadingEditor);
+        await loadingStyle;
+    } finally {
+        editorLoading = false;
+    }
+    if (noteEditor || player !== songPlayer) return;
     noteEditor = new NoteEditor(songView, songPlayer, {
         // Nach dem Speichern zeigt der Player wieder die Ansicht des Songs, dafür neu laden.
         onClose: saved => {
             closeNoteEditor();
             const song = saved || songDataChanged() ? findSong(songPlayer.slug) : null;
-            if (song) showSong(song);
+            if (song) void showSong(song);
         },
         onSaved: saved => storeSong(saved),
     });
@@ -468,7 +321,7 @@ function openNoteEditor(songPlayer, songDataChanged) {
 }
 
 /**
- * Verlässt den Bearbeitungsmodus ohne Rückfrage (Rückfragen stellt NoteEditor.finish()).
+ * Verlässt die Bearbeitungsseite ohne Rückfrage (Rückfragen stellt NoteEditor.finish()).
  * @returns {void}
  */
 function closeNoteEditor() {
@@ -478,168 +331,70 @@ function closeNoteEditor() {
 }
 
 /**
- * Zeigt das Griffbrett bis zum 15. Bund. Kartenreiter für Ton, Akkord und Tonleiter, darunter Grundton und Art in
- * Auswahllisten; die Punkte tragen Notennamen oder Intervalle (umschaltbar), sind je Intervall eingefärbt und werden bei
- * Akkorden und Tonleitern durch Klammern zu Griffen bzw. Lagen zusammengefasst. Unter dem Griffbrett steht die Legende.
- * @returns {void}
- */
-function showFretboard() {
-    let root = 0;
-    let group = STRUCTURES[1];
-    let kind = group.items[0].id;
-    let showIntervals = false;
-    /** Index des umklammerten Griffs bzw. der Lage (-1: keiner). */
-    let active = -1;
-    openOverlay(`
-    <h2>Griffbrett</h2>
-    <p class="ov-meta">Standard-Tuning, bis zum 15. Bund</p>
-    <div class="ov-tools">
-        <button class="btn" type="button" id="printChords">Drucken</button>
-    </div>
-    <div class="chord-sheet">
-      <div class="upl-tabs" role="tablist" id="fbTabs">${STRUCTURES.map(g =>
-        `<button type="button" role="tab" data-group="${g.id}">${g.group}</button>`).join('')}</div>
-      <div class="controls pattern-filter">
-        <select id="fbRoot" aria-label="Grundton">${NOTE_LABELS.map((label, i) =>
-        `<option value="${i}">${label}</option>`).join('')}</select>
-        <select id="fbKind" aria-label="Art"></select>
-        <span class="fb-mode" role="group" aria-label="Beschriftung">
-          <button class="btn" type="button" data-mode="notes">Noten</button>
-          <button class="btn" type="button" data-mode="intervals">Intervalle</button>
-        </span>
-      </div>
-      <h3 class="fb-title" id="fbTitle"></h3>
-      <div class="fb-scroll" id="fretboard"></div>
-      <p class="fb-hint" id="fbHint"></p>
-      <div class="fb-legend" id="fbLegend"></div>
-    </div>`, false, false, true);
-    const board = document.getElementById('fretboard');
-    const kindSel = /** @type {HTMLSelectElement} */ (document.getElementById('fbKind'));
-    const tabs = [...document.querySelectorAll('#fbTabs button')];
-    const modes = [...document.querySelectorAll('.fb-mode button')];
-    const hints = {
-        chord: 'Ein Klick auf einen Grundton mit Ring umklammert einen Griff in Grundstellung: je Ton eine Saite, benachbarte '
-            + 'Saiten, der tiefste Ton ist der Grundton, alles innerhalb von vier Bünden. Weitere Klicks zeigen die anderen Griffe '
-            + 'ab diesem Ton, der letzte schaltet aus.',
-        scale: 'Ein Klick auf einen Grundton mit Ring umklammert eine Lage: die Tonleiter vom Grundton an eine Oktave lang ohne '
-            + 'Handwechsel (vier Bünde). Weitere Klicks zeigen die anderen Lagen ab diesem Ton, der letzte schaltet aus.',
-    };
-    const draw = () => {
-        const view = structureOf(root, kind);
-        document.getElementById('fbTitle').textContent = view.title;
-        board.innerHTML = fretboardSvg(view.notes, root, {
-            intervals: showIntervals,
-            alt: view.alt,
-            shapes: view.shapes,
-            active
-        });
-        document.getElementById('fbHint').textContent = view.kind === 'note' ? ''
-            : view.shapes.length ? hints[view.kind]
-                : view.kind === 'chord' ? 'Für diesen Akkord gibt es keinen Griff in Grundstellung auf benachbarten Saiten innerhalb von vier Bünden.'
-                    : 'Für diese Tonleiter gibt es keine Lage mit einer Oktave ab dem Grundton innerhalb von vier Bünden.';
-        document.getElementById('fbLegend').innerHTML = view.kind === 'note' ? '' : view.legend.map(i =>
-            `<span class="fb-key"><i style="background:${i.color}"></i><b>${i.label}</b> ${escapeHtml(i.name)}</span>`).join('');
-        for (const tab of tabs) tab.setAttribute('aria-selected', String(tab.dataset.group === group.id));
-        for (const button of modes) button.setAttribute('aria-pressed', String((button.dataset.mode === 'intervals') === showIntervals));
-    };
-    const fillKinds = () => {
-        kindSel.innerHTML = group.items.map(i => `<option value="${i.id}">${i.label}</option>`).join('');
-        kindSel.value = kind;
-        kindSel.hidden = group.id === 'note';
-    };
-    board.addEventListener('click', e => {
-        const dot = /** @type {Element} */ (e.target).closest('.fb-pick');
-        if (!dot) return;
-        const list = dot.getAttribute('data-shapes').split(',').map(Number);
-        const at = list.indexOf(active);
-        active = at < 0 ? list[0] : at + 1 < list.length ? list[at + 1] : -1;
-        draw();
-    });
-    for (const tab of tabs) tab.addEventListener('click', () => {
-        active = -1;
-        group = STRUCTURES.find(g => g.id === tab.dataset.group);
-        kind = group.items[0].id;
-        fillKinds();
-        draw();
-    });
-    for (const button of modes) button.addEventListener('click', () => {
-        showIntervals = button.dataset.mode === 'intervals';
-        draw();
-    });
-    document.getElementById('fbRoot').addEventListener('change', e => {
-        root = Number(e.target.value);
-        active = -1;
-        draw();
-    });
-    kindSel.addEventListener('change', () => {
-        kind = kindSel.value;
-        active = -1;
-        draw();
-    });
-    document.getElementById('printChords').addEventListener('click', () => window.print());
-    fillKinds();
-    draw();
-}
-
-/**
- * Zeigt je nach Hash die Liste (#/) oder ein Lied (#/song/<slug>); unbekannte Lieder führen zur Liste.
+ * Zeigt je nach Hash die Liste (#/) oder einen Song (#/song/<slug>); unbekannte Songs führen zur Liste.
  * @returns {void}
  */
 function route() {
     const m = location.hash.match(/^#\/song\/([^/]+)$/);
     if (!m) {
-        showLibrary();
+        showOverview();
         return;
     }
     const song = findSong(decodeURIComponent(m[1]));
-    if (song) showSong(song);
-    else location.replace(LIST_HASH);
+    if (song) void showSong(song);
+    else location.replace(OVERVIEW_HASH);
 }
 
 /**
- * Öffnet ein gerade angelegtes oder importiertes Lied.
- * @param {Song} saved Lied
+ * Öffnet einen gerade angelegten oder importierten Song.
+ * @param {Song} saved Song
  * @returns {void}
  */
 const openSaved = saved => {
     location.hash = songHash(saved.slug);
 };
-newSongBtn.addEventListener('click', () => openImportForm(openSaved));
-// Menü ☰ der Liederliste: Akkorde, Patterns und Griffbrett öffnen als Dialog.
-const libMenu = document.getElementById('libMenu');
-const libMenuBtn = document.getElementById('libMenuBtn');
-libMenuBtn.addEventListener('click', () => {
-    libMenu.hidden = !libMenu.hidden;
-    libMenuBtn.setAttribute('aria-expanded', String(!libMenu.hidden));
+newSongBtn.addEventListener('click', () => {
+    void import('./js/dialogs/import.js').then(m => m.openImportForm(openSaved));
 });
-libMenu.addEventListener('click', e => {
-    const open = {chords: showChordLibrary, patterns: showPatternLibrary, fretboard: showFretboard}[
-        /** @type {HTMLElement} */ (e.target).closest('button')?.dataset.page];
+// Menü ☰ der Übersichtsseite: Akkorde, Patterns und Griffbrett öffnen als Dialog.
+const overviewMenu = document.getElementById('overviewMenu');
+const overviewMenuBtn = document.getElementById('overviewMenuBtn');
+overviewMenuBtn.addEventListener('click', () => {
+    overviewMenu.hidden = !overviewMenu.hidden;
+    overviewMenuBtn.setAttribute('aria-expanded', String(!overviewMenu.hidden));
+});
+overviewMenu.addEventListener('click', e => {
+    // Die Dialoge lädt erst ihr Menüeintrag (import()).
+    const open = {
+        chords: async () => (await import('./js/dialogs/chordcatalog.js')).showChordCatalog(),
+        patterns: async () => (await import('./js/dialogs/patterncatalog.js')).showPatternCatalog(),
+        fretboard: async () => (await import('./js/dialogs/fretboard.js')).showFretboard(),
+    }[/** @type {HTMLElement} */ (e.target).closest('button')?.dataset.page];
     if (!open) return;
-    libMenu.hidden = true;
-    libMenuBtn.setAttribute('aria-expanded', 'false');
+    overviewMenu.hidden = true;
+    overviewMenuBtn.setAttribute('aria-expanded', 'false');
     void open();
 });
 document.addEventListener('click', e => {
-    if (/** @type {Element} */ (e.target).closest('.lib-menu')) return;
-    libMenu.hidden = true;
-    libMenuBtn.setAttribute('aria-expanded', 'false');
+    if (/** @type {Element} */ (e.target).closest('.overview-menu')) return;
+    overviewMenu.hidden = true;
+    overviewMenuBtn.setAttribute('aria-expanded', 'false');
 });
 // Zugeklappte Gruppen der Griffbilder für den Druck öffnen (auch bei Strg+P) und danach wieder schließen.
 window.addEventListener('beforeprint', () => {
-    for (const group of document.getElementById('sheet').querySelectorAll('details.chord-root:not([open])')) {
+    for (const group of document.getElementById('dialog').querySelectorAll('details.chord-root:not([open])')) {
         group.dataset.printOpened = '';
         group.open = true;
     }
 });
 window.addEventListener('afterprint', () => {
-    for (const group of document.getElementById('sheet').querySelectorAll('details[data-print-opened]')) {
+    for (const group of document.getElementById('dialog').querySelectorAll('details[data-print-opened]')) {
         delete group.dataset.printOpened;
         group.open = false;
     }
 });
 window.addEventListener('hashchange', route);
-// Klick außerhalb schließt das Menü der Liedansicht.
+// Klick außerhalb schließt das Menü der Playerseite.
 document.addEventListener('click', e => {
     const target = /** @type {Element} */ (e.target);
     if (target.closest('.songbar-menu')) return;
@@ -648,7 +403,8 @@ document.addEventListener('click', e => {
 });
 
 try {
-    await initLibrary();
+    initOverlay();
+    await initOverview();
     route();
 } catch (err) {
     console.error(err);

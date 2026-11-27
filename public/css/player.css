@@ -1,0 +1,1458 @@
+/* Player und alles, was von dort erreichbar ist: Abspielleiste, Mixer, Text & Akkorde, Streifen, Stammdaten,
+   Darstellung, Leadsheet (Vorschau und Druck). */
+
+/* Längen von Noten, YouTube-Clip und MP3 rechts neben der Beschriftung */
+.form-field .lengths {
+    float: right;
+    margin-left: .75rem;
+    text-transform: none;
+    letter-spacing: normal;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+}
+
+.form-field .lengths span:not(:empty) + span:not(:empty)::before {
+    content: ' · ';
+}
+
+.form-field .hint, .mixer-dialog .hint {
+    font-size: .75rem;
+    color: var(--ink-soft);
+    margin-top: .3rem;
+}
+
+/* Stammdaten: Schalter "Baustelle" neben seiner Überschrift, die Spuren in normaler Schrift. */
+.form-field label.wip-switch {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    cursor: pointer;
+}
+
+.form-field .wip-tracks label {
+    display: inline-flex;
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: .95rem;
+    color: inherit;
+    margin: 0;
+}
+
+/* Cover im Formular „Song bearbeiten“: Klick öffnet den Cover-Dialog (wie das Poster in der Videothek) */
+.form-head {
+    display: grid;
+    grid-template-columns:118px 1fr;
+    gap: 0 1rem;
+    align-items: start;
+}
+
+.cover-pick {
+    position: relative;
+    aspect-ratio: 1;
+    margin-top: 1.2rem;
+    padding: 0;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--paper-deep);
+    overflow: hidden;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.cover-pick:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.cover-pick img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.cover-pick .cover-empty {
+    --h: 210; /* Vorgabe, per style-Attribut überschrieben */
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, hsl(var(--h) 55% 58%), hsl(calc(var(--h) + 40) 45% 30%));
+    color: #fff;
+    font-size: .8rem;
+    font-weight: 600;
+}
+
+/* Treffer der Cover-Suche */
+.cover-results {
+    display: grid;
+    grid-template-columns:repeat(auto-fill, minmax(110px, 1fr));
+    gap: .6rem;
+    margin-bottom: 1rem;
+}
+
+.cover-results .hint {
+    grid-column: 1 / -1;
+    font-size: .85rem;
+    color: var(--ink-soft);
+    margin: 0;
+}
+
+.cover-hit {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    padding: 0 0 .35rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    overflow: hidden;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.cover-hit:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.cover-hit img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    display: block;
+}
+
+.cover-hit span, .cover-hit small {
+    padding: 0 .4rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cover-hit span {
+    font-size: .75rem;
+    color: var(--ink);
+}
+
+.cover-hit small {
+    font-size: .65rem;
+    color: var(--ink-soft);
+}
+
+/* Playerseite: Kopf mit Cover und drei Zeilen (Titel, Interpret, Eckdaten), Streifen mit aktuellem Akkord und Patterns,
+   Notenblatt, Abspielleiste unten mit allen Bedienelementen. Am Handy scrollt der Kopf weg, und der Streifen bleibt
+   oben stehen; am PC (ab 900 px) stehen Kopf und Streifen in einer Zeile, die ganz stehen bleibt. Der Knopf zum
+   Schließen schwebt oben rechts. */
+#songView {
+    padding-bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + 1rem);
+}
+
+/* Am Handy kein eigener Kasten: Sonst könnte der Streifen nicht über den Kopf hinaus oben stehen bleiben. */
+.songtop {
+    display: contents;
+}
+
+.songhead {
+    display: flex;
+    gap: .7rem;
+    align-items: center;
+    padding: .6rem 4rem .6rem .8rem;
+    background: var(--card);
+}
+
+.songhead-cover {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex: none;
+    background: var(--paper-deep);
+}
+
+.songhead-text {
+    min-width: 0;
+    flex: 1;
+}
+
+.songhead h2, .songhead-artist, .songhead-info {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.songhead h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    line-height: 1.25;
+}
+
+.songhead-artist {
+    color: var(--ink-soft);
+    line-height: 1.3;
+}
+
+.songhead-artist:empty {
+    display: none;
+}
+
+.songhead-info {
+    font-size: .82rem;
+    line-height: 1.4;
+    color: var(--ink);
+}
+
+/* Ein Song ohne Noten hat keine Abspielleiste: Sein Menü sitzt im Kopf. */
+.songhead .songbar-menu {
+    flex: none;
+}
+
+/* Schließen: schwebt oben rechts, unauffällig halbtransparent */
+.song-close {
+    position: fixed;
+    top: .6rem;
+    right: .6rem;
+    z-index: 40;
+    /* Eigene Größe, unabhängig von den Knöpfen der Abspielleiste */
+    --close-size: 34px;
+    width: var(--close-size);
+    height: var(--close-size);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    text-decoration: none;
+    background: rgba(255, 255, 255, .55);
+    color: rgba(39, 43, 52, .75);
+    border: 1px solid rgba(39, 43, 52, .12);
+    backdrop-filter: blur(3px);
+}
+
+.song-close:hover {
+    background: rgba(255, 255, 255, .9);
+    color: var(--ink);
+}
+
+/* Bearbeiten (Stift): schwebt links neben ✕, im gleichen Stil, mit eigener Größe */
+.song-edit {
+    position: fixed;
+    top: .6rem;
+    /* Rechts daneben ✕ (34 px, siehe .song-close) */
+    right: calc(.6rem + 34px + .4rem);
+    z-index: 40;
+    --edit-size: 34px;
+    width: var(--edit-size);
+    height: var(--edit-size);
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: rgba(255, 255, 255, .55);
+    color: rgba(39, 43, 52, .75);
+    border: 1px solid rgba(39, 43, 52, .12);
+    backdrop-filter: blur(3px);
+}
+
+.song-edit svg {
+    width: 18px;
+    height: 18px;
+}
+
+.song-edit:hover {
+    background: rgba(255, 255, 255, .9);
+    color: var(--ink);
+}
+
+/* Zum Bearbeiten braucht es Platz (Panels links, rechts, unten): Unter 1080 px Breite (Tablet hochkant, Handy) gibt
+   es den Stift nicht. */
+@media (width < 1080px) {
+    .song-edit {
+        display: none;
+    }
+}
+
+/* Mit Stift brauchen die beiden schwebenden Knöpfe oben rechts mehr Platz in der Kopfzeile */
+@media (min-width: 1080px) {
+    #songView .songtop {
+        padding-right: 6.5rem;
+    }
+}
+
+/* Streifen: aktueller Akkord mit Griffbild, daneben Strumming und Picking Patterns, senkrecht mittig. Rechts Platz für
+   den schwebenden Knopf. Am Handy eines der Patterns (data-show, Umschalter), am PC beide. */
+.songstrip {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    min-height: 84px;
+    padding: .35rem 4rem .35rem .8rem;
+    background: var(--card);
+    border-bottom: 1px solid var(--rule);
+}
+
+.songstrip[hidden] {
+    display: none;
+}
+
+.chord-now {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    white-space: nowrap;
+    flex: none;
+}
+
+.chord-now[hidden] {
+    display: none;
+}
+
+.chord-now strong {
+    color: var(--accent-dark);
+    font-size: 1.1rem;
+    line-height: 1.1;
+}
+
+.chord-now-svg svg {
+    display: block;
+    height: 76px;
+    width: auto;
+}
+
+.chord-now-svg text:first-child {
+    display: none;
+}
+
+/* Bundangabe (z. B. "3" neben dem Griff) lesbar: im verkleinerten Bild sonst nur etwa 6 px, so etwa 15 px */
+.chord-now-svg .fret-label {
+    font-size: 26px;
+    font-weight: 600;
+}
+
+.strip-swap {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    background: var(--card);
+    color: var(--ink-soft);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-right: -.3rem;
+}
+
+.strip-swap[hidden] {
+    display: none;
+}
+
+.strip-pattern {
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+    min-width: 0;
+}
+
+.strip-pattern[hidden] {
+    display: none;
+}
+
+.strip-pattern-name {
+    font-size: .72rem;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Der Schlag, der gerade dran ist, läuft mit (showPatterns() in pages/player.js) */
+.strip-pattern .pgrid td.pgrid-now {
+    background: rgba(255, 150, 60, .3);
+}
+
+@media (max-width: 899px) {
+    /* Platz für den längsten Akkordnamen, damit das Griffbild beim Wechsel (C, Am7) nicht hin und her springt */
+    .chord-now-label {
+        min-width: 2rem;
+        text-align: right;
+    }
+
+    .songstrip[data-show="strumming"] .strip-pattern[data-technique="picking"],
+    .songstrip[data-show="picking"] .strip-pattern[data-technique="strumming"] {
+        display: none;
+    }
+}
+
+@media (min-width: 900px) {
+    .songtop {
+        display: flex;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: var(--card);
+        border-bottom: 1px solid var(--rule);
+        padding-right: 4rem;
+    }
+
+    .songhead {
+        flex: 0 1 auto;
+        min-width: 0;
+        padding-right: 1.5rem;
+    }
+
+    .songhead h2 {
+        font-size: 1.35rem;
+    }
+
+    .songhead-info {
+        font-size: .9rem;
+    }
+
+    .songstrip {
+        position: static;
+        border: 0;
+        margin-left: auto;
+        padding-right: 0;
+        flex: none;
+        gap: 1.2rem;
+    }
+
+    .strip-swap {
+        display: none;
+    }
+}
+
+.songbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .8rem;
+    background: var(--card);
+    border-bottom: 1px solid var(--rule);
+}
+
+.songbar h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.songbar-menu {
+    position: relative;
+    margin-left: auto;
+}
+
+/* In der Abspielleiste klappt das Menü nach oben auf */
+.transport .menu {
+    top: auto;
+    bottom: calc(100% + .6rem);
+}
+
+.transport .songbar-menu {
+    margin-left: 0;
+    flex: none;
+}
+
+.score-status {
+    text-align: center;
+    color: var(--ink-soft);
+    padding: 1rem;
+    font-size: .9rem;
+}
+
+/* Eigener Stacking-Kontext: alphaTab gibt Cursor und Auswahl hohe z-index-Werte, die sonst über Kopfzeile und Overlay lägen. */
+.score-wrap {
+    position: relative;
+    z-index: 0;
+    background: var(--card);
+    margin: .6rem auto 0;
+    max-width: 1300px;
+    border-radius: 6px;
+}
+
+.score-wrap > div {
+    min-height: 40vh;
+}
+
+/* Text & Akkorde: je Silbe ein Block mit Akkord darüber */
+/* Pfeil statt Textcursor: ein Klick springt an die Stelle, wie in den Noten von alphaTab */
+.text-view {
+    background: var(--card);
+    margin: .6rem auto 0;
+    max-width: 900px;
+    border-radius: 6px;
+    padding: 1rem 1.2rem 2rem;
+    cursor: default;
+}
+
+/* Größe (Darstellung) nur für den Inhalt: das Blatt behält Breite und Hintergrund */
+.text-view > * {
+    zoom: var(--scale);
+}
+
+.tv-section {
+    margin-top: 1.1rem;
+}
+
+.tv-section h3 {
+    margin: 0 0 .3rem;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+
+.tv-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    margin-bottom: .35rem;
+    font-size: 1.1rem;
+    line-height: 1.3;
+}
+
+.tv-part {
+    display: inline-flex;
+    flex-direction: column;
+    white-space: pre;
+}
+
+/* Silbe unter der Maus markieren (ein Klick springt dorthin) */
+.tv-part[data-t]:hover .tv-syl {
+    text-decoration: underline dotted var(--ink-soft);
+}
+
+/* Wird eine Silbe mitten im Wort durch einen breiten Akkord gedehnt, füllt ein Strich die Lücke ("Jun — ge"). */
+.tv-stretch .tv-syl {
+    display: flex;
+}
+
+.tv-stretch .tv-syl::after {
+    content: "";
+    flex: 1;
+    border-bottom: 1px solid var(--ink-soft);
+    margin: 0 .05em .35em;
+}
+
+.tv-chord {
+    color: var(--accent-dark);
+    font-weight: 600;
+    font-size: .95rem;
+    min-height: 1.25em;
+    padding-right: .35em;
+}
+
+/* Beim Abspielen: aktueller Takt hinterlegt, aktuelle Silbe kräftig */
+.tv-now-bar {
+    background: var(--mark-soft);
+}
+
+.tv-now-syl .tv-syl {
+    background: var(--mark);
+    color: #fff;
+    border-radius: 3px;
+}
+
+.tv-barline {
+    color: var(--ink-soft);
+    font-weight: 400;
+    margin-right: .15em;
+}
+
+/* Takt ohne eigene Silbe: nur Taktstrich und Akkord, etwas Abstand zum nächsten */
+.tv-empty .tv-chord {
+    padding-right: .8em;
+}
+
+/* Taktzeile (Abschnitt ohne Text): nur die Akkordzeile, die Takte weiter auseinander */
+.tv-barrow .tv-syl {
+    display: none;
+}
+
+.tv-barrow .tv-empty .tv-chord {
+    padding-right: 1.6em;
+}
+
+.transport {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    min-height: var(--bar-h);
+    padding: .5rem .7rem calc(.5rem + env(safe-area-inset-bottom));
+    background: var(--dark);
+    color: #fff;
+    box-shadow: 0 -4px 16px rgba(39, 43, 52, .18);
+    /* Durchmesser der runden Knöpfe der Abspielleiste */
+    --tbtn-size: 34px;
+}
+
+.tbtn {
+    flex: 0 0 auto;
+    /* Kreis: feste Breite und ohne Innenabstand des Browsers (sonst wird der Knopf breiter als hoch). Die Größe setzt
+       jede Leiste selbst (--tbtn-size). */
+    width: var(--tbtn-size, 34px);
+    min-width: var(--tbtn-size, 34px);
+    height: var(--tbtn-size, 34px);
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, .35);
+    background: transparent;
+    color: #fff;
+    font-size: 1.05rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tbtn:disabled {
+    opacity: .45;
+    cursor: default;
+}
+
+.tbtn[hidden] {
+    display: none;
+}
+
+.tbtn[aria-pressed="true"], .tbtn[aria-expanded="true"], .tbtn.on {
+    background: var(--mark);
+    border-color: var(--mark);
+}
+
+/* Play so groß wie die anderen Knöpfe */
+.tbtn-play {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.tbtn.small {
+    width: auto;
+    min-width: 34px;
+    height: 34px;
+    border-radius: 6px;
+    font-size: .85rem;
+    color: var(--ink);
+    border-color: var(--rule);
+}
+
+/* Fortschritt als Linie am oberen Rand der Leiste (statt eines Schiebers) */
+.tline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, .18);
+}
+
+.tline div {
+    height: 100%;
+    width: 0;
+    background: var(--mark);
+    border-radius: 0 2px 2px 0;
+}
+
+/* Zeit: nimmt den Platz zwischen Play und den Knöpfen rechts; am Handy zweizeilig */
+.ttime {
+    flex: 1;
+    min-width: 0;
+    margin: 0 .3rem;
+    font-size: .9rem;
+    opacity: .9;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .ttime {
+        display: flex;
+        flex-direction: column;
+        font-size: .82rem;
+        line-height: 1.25;
+    }
+
+    .ttime-sep {
+        display: none;
+    }
+}
+
+/* Geschwindigkeit: Knopf mit Läufer, unter 100 % mit Wert; darüber die Liste der Werte */
+.speed-menu, .view-menu {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+/* Bei 100 % nur das Symbol: ein Kreis wie die anderen Knöpfe. Mit Prozentangabe eine Pille. */
+.tbtn-speed:has(> span:not([hidden])) {
+    width: auto;
+    border-radius: 22px;
+    gap: .3rem;
+    padding: 0 .55rem;
+}
+
+.tbtn-speed span {
+    font-size: .8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.speed-pop {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + .5rem);
+    z-index: 31;
+    min-width: 5.5rem;
+    display: flex;
+    flex-direction: column;
+    padding: .3rem 0;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(39, 43, 52, .22);
+}
+
+.speed-pop button {
+    font: inherit;
+    font-size: .9rem;
+    text-align: right;
+    padding: .4rem 1rem;
+    border: 0;
+    background: none;
+    color: var(--ink);
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+}
+
+.speed-pop button:hover {
+    background: var(--paper);
+}
+
+.speed-pop button[aria-current="true"] {
+    color: var(--accent-dark);
+    font-weight: 600;
+}
+
+/* Liste der Ansichten über ihrem Knopf: linksbündig, breiter */
+.view-pop {
+    min-width: 9.5rem;
+}
+
+.view-pop button {
+    text-align: left;
+    padding: .6rem 1rem;
+}
+
+.view-pop button[aria-current="true"] {
+    background: var(--accent);
+    color: #fff;
+}
+
+/* Bereich zum Wiederholen in "Chords" (onLoopTick() in pages/player.js) */
+.tv-loop {
+    box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+.mixer-dialog {
+    position: fixed;
+    right: .6rem;
+    z-index: 30;
+    bottom: calc(var(--bar-h) + env(safe-area-inset-bottom) + .5rem);
+    width: min(360px, calc(100vw - 1.2rem));
+    max-height: calc(100vh - var(--bar-h) - 6rem);
+    overflow-y: auto;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(39, 43, 52, .22);
+    padding: .4rem 1rem 1rem;
+}
+
+.mixer-dialog output {
+    display: inline-block;
+    min-width: 3.2em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Mixer-Dialog: Checkbox mit Name, Regler, Wert in festen Spalten */
+/* Mixer: je Zeile Auge (Spur anzeigen), Lautsprecher (zu hören), Name, darunter Regler und Wert */
+.mix-rows {
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    padding-top: .6rem;
+}
+
+.mix-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.mix-icon {
+    width: 38px;
+    height: 38px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--accent-dark);
+    cursor: pointer;
+}
+
+/*.mix-icon[aria-pressed="false"]{color:var(--ink-soft); opacity:.55;}*/
+.mix-icon:disabled {
+    opacity: .3;
+    cursor: default;
+}
+
+.mix-gap-icon {
+    width: 38px;
+    flex: none;
+}
+
+.mix-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.mix-body.off {
+    opacity: .4;
+}
+
+.mix-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: .9rem;
+    line-height: 1.2;
+}
+
+.mix-slider {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.mix-slider input {
+    flex: 1;
+    min-width: 0;
+}
+
+.mix-gap {
+    border-top: 1px solid var(--rule);
+}
+
+.mixer-dialog .hint {
+    margin: 0;
+}
+
+/* alphaTab: Markierungen beim Abspielen und Auswahl */
+.at-cursor-bar {
+    background: var(--mark-soft);
+}
+
+.at-cursor-beat {
+    background: var(--mark);
+    width: 3px;
+}
+
+.at-selection div {
+    background: var(--accent-soft);
+}
+
+.at-highlight * {
+    fill: var(--accent);
+    stroke: var(--accent);
+}
+
+/* Druck: alles auf weißem Grund, ohne Bedienelemente; gedruckt wird nur der Dialog (Akkorde, Patterns, Griffbrett) */
+@media print {
+    body, .songbar, .chord-group {
+        background: #fff !important;
+    }
+
+    .songbar .btn, .pattern-filter {
+        display: none !important;
+    }
+
+    .songbar {
+        position: static;
+        border: 0;
+        padding: 0 0 .5rem;
+    }
+}
+
+@media (max-width: 520px) {
+    .score-wrap {
+        margin-top: 0;
+        border-radius: 0;
+    }
+
+    .text-view {
+        margin-top: 0;
+        border-radius: 0;
+        padding: .8rem 1rem 1.5rem;
+    }
+
+    .transport {
+        gap: .3rem;
+        padding-left: .4rem;
+        padding-right: .4rem;
+    }
+}
+
+#songView {
+    --edit-left-w: 326px;
+    --edit-right-w: 380px;
+    --edit-closed-w: 38px;
+}
+
+/* Knöpfe der Abspielleiste ohne Funktion auf der Bearbeitungsseite */
+.transport .tbtn:disabled {
+    opacity: .3;
+}
+
+.songbar-menu {
+    display: flex;
+    gap: .4rem;
+    align-items: center;
+}
+
+/* Baustelle in den Stammdaten: Grund und Spuren unter dem Schalter. */
+#wipFields {
+    margin-top: .5rem;
+}
+
+#wipFields .wip-tracks {
+    margin: .5rem 0 0;
+}
+
+/* Seite DIN A4 (Breite : Höhe = 210 : 297), immer hell wie Papier; eine gestrichelte Linie zeigt das Seitenende.
+   Die Grundschrift --ls-pt in pt setzt das Einpassen (layoutLeadsheet() in ui/sheetview.js): Die Seite ist 595,28 pt breit,
+   1 pt also 0,168cqw; alle anderen Größen sind in em und wachsen mit. */
+.ls-page {
+    --ink: #1b1b1b;
+    --ink-soft: #666;
+    --rule: #c9c9c9;
+    --card: #fff;
+    --accent-dark: #9a3f00;
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 141.43cqw;
+    padding: 6cqw 7cqw;
+    background: #fff;
+    color: var(--ink);
+    font-size: calc(var(--ls-pt) * .168cqw);
+    line-height: 1.3;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+}
+
+.ls-page::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 141.43cqw;
+    border-top: 2px dashed #d32f2f;
+}
+
+.ls-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1.5em;
+}
+
+.ls-head h1 {
+    font-size: 2.1em;
+    line-height: 1.1;
+    margin: 0;
+}
+
+.ls-qrs {
+    display: flex;
+    gap: 1em;
+    flex: none;
+}
+
+.ls-qr {
+    margin: 0;
+    width: 5.2em;
+    text-align: center;
+    font-size: .8em;
+}
+
+.ls-qr svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.ls-qr figcaption {
+    margin-top: .2em;
+    line-height: 1.15;
+}
+
+/* Abstand zwischen Patterns, Griffbildern und Tabs */
+.ls-chords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4em 1em;
+    margin: 1.5em 0 1.1em;
+}
+
+.ls-chords .chord-diagram {
+    width: 5em;
+    height: auto;
+    color: var(--ink);
+}
+
+.ls-small .ls-chords .chord-diagram {
+    width: 3.8em;
+}
+
+.ls-md {
+    margin: .8em 0;
+}
+
+.ls-md h4, .ls-md h5, .ls-md h6 {
+    margin: .6em 0 .2em;
+    font-size: 1.05em;
+}
+
+.ls-md p {
+    margin: .3em 0;
+}
+
+.ls-md ul, .ls-md ol {
+    margin: .3em 0;
+    padding-left: 1.4em;
+}
+
+.ls-md a {
+    color: inherit;
+}
+
+.ls-links {
+    display: flex;
+    flex-direction: column;
+    gap: .1em;
+    margin: .6em 0;
+    font-size: .9em;
+    word-break: break-all;
+}
+
+.ls-page2-head {
+    margin-bottom: .4em;
+    font-size: 1.15em;
+}
+
+.ls-page-label {
+    font-size: .75rem;
+    color: var(--ink-soft);
+    margin: .2rem 0 .25rem;
+}
+
+.ls-page + .ls-page-label {
+    margin-top: .8rem;
+}
+
+.ls-artist {
+    font-size: 1.25em;
+    color: var(--ink-soft);
+}
+
+.ls-facts {
+    margin-top: .25em;
+}
+
+.ls-soft {
+    color: var(--ink-soft);
+    font-weight: 400;
+}
+
+.ls-patterns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .8em 2.5em;
+    margin: 1.1em 0 1.5em;
+}
+
+.ls-tabs {
+    margin: 1.5em 0 1.1em;
+}
+
+.ls-tabs .ls-tab:first-child h3 {
+    margin-top: 0;
+}
+
+.ls-pattern-head {
+    margin-bottom: .2em;
+}
+
+.ls-page .pgrid {
+    font-size: .85em;
+}
+
+.ls-page .pgrid td {
+    min-width: 1.6em;
+    padding: .05em .15em;
+}
+
+.ls-page .pgrid .smufl {
+    font-size: 2.6em;
+}
+
+.ls-page .pgrid-strum .pgrid-token td {
+    height: 1.9em;
+}
+
+.ls-page .pgrid-accent td {
+    height: 1.1em;
+}
+
+.ls-page .pgrid-count td, .ls-page .pgrid-count td.pgrid-strong, .ls-page .pgrid-pick .pgrid-label {
+    font-size: .9em;
+}
+
+.ls-page .pgrid-string td:not(.pgrid-label) {
+    height: 1.15em;
+}
+
+.ls-page .pgrid-mute {
+    font-size: 1.4em;
+}
+
+.ls-tab h3 {
+    font-size: 1em;
+    margin: .7em 0 .1em;
+}
+
+/* Fußzeile mit dem Hinweis auf alphaTab und dessen offiziellem Logo statt des Vermerks unter jeder Zeichnung
+   (creditHtml() in ui/credit.js; https://github.com/CoderLine/alphaTab/discussions/1608). */
+.credit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .45em;
+    margin: 0;
+    color: #333;
+}
+
+.credit a {
+    display: inline-flex;
+    align-items: center;
+    color: inherit;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.credit-logo {
+    height: 1.5em;
+    width: auto;
+    display: block;
+}
+
+.credit-logo + .credit-name {
+    display: none;
+}
+
+/* Leadsheet: im unteren Rand der ersten A4-Seite. */
+.ls-credit {
+    position: absolute;
+    left: 7cqw;
+    right: 7cqw;
+    top: 136.2cqw;
+    font-size: calc(9.5 * .168cqw);
+}
+
+/* Player und Bearbeitungsseite: unter den Noten. */
+.player-credit {
+    font-size: .8rem;
+    padding: .6rem 0 1rem;
+    color: var(--ink-soft);
+}
+
+/* Tab von alphaTab, zu einer SVG zusammengesetzt (ui/sheetview.js); Zählzeiten in Einheiten der Zeichnung. */
+.ls-at-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.ls-at-svg svg {
+    overflow: visible;
+}
+
+.ls-at-svg text {
+    dominant-baseline: alphabetic;
+    white-space: pre;
+}
+
+.ls-at-svg .at {
+    font-family: 'GbBravura', sans-serif;
+    font-size: var(--at-glyph);
+    font-style: normal;
+    font-weight: normal;
+    line-height: 1;
+}
+
+.ls-at-count {
+    font: 9px system-ui, sans-serif;
+    text-anchor: middle;
+    fill: #777;
+}
+
+.ls-at-count-beat {
+    font-weight: 700;
+    fill: #222;
+}
+
+.ls-hints {
+    margin: .6em 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2em .8em;
+}
+
+.ls-text .tv-section {
+    margin-top: .8em;
+}
+
+.ls-text .tv-section h3 {
+    font-size: .85em;
+    margin-bottom: .15em;
+}
+
+.ls-text .tv-line {
+    font-size: 1em;
+    margin-bottom: .2em;
+}
+
+.ls-text .tv-chord {
+    font-size: .9em;
+}
+
+.ls-text .tv-line {
+    break-inside: avoid;
+}
+
+.ls-text .tv-section h3 {
+    break-after: avoid;
+}
+
+/* Gleiche Abschnitte nur einmal: Zusatz neben dem Namen ("wie oben", "2×"). */
+.tv-note {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    margin-left: .3em;
+}
+
+/* Hinweis an Stelle ausgelassener Takte in Text & Akkorde (applyCuts() in ui/sheetview.js) und in den Tabs (tabPieces()). */
+.ls-tab-hint {
+    font-style: italic;
+    color: #444;
+    margin: .3em 0 .6em;
+}
+
+.ls-tab-hint::before {
+    content: '→';
+    font-style: normal;
+    margin-right: .4em;
+}
+
+.tv-line.tv-hint {
+    font-style: italic;
+    color: #444;
+}
+
+.tv-line.tv-hint::before {
+    content: '→';
+    font-style: normal;
+    margin-right: .4em;
+}
+
+/* Text zweispaltig (Einpassen); ein Abschnitt bleibt möglichst in einer Spalte. */
+.ls-cols2 .ls-text {
+    columns: 2;
+    column-gap: 2.4em;
+}
+
+.ls-cols2 .ls-text .tv-section {
+    break-inside: avoid;
+}
+
+.ls-cols2 .ls-text > :first-child {
+    margin-top: 0;
+}
+
+@media print {
+    body.ls-printing {
+        margin: 0;
+        padding: 0;
+        background: #fff !important;
+    }
+}
+
+.tag.level-can {
+    background: #d9f2df;
+    color: #1d6b33;
+}
+
+.tag.level-practice {
+    background: #fdf0c4;
+    color: #7a5a00;
+}
+
+.tag.level-cannot {
+    background: #e8e8e8;
+    color: #555;
+}
+
+.song-marks {
+    margin-top: .5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
+}
+
+.song-marks .level-can[aria-pressed="true"] {
+    background: #d9f2df;
+    border-color: #1d6b33;
+    color: #1d6b33;
+}
+
+.song-marks .level-practice[aria-pressed="true"] {
+    background: #fdf0c4;
+    border-color: #7a5a00;
+    color: #7a5a00;
+}
+
+.song-marks .level-cannot[aria-pressed="true"] {
+    background: #e8e8e8;
+    border-color: #555;
+    color: #555;
+}
+
+/* Einstufung und Favorit im Dialog "Stammdaten": Symbolknöpfe, die gewählten farbig (wie die Kachel auf der Übersichtsseite) */
+.rating-line {
+    display: flex;
+    gap: .4rem;
+}
+
+.rate-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    background: var(--card);
+    color: var(--ink-soft);
+    cursor: pointer;
+    padding: 0;
+}
+
+.rate-btn:hover {
+    border-color: var(--ink-soft);
+}
+
+.rate-icon {
+    width: 24px;
+    height: 24px;
+    fill: currentColor;
+}
+
+.rate-btn[data-level="can"][aria-pressed="true"] {
+    background: #d9f2df;
+    border-color: #1d6b33;
+    color: #1d6b33;
+}
+
+.rate-btn[data-level="practice"][aria-pressed="true"] {
+    background: #fdf0c4;
+    border-color: #7a5a00;
+    color: #7a5a00;
+}
+
+.rate-btn[data-level="cannot"][aria-pressed="true"] {
+    background: #e8e8e8;
+    border-color: #555;
+    color: #444;
+}
+
+.rate-fav[aria-pressed="true"] {
+    background: #fbdcdc;
+    border-color: #c0392b;
+    color: #c0392b;
+}
+
+/* Außerhalb der Bearbeitungsseite ist die Leiste leer und unsichtbar (sie nimmt nur die Werkzeugleiste der Bearbeitungsseite auf). */
+#songView:not(.editing) > .songbar {
+    display: none;
+}
+
+/* Spuren der Baustelle (Stammdaten): nebeneinander, wie die Radiobuttons in den Dialogen des Editors */
+.wip-tracks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem 1rem;
+    margin: .8rem 0 1rem;
+}
+
+.wip-tracks label {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.wip-tracks input {
+    margin: 0;
+}
+
+/* Eingeklappt statt ausgeblendet: alphaTab braucht die Breite des Containers zum Zeichnen. */
+.score-wrap.collapsed {
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    margin: 0;
+}
+
+.score-wrap.collapsed > div {
+    min-height: 0;
+}

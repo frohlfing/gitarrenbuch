@@ -1,16 +1,12 @@
 <?php
 
 /**
- * Audiospur eines Lieds (audio.mp3): ausliefern und hochladen.
- * Ausliefern über die API ist nötig, weil DATA_DIR bewusst außerhalb des Document Root liegt.
+ * Audiospur eines Songs (audio.mp3) ausliefern und hochladen. Hochgeladen wird von bin/fetchaudio.php, weil dem
+ * Server yt-dlp und ffmpeg fehlen.
  *
- * GET /api/audio.php?slug=xyz   -> die MP3 als audio/mpeg. 404, falls Lied oder Datei fehlt. Kein Token nötig.
- * PUT /api/audio.php?slug=xyz   -> ersetzt audio.mp3. Body: die MP3-Datei selbst (Content-Type audio/mpeg), höchstens
- *                                  MAX_UPLOAD_BYTES. Antwort: das aktualisierte Lied. Token nötig. Hochgeladen wird
- *                                  von bin/audio.php, das die Audiospur lokal von YouTube holt (auf dem Server fehlen
- *                                  yt-dlp und ffmpeg).
- *
- * Token wird per Header X-API-Token erwartet (siehe api/lib/http.php: require_token()).
+ * GET /api/audio.php?slug=xyz   -> die MP3 (audio/mpeg)
+ * PUT /api/audio.php?slug=xyz   -> ersetzt audio.mp3 (Body: die MP3, höchstens MAX_UPLOAD_BYTES). Antwort: der Song.
+ *                                  Token nötig.
  */
 
 require_once __DIR__ . '/../../config.php';

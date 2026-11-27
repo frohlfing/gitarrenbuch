@@ -1,48 +1,15 @@
 <?php
 
 /**
- * Angaben für das Leadsheet, die alphaTex nicht kennt (siehe public/js/sheet.js). Sie stehen in score.json neben
- * score.atex (siehe read_leadsheet()) und kommen mit ihr unverändert in den Verlauf; die API liefert sie beim Lied
- * als Feld leadsheet mit (with_file_flags()):
+ * Angaben für das Leadsheet (score.json neben score.atex; Aufbau siehe Typ Sheet in public/js/lib/sheetmodel.js).
+ * Ein eigener Endpunkt statt PUT api/songs.php: Der Editor speichert sie mit den Noten, das Formular "Stammdaten"
+ * getrennt davon; so überschreibt keiner die Änderungen des anderen.
  *
- *   {
- *     "patterns": [{"id": "folk", "when": "Strophe und Refrain"}],
- *     "tabs": [{"from": 0, "to": 3, "track": "picking", "label": "Intro"}],
- *     "cuts": [{"from": 40, "to": 47, "text": "wiederholen und leiser werden"}],
- *     "chords": {"G": false, "G*": true},
- *     "links": [{"label": "Original", "url": "https://…", "qr": true}],
- *     "instructions": "Markdown",
- *     "layout": {"twoPages": true, "columns": false, "font": 12, "compactTabs": false, "smallChords": false,
- *                "tabCounts": false, "mergeSections": true},
- *     "barsPerRow": 4
- *   }
- *
- * patterns: die Patterns des Songs (Verweis auf den Katalog data/patterns.json) mit Freitext, wann sie gespielt
- * werden. tabs: Takte, die als Tab auf das Blatt kommen; from/to sind Indizes der Takte (0 = erster Takt), track der
- * Name der Spur. Fügt der Editor Takte ein oder löscht welche, zieht er die Indizes nach. cuts: Takte, die in
- * "Text & Akkorde" nicht ausgeschrieben werden, an ihrer Stelle steht text (leer: nichts); nur gespeichert, wenn es
- * welche gibt. chords: Griffbilder, die
- * von der Regel abweichen (true zeigen, false ausblenden). links: auf dem Blatt als QR-Code oder Text; Links ohne
- * Adresse fallen beim Speichern weg. instructions: Hinweise zur Spielweise für Seite 1 (Markdown, höchstens 5000
- * Zeichen); nicht zu verwechseln mit notes in song.json (Notizen der Stammdaten), beide bleiben getrennt. Beim Import
- * einer GP-Datei wird es mit deren Anweisungen vorbelegt (api/import.php). layout: wie das Blatt gesetzt wird
- * (Kontrollkästchen im Reiter "Leadsheet": zwei Seiten, Text zweispaltig, Schrift in pt, Tabs zusammenfassen,
- * Griffbilder klein, Zählzeiten unter den Tabs, gleiche Abschnitte nur einmal); gespeichert nur, wenn es von LEADSHEET_LAYOUT abweicht.
- * barsPerRow: Takte pro Zeile in den Noten, gezählt ab jedem Abschnitt (Feld in der Leiste des Editors); nur
- * gespeichert, wenn gesetzt.
- *
- * Ein eigener Endpunkt statt PUT api/songs.php: Der Editor speichert die Angaben zusammen mit den Noten, das Formular
- * "Stammdaten" getrennt davon; so überschreibt keiner die Änderungen des anderen.
- *
- * GET /api/leadsheet.php?slug=xyz   -> Inhalt, fehlende Felder leer. Kein Token nötig.
- * GET /api/leadsheet.php?slug=xyz&version=<id>
- *                                   -> dasselbe aus einem aufgehobenen Stand (id aus api/score.php?history=1).
- * PUT /api/leadsheet.php?slug=xyz   -> ersetzt score.json (ohne Einträge fällt sie weg). Body wie oben. Vorher
- *                                      kommt der bisherige Stand in den Verlauf
- *                                      (siehe keep_score_history(); mit &note=… samt Notiz, was sich ändert), außer
- *                                      mit &keep=0 (der Editor setzt es, wenn er im selben Speichern schon die Noten
- *                                      gesichert hat). Antwort: das
- *                                      aktualisierte Lied. Token nötig.
+ * GET /api/leadsheet.php?slug=xyz              -> Inhalt, fehlende Felder leer. Kein Token nötig.
+ * GET /api/leadsheet.php?slug=xyz&version=<id> -> dasselbe aus einem Stand im Verlauf (id aus score.php?history=1).
+ * PUT /api/leadsheet.php?slug=xyz              -> ersetzt score.json; der bisherige Stand kommt in den Verlauf (mit
+ *                                                 &note=… samt Notiz), außer mit &keep=0. Antwort: der Song.
+ *                                                 Token nötig.
  */
 
 require_once __DIR__ . '/../../config.php';
@@ -52,28 +19,24 @@ require_once __DIR__ . '/lib/file_store.php';
 
 /**
  * Höchstzahl der Patterns und der Tab-Stellen je Song.
- *
  * @var int
  */
 const LEADSHEET_MAX_ITEMS = 50;
 
 /**
  * Höchster Index eines Takts (ein Song hat selten mehr als 300 Takte).
- *
  * @var int
  */
 const LEADSHEET_MAX_BAR = 4999;
 
 /**
- * Höchstzahl der Takte pro Zeile (wie BARS_PER_ROW_MAX in js/editor.js).
- *
+ * Höchstzahl der Takte pro Zeile (wie BARS_PER_ROW_MAX in js/pages/editor.js).
  * @var int
  */
 const LEADSHEET_BARS_PER_ROW_MAX = 12;
 
 /**
  * Kürzt einen Freitext und prüft seine Länge.
- *
  * @param mixed $value Wert aus dem Body
  * @param string $what Bezeichnung für die Fehlermeldung
  * @param int $max höchste Länge in Zeichen
@@ -93,7 +56,6 @@ function leadsheet_text(mixed $value, string $what, int $max = 200): string
 
 /**
  * Prüft den Inhalt und bringt ihn in die gespeicherte Form (Tab-Stellen nach Takt sortiert).
- *
  * @param array $data dekodierter Body
  * @return array{patterns: array<int, array>, tabs: array<int, array>, chords: array<string, bool>,
  *               links: array<int, array>, instructions: string}
@@ -123,12 +85,7 @@ function validate_leadsheet(array $data): array
         if (!is_int($from) || !is_int($to) || $from < 0 || $to < $from || $to > LEADSHEET_MAX_BAR) {
             json_error(400, 'Tab ' . ($k + 1) . ': from/to ungültig');
         }
-        $cleanTabs[] = [
-            'from' => $from,
-            'to' => $to,
-            'track' => leadsheet_text($tab['track'] ?? '', 'Tab ' . ($k + 1) . ': track'),
-            'label' => leadsheet_text($tab['label'] ?? '', 'Tab ' . ($k + 1) . ': label'),
-        ];
+        $cleanTabs[] = ['from' => $from, 'to' => $to, 'track' => leadsheet_text($tab['track'] ?? '', 'Tab ' . ($k + 1) . ': track'), 'label' => leadsheet_text($tab['label'] ?? '', 'Tab ' . ($k + 1) . ': label'),];
     }
     usort($cleanTabs, fn($a, $b) => [$a['from'], $a['to']] <=> [$b['from'], $b['to']]);
 
@@ -144,11 +101,7 @@ function validate_leadsheet(array $data): array
         if (!is_int($from) || !is_int($to) || $from < 0 || $to < $from || $to > LEADSHEET_MAX_BAR) {
             json_error(400, 'Ersetzte Takte ' . ($k + 1) . ': from/to ungültig');
         }
-        $cleanCuts[] = [
-            'from' => $from,
-            'to' => $to,
-            'text' => leadsheet_text($cut['text'] ?? '', 'Ersetzte Takte ' . ($k + 1) . ': text'),
-        ];
+        $cleanCuts[] = ['from' => $from, 'to' => $to, 'text' => leadsheet_text($cut['text'] ?? '', 'Ersetzte Takte ' . ($k + 1) . ': text'),];
     }
     usort($cleanCuts, fn($a, $b) => [$a['from'], $a['to']] <=> [$b['from'], $b['to']]);
 
@@ -178,11 +131,7 @@ function validate_leadsheet(array $data): array
             /** @noinspection HttpUrlsUsage */
             json_error(400, 'Link ' . ($k + 1) . ': Adresse muss mit http:// oder https:// beginnen');
         }
-        $cleanLinks[] = [
-            'label' => leadsheet_text($link['label'] ?? '', 'Link ' . ($k + 1) . ': label', 80),
-            'url' => $url,
-            'qr' => ($link['qr'] ?? true) !== false,
-        ];
+        $cleanLinks[] = ['label' => leadsheet_text($link['label'] ?? '', 'Link ' . ($k + 1) . ': label', 80), 'url' => $url, 'qr' => ($link['qr'] ?? true) !== false,];
     }
 
     $barsPerRow = $data['barsPerRow'] ?? 0;
@@ -190,37 +139,24 @@ function validate_leadsheet(array $data): array
         json_error(400, 'barsPerRow muss eine ganze Zahl von 0 bis ' . LEADSHEET_BARS_PER_ROW_MAX . ' sein');
     }
 
-    return [
-        'patterns' => $cleanPatterns,
-        'tabs' => $cleanTabs,
-        'cuts' => $cleanCuts,
-        'chords' => $cleanChords,
-        'links' => $cleanLinks,
-        'instructions' => leadsheet_text($data['instructions'] ?? '', 'instructions', LEADSHEET_TEXT_MAX),
-        'layout' => leadsheet_layout($data['layout'] ?? null),
-        'barsPerRow' => $barsPerRow,
-    ];
+    return ['patterns' => $cleanPatterns, 'tabs' => $cleanTabs, 'cuts' => $cleanCuts, 'chords' => $cleanChords, 'links' => $cleanLinks, 'instructions' => leadsheet_text($data['instructions'] ?? '', 'instructions', LEADSHEET_TEXT_MAX), 'layout' => leadsheet_layout($data['layout'] ?? null), 'barsPerRow' => $barsPerRow,];
 }
 
 /**
- * Layout ohne Angabe (wie DEFAULT_LAYOUT in js/sheet.js): eine Seite, einspaltig, 12 pt, gleiche Abschnitte nur
- * einmal.
- *
+ * Layout ohne Angabe (wie DEFAULT_LAYOUT in js/lib/sheetmodel.js): eine Seite, einspaltig, 12 pt, gleiche Abschnitte
+ * nur einmal.
  * @var array<string, bool|int>
  */
-const LEADSHEET_LAYOUT = ['twoPages' => false, 'columns' => false, 'font' => 12, 'compactTabs' => false,
-    'smallChords' => false, 'tabCounts' => false, 'mergeSections' => true];
+const LEADSHEET_LAYOUT = ['twoPages' => false, 'columns' => false, 'font' => 12, 'compactTabs' => false, 'smallChords' => false, 'tabCounts' => false, 'mergeSections' => true];
 
 /**
- * Schriftgrößen des Blatts in pt (wie FONT_SIZES in js/sheet.js).
- *
+ * Schriftgrößen des Blatts in pt (wie FONT_SIZES in js/lib/sheetmodel.js).
  * @var int[]
  */
 const LEADSHEET_FONTS = [12, 11, 10, 9];
 
 /**
  * Prüft das Layout aus einem Request; fehlende Angaben bekommen die Vorgabe.
- *
  * @param mixed $layout Wert von "layout" im Body
  * @return array<string, bool|int> vollständiges Layout
  */
@@ -256,19 +192,8 @@ try {
     }
     switch ($method) {
         case 'GET':
-            $data = isset($_GET['version'])
-                ? score_history_leadsheet($slug, (string)$_GET['version']) : read_leadsheet($slug);
-            $result = [
-                'patterns' => is_array($data['patterns'] ?? null) ? array_values($data['patterns']) : [],
-                'tabs' => is_array($data['tabs'] ?? null) ? array_values($data['tabs']) : [],
-                'cuts' => is_array($data['cuts'] ?? null) ? array_values($data['cuts']) : [],
-                'chords' => (object)(is_array($data['chords'] ?? null) ? $data['chords'] : []),
-                'links' => is_array($data['links'] ?? null) ? array_values($data['links']) : [],
-                'instructions' => is_string($data['instructions'] ?? null) ? $data['instructions'] : '',
-                'layout' => array_merge(LEADSHEET_LAYOUT,
-                    array_intersect_key(is_array($data['layout'] ?? null) ? $data['layout'] : [], LEADSHEET_LAYOUT)),
-                'barsPerRow' => is_int($data['barsPerRow'] ?? null) ? $data['barsPerRow'] : 0,
-            ];
+            $data = isset($_GET['version']) ? score_history_leadsheet($slug, (string)$_GET['version']) : read_leadsheet($slug);
+            $result = ['patterns' => is_array($data['patterns'] ?? null) ? array_values($data['patterns']) : [], 'tabs' => is_array($data['tabs'] ?? null) ? array_values($data['tabs']) : [], 'cuts' => is_array($data['cuts'] ?? null) ? array_values($data['cuts']) : [], 'chords' => (object)(is_array($data['chords'] ?? null) ? $data['chords'] : []), 'links' => is_array($data['links'] ?? null) ? array_values($data['links']) : [], 'instructions' => is_string($data['instructions'] ?? null) ? $data['instructions'] : '', 'layout' => array_merge(LEADSHEET_LAYOUT, array_intersect_key(is_array($data['layout'] ?? null) ? $data['layout'] : [], LEADSHEET_LAYOUT)), 'barsPerRow' => is_int($data['barsPerRow'] ?? null) ? $data['barsPerRow'] : 0,];
             json_response(200, $result);
 
         case 'PUT':

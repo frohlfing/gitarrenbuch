@@ -1,0 +1,2542 @@
+/* Bearbeitungsseite (erst mit dem Stift geladen): Werkzeugleiste, Panels, Sync-Editor und seine Dialoge. */
+
+/* Dialoge "Rhythmus ableiten" und "Melodie ableiten": alle Teile im gleichen Abstand untereinander */
+.dialog:has(#rhBox), .dialog:has(#mdApply) {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.dialog:has(#rhBox) > *, .dialog:has(#mdApply) > * {
+    flex: none;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* "Rhythmus ableiten" passt ins Fenster, nur die Liste der Rhythmen rollt */
+.dialog:has(#rhBox) {
+    max-height: calc(100vh - 6vh);
+}
+
+.dialog:has(#rhBox) > #rhBox {
+    flex: 1 1 auto;
+    min-height: 6rem;
+    max-height: none;
+}
+
+/* Struktur-Editor: je Spur Name, Wahl der Akkordspur und Eckdaten */
+.struct-form fieldset {
+    border: 0;
+    border-top: 1px solid var(--rule);
+    margin: 0 0 .6rem;
+    padding: .6rem 0 0;
+}
+
+.struct-form legend {
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--ink-soft);
+    padding-right: .5rem;
+}
+
+/* Dialog "Akkorde/Liedtext nach …" (Reiter "Spuren"): je Möglichkeit Knopf und Erklärung */
+.move-option {
+    display: grid;
+    grid-template-columns:10.5rem minmax(0, 1fr);
+    gap: .6rem;
+    align-items: start;
+    margin: .6rem 0;
+}
+
+.move-option .btn {
+    width: 100%;
+}
+
+@media (max-width: 520px) {
+    .move-option {
+        grid-template-columns:1fr;
+    }
+}
+
+.struct-form .hint {
+    font-size: .75rem;
+    color: var(--ink-soft);
+}
+
+.struct-form.busy {
+    opacity: .6;
+    pointer-events: none;
+}
+
+#songView.editing .song-edit {
+    display: none;
+}
+
+/* Menü "Bereinigen" in der Leiste der Bearbeitungsseite (editor.js): klappt nach unten auf */
+.etool-menu {
+    position: relative;
+    display: inline-flex;
+}
+
+.etool-pop {
+    top: calc(100% + .3rem);
+    bottom: auto;
+    left: 0;
+    right: auto;
+    min-width: 12rem;
+}
+
+/* Menü "Abschnitte" am rechten Ende der Leiste: klappt nach links auf, lange Listen rollen */
+.etool-pop-end {
+    left: auto;
+    right: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.etool-pop-end button {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    white-space: nowrap;
+}
+
+.etool-pop-bar {
+    opacity: .65;
+}
+
+/* Sync-Editor (pages/player.js): liegt im Reiter "Audio" der Bearbeitungsseite, im Fluss des Panels */
+.sync-editor {
+    padding: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.sync-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    align-items: center;
+}
+
+.sync-shift {
+    display: inline-flex;
+    gap: .25rem;
+    align-items: center;
+    font-size: .85rem;
+}
+
+/* Beschriftung und Tempo mit fester Breite: Beim Wechsel des Markers verschiebt sich nichts. */
+.sync-at, .sync-bpm {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Mittig zwischen Knopf (.35rem Leistenlücke + .8rem) und ms-Feld (.25rem Lücke + .9rem). */
+.sync-at {
+    min-width: 6.5em;
+    margin-right: .9rem;
+    text-align: center;
+}
+
+.sync-bpm {
+    min-width: 4.6em;
+    text-align: right;
+    font-size: .85rem;
+}
+
+.sync-toolbar [data-act="add"], .sync-toolbar [data-act="optimize"], .sync-toolbar > .ebtn + .sync-shift,
+.sync-shift + .sync-bpm {
+    margin-left: .8rem;
+}
+
+.sync-zoom {
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.sync-shift [data-ref="shiftMs"] {
+    width: 4.6rem;
+}
+
+.sync-shift input {
+    width: 3.25rem;
+    padding: .3rem .4rem;
+    font: inherit;
+    font-size: .85rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+}
+
+.sync-wave {
+    display: block;
+    width: 100%;
+    flex: 1 1 0;
+    min-height: 48px;
+    margin-top: .3rem;
+    border-radius: 6px;
+    cursor: pointer;
+    touch-action: none;
+}
+
+.sync-wave:focus-visible {
+    outline: 2px solid var(--accent);
+}
+
+.sync-scroll {
+    display: block;
+    width: 100%;
+    margin: .25rem 0 0;
+    accent-color: var(--accent);
+}
+
+.sync-status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    align-items: center;
+    min-height: 1.4em;
+    font-size: .8rem;
+    color: var(--ink-soft);
+}
+
+/* Auf der Bearbeitungsseite steht die Markierung des Abspielens nur beim Abspielen im Bild: Sonst springt sie nach jeder
+   Änderung an den Anfang und stört den Cursor der Bearbeitung. */
+#songView.editing:not(.is-playing) .at-cursor-bar, #songView.editing:not(.is-playing) .at-cursor-beat {
+    display: none;
+}
+
+/* Kopf, Streifen, Hinweise und der Knopf zum Schließen gehören zum Abspielen; die Bearbeitungsseite verlässt "Fertig". */
+#songView.editing .songhead, #songView.editing .songstrip,
+#songView.editing .song-close {
+    display: none;
+}
+
+/* Auf der Bearbeitungsseite zeigt die feste Leiste nur die Werkzeugleiste (Ansicht und Spuren stecken darin, siehe editor.js) */
+/* Über den Panels (25–27), damit das Menü "Bereinigen" aus der Leiste darüber aufklappt */
+#songView.editing .songbar {
+    display: block;
+    padding: 0;
+    z-index: 28;
+}
+
+#songView.editing .songbar > :not(.edit-toolbar) {
+    display: none;
+}
+
+/* Schließen wie im Player: rundes ✕ */
+.edit-close {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    background: var(--card);
+    color: var(--ink);
+    font-size: 1.05rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.edit-close:hover {
+    border-color: var(--accent);
+    color: var(--accent-dark);
+}
+
+/* Capo je Spur (rechtes Panel, nur bei ungleichem Capo) */
+#songView.editing .track-checks {
+    padding: 0;
+}
+
+#songView.editing .score-wrap {
+    max-width: none;
+}
+
+#songView.editing {
+    padding-bottom: calc(var(--bar-h) + var(--edit-bottom-h) + env(safe-area-inset-bottom) + 1rem);
+}
+
+#songView.editing .score-wrap, #songView.editing .score-status {
+    margin-left: var(--edit-closed-w);
+    margin-right: var(--edit-closed-w);
+}
+
+#songView.editing.edit-left-open .score-wrap, #songView.editing.edit-left-open .score-status {
+    margin-left: var(--edit-left-w);
+}
+
+#songView.editing.edit-right-open .score-wrap, #songView.editing.edit-right-open .score-status {
+    margin-right: var(--edit-right-w);
+}
+
+.edit-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .8rem;
+    padding: .45rem .8rem;
+    background: var(--paper);
+}
+
+.egroup {
+    display: flex;
+    gap: .2rem;
+    align-items: center;
+}
+
+.egroup + .egroup {
+    padding-left: .8rem;
+    border-left: 1px solid var(--rule);
+}
+
+.edit-toolbar .edit-end {
+    margin-left: auto;
+    gap: .4rem;
+    border-left: 0;
+}
+
+/* Felder in der Werkzeugleiste: Tonart, Capo, Tuning */
+.egroup-song {
+    gap: .5rem;
+}
+
+.etool-field {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .8rem;
+    color: var(--ink-soft);
+}
+
+.etool-field select, .etool-field input {
+    height: 34px;
+    padding: 0 .4rem;
+    font: inherit;
+    font-size: .85rem;
+    color: var(--ink);
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+}
+
+.etool-field input[type="number"] {
+    width: 3.6rem;
+}
+
+.etool-field input[type="text"] {
+    width: 8.5rem;
+}
+
+.etool-field input:disabled {
+    opacity: .5;
+}
+
+.etool-info {
+    font-size: .9rem;
+    color: var(--ink);
+    white-space: nowrap;
+}
+
+/* "!" neben der Tonart: Die Erkennung schlägt eine andere vor (Tooltip) */
+.etool-keyhint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--rule);
+    color: var(--danger);
+    font-size: .8rem;
+    font-weight: 700;
+    cursor: help;
+    margin-left: -.3rem;
+}
+
+.etool-keyhint[hidden] {
+    display: none;
+}
+
+.etool-keyhint.etool-tempohint {
+    margin-left: .05rem;
+}
+
+/* "!" am Label "Audio": irgendwo passt das Tempo nicht zur Audiospur; ein Klick springt zum ersten Abschnitt */
+.etool-keyhint.etool-audiohint {
+    margin-left: -.4rem;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    font-size: .8rem;
+    font-weight: 700;
+}
+
+.edit-bottom-head .edit-panel-title {
+    flex: none;
+}
+
+.etool-info[hidden] {
+    display: none;
+}
+
+/* Dialog "Transponieren" (js/transposedialog.js): links Eingaben und Angaben, rechts die Vorschau vorher und nachher */
+.dialog:has(.tp) {
+    width: fit-content;
+    max-width: min(1180px, 100%);
+}
+
+.tp-keyrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem 1.4rem;
+    margin-bottom: .8rem;
+}
+
+.tp-keyrow .btn {
+    margin-left: .4rem;
+}
+
+.tp-newkey {
+    margin: 1rem 0 0;
+}
+
+/* Dialog "Rhythmus ableiten" (rhythmdialog.js): je Rhythmus Ort, Raster mit Feld, Knöpfe zum Übernehmen, Warnung */
+.dialog:has(.rh) {
+    max-width: min(900px, 100%);
+}
+
+/* Rechts bündig mit dem Text der Rhythmen darunter (Abstand setzt rhythmdialog.js, alignTools()) */
+.rh-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem .8rem;
+    align-items: center;
+    margin-bottom: 1.1rem;
+}
+
+.rh-tools .rh-count {
+    margin-left: auto;
+}
+
+.rh {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    max-height: min(70vh, 720px);
+    overflow: auto;
+    padding-right: .3rem;
+}
+
+.rh-row {
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: .5rem .7rem;
+}
+
+.rh-row.rh-bad {
+    border-color: var(--danger);
+}
+
+/* "Nach Abschnitten": Überschrift je Abschnittsgruppe, darunter ihre Rhythmen */
+.rh-group {
+    display: flex;
+    gap: .6rem;
+    align-items: baseline;
+    /* näher an den eigenen Rhythmen als am Rhythmus davor */
+    margin: .5rem 0 -.25rem;
+}
+
+.rh-group:first-child {
+    margin-top: 0;
+}
+
+/* Durchgänge und Takte neben dem Namen: normal geschrieben, nicht wie die Überschrift in Großbuchstaben */
+.rh-group .efield-hint {
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+/* Kopf je Rhythmus: links "Rhythmus 2:" und "behalten", rechts die Zahl der Takte; darunter als Hinweis, wo er
+   vorkommt */
+.rh-head {
+    display: flex;
+    gap: .6rem 1rem;
+    align-items: center;
+}
+
+.rh-head .rh-bars {
+    margin: 0 0 0 auto;
+    text-align: right;
+}
+
+.rh-hint.rh-where {
+    margin: .1rem 0 .4rem;
+}
+
+.rh-edit {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem .8rem;
+    align-items: center;
+}
+
+.rh-edit .pgrid td[data-cell] {
+    cursor: pointer;
+}
+
+.dialog .rh-edit input[type=text] {
+    width: 10rem;
+    padding: 0 .5rem;
+    font: inherit;
+    font-family: ui-monospace, monospace;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+}
+
+.rh-hint {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: .8rem;
+    color: var(--ink-soft);
+}
+
+.rh-title {
+    font-weight: 600;
+}
+
+.rh-take {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    margin-top: .4rem;
+}
+
+.rh-warn {
+    margin: .4rem 0 0;
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.tp {
+    display: grid;
+    grid-template-columns:max-content minmax(0, max-content);
+    gap: 0 1.6rem;
+    align-items: start;
+}
+
+.tp-row .hint {
+    white-space: nowrap;
+}
+
+.tp-row .form-field input {
+    width: 130px;
+    max-width: 100%;
+}
+
+.tp .hint {
+    font-size: .75rem;
+    color: var(--ink-soft);
+    margin: .3rem 0;
+}
+
+.tp .hint.hint-warn {
+    color: var(--danger);
+}
+
+.tp-row .form-field {
+    margin-bottom: .6rem;
+}
+
+/* Dialog "Rhythmus ableiten": Spur neu anlegen oder überschreiben, über den Knöpfen */
+/* Abstand nach unten wie bei einem Formularfeld (.form-field) vor den Knöpfen */
+.rh-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .85rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+/* Gesperrt: ausgegraut, der Tooltip sagt warum */
+.rh-switch:has(input:disabled) {
+    opacity: .5;
+    cursor: default;
+}
+
+/* Dialog "Rhythmus ableiten": die Schalter untereinander unter dem Hinweis */
+.rh-switches {
+    flex-basis: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .45rem;
+}
+
+.rh-switches .rh-hint {
+    margin: 0;
+}
+
+/* Dialog "Melodie ableiten": der Schalter mit Abstand zum Hinweis darüber und zur Erklärung darunter */
+.md-switch {
+    display: flex;
+    width: max-content;
+    margin: .9rem 0;
+}
+
+.md-switch[hidden] {
+    display: none;
+}
+
+.rh-target, .brush-kinds, .wip-tracks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem 1rem;
+    margin: .8rem 0 1rem;
+}
+
+.rh-target label, .brush-kinds label, .wip-tracks label {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.rh-target input, .brush-kinds input, .wip-tracks input {
+    margin: 0;
+}
+
+/* Pinsel: die Arten untereinander. */
+.brush-kinds {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.tp-warn .hint {
+    margin: 0 0 .3rem;
+}
+
+#tpSuggest:empty {
+    display: none;
+}
+
+#tpSuggest .btn {
+    margin-left: .3rem;
+}
+
+/* Der Hinweis auf die Audiospur bestimmt die Breite der linken Spalte nicht mit (der Befehl ist lang). */
+.tp-audio {
+    margin-top: 1rem;
+    width: 0;
+    min-width: 100%;
+}
+
+.tp-side {
+    margin-bottom: .6rem;
+}
+
+.dialog .tp-side h3 {
+    margin: .1rem 0 .4rem;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 1rem;
+    color: var(--ink);
+}
+
+.tp-score {
+    background: #fff;
+    border-radius: 6px;
+    padding: .3rem;
+    color: #1b1b1b;
+    overflow-x: auto;
+}
+
+.tp-score > svg {
+    display: block;
+}
+
+.tp-chords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem .5rem;
+    margin: .2rem 0 .5rem;
+}
+
+.tp-chord svg {
+    width: 52px;
+    height: auto;
+    color: var(--ink);
+}
+
+/* Dialog "Metrum umschreiben" (js/timingdialog.js): Aufbau wie "Transponieren"; feste Breite, damit er beim Rechnen der
+   Vorschau nicht springt. Rechts die Tabelle jetzt/danach und je Rhythmus "Jetzt" über "Danach": Spalten so breit wie
+   ihre Dauer, gleiche Zeit untereinander. */
+.dialog:has(.tm) {
+    width: min(1180px, 100%);
+}
+
+.tm #tmChoice {
+    width: 100%;
+}
+
+.tm-variants tbody tr {
+    cursor: pointer;
+}
+
+.tm-variants tbody tr:hover, .tm-variants tr.tm-chosen {
+    background: var(--accent-soft);
+}
+
+.tm-variants tr.tm-impossible {
+    color: var(--ink-soft);
+    text-decoration: line-through;
+}
+
+.tm-variants input {
+    margin: 0;
+}
+
+/* Gelb: Die Betonung verschiebt sich (rot: .hint-warn) */
+.tm .hint.hint-caution {
+    color: var(--caution);
+}
+
+/* Die Vorschau nimmt den Rest der festen Breite (sonst ändert sie ihre Breite mit jeder Eingabe). */
+.tm {
+    grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.tm .tp-preview {
+    min-width: 0;
+}
+
+/* Hinweise über die ganze Breite unter Auswahl und Vorschau */
+.tm-warn {
+    margin-top: .8rem;
+}
+
+.tm-warn:empty {
+    display: none;
+}
+
+.tm-summary {
+    border-collapse: collapse;
+    margin-bottom: .6rem;
+    font-size: .9rem;
+}
+
+.tm-summary th, .tm-summary td {
+    padding: .2rem .8rem .2rem 0;
+    text-align: left;
+    font-weight: normal;
+    vertical-align: middle;
+}
+
+.tm-summary thead th {
+    font-size: .75rem;
+    color: var(--ink-soft);
+}
+
+.tm-summary tbody th {
+    font-weight: 600;
+}
+
+.tm-summary .tm-num {
+    text-align: right;
+}
+
+.tm-values {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .1rem .5rem;
+}
+
+.tm-value {
+    display: inline-flex;
+    align-items: baseline;
+}
+
+/* Rhythmen als Reiter, rechts daneben der Knopf für das Metronom; darunter der gewählte, "Jetzt" über "Danach" */
+.tm-rhythm-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: .8rem;
+    margin: .7rem 0 .5rem;
+}
+
+.tm-lanes {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    gap: .4rem .6rem;
+    align-items: start;
+}
+
+/* Spalte, die beim Abspielen gerade klingt */
+.tm-grid > .tm-now {
+    background: var(--mark-soft);
+}
+
+.tm-label {
+    padding-top: 1.1rem;
+    font-size: .8rem;
+    color: var(--ink-soft);
+}
+
+.tm-grid {
+    display: grid;
+    border-right: 1px solid var(--rule);
+    font-size: .8rem;
+    line-height: 1.2;
+}
+
+/* Jede Spalte ist ein Schritt des gemeinsamen Zeitrasters (punktiert); Zeichen stehen am Anfang ihrer Dauer,
+   Taktstriche durchgezogen. */
+.tm-grid > span {
+    min-width: 0;
+    padding-left: 2px;
+    text-align: left;
+    white-space: nowrap;
+    overflow: visible;
+    border-left: 1px dotted var(--rule);
+}
+
+.tm-grid > .tm-bar {
+    border-left: 1px solid var(--ink-soft);
+}
+
+.tm-grid > .tm-chord {
+    height: 1.1rem;
+    padding-left: .15rem;
+    text-align: left;
+    overflow: visible;
+    font-weight: 600;
+}
+
+.tm-grid > .tm-accent {
+    height: .9rem;
+}
+
+.tm-grid > .tm-stroke {
+    height: 1.6rem;
+}
+
+/* Plektrumzeichen wie im Pattern-Raster (.pgrid), etwas kleiner */
+.tm-grid .smufl {
+    font-size: 26px;
+    pointer-events: none;
+}
+
+.tm-grid .smufl-pickdown {
+    top: -.167em;
+}
+
+.tm-grid > .tm-count {
+    font-size: .7rem;
+    color: var(--ink-soft);
+}
+
+@media (max-width: 900px) {
+    .tp {
+        grid-template-columns:1fr;
+    }
+
+    .tp-row .hint {
+        white-space: normal;
+    }
+}
+
+/* Taktart und Tempo nebeneinander im linken Panel */
+.etakt {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+}
+
+.etakt input[data-song="ts"] {
+    width: 5rem;
+}
+
+.etakt .efield-row input {
+    width: 4.2rem;
+}
+
+.ebtn {
+    min-width: 34px;
+    height: 34px;
+    padding: 0 .4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: inherit;
+    font-size: .85rem;
+    line-height: 1;
+    color: var(--ink);
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.ebtn:hover {
+    border-color: var(--accent);
+    color: var(--accent-dark);
+}
+
+.ebtn[aria-pressed="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent-dark);
+}
+
+.ebtn-text {
+    padding: 0 .6rem;
+    white-space: nowrap;
+}
+
+.ebtn-danger {
+    color: var(--danger);
+}
+
+.ebtn-danger:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.ebtn .smufl-pickdown, .ebtn .smufl-pickup {
+    font-size: 24px;
+}
+
+.ebtn .smufl-pickdown {
+    top: .167em;
+}
+
+.ebtn .smufl-pickup {
+    top: .25em;
+}
+
+/* Der Violinschlüssel ist rund 1,8-mal so hoch wie die Schriftgröße */
+.ebtn[data-action="notation"] .smufl {
+    font-size: 12px;
+}
+
+.ebtn-wide {
+    padding: 0 .3rem;
+}
+
+/* Seitliche Panels: fest zwischen Leiste und unterem Panel; eingeklappt ein schmaler Streifen mit senkrechtem Titel */
+.edit-panel {
+    position: fixed;
+    z-index: 25;
+    top: var(--edit-top);
+    bottom: calc(var(--bar-h) + var(--edit-bottom-h) + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    background: var(--card);
+    border-color: var(--rule);
+    border-style: solid;
+    border-width: 0;
+}
+
+.edit-left {
+    left: 0;
+    width: var(--edit-left-w);
+    border-right-width: 1px;
+}
+
+.edit-right {
+    right: 0;
+    width: var(--edit-right-w);
+    border-left-width: 1px;
+}
+
+/* Linker Rand zum Ziehen der Breite (--edit-right-w setzt editor.js) */
+.edit-right-resize {
+    position: absolute;
+    left: -4px;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    z-index: 1;
+    touch-action: none;
+}
+
+.edit-right-resize:hover {
+    background: linear-gradient(90deg, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px);
+}
+
+.edit-right.collapsed .edit-right-resize {
+    display: none;
+}
+
+.edit-panel.collapsed {
+    width: var(--edit-closed-w);
+}
+
+.edit-panel-head {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .4rem .4rem .4rem .7rem;
+    border-bottom: 1px solid var(--rule);
+}
+
+.edit-panel-title {
+    flex: 1;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    color: var(--ink-soft);
+}
+
+.edit-panel.collapsed .edit-panel-head {
+    flex-direction: column-reverse;
+    padding: .4rem 0;
+    border: 0;
+    gap: .6rem;
+}
+
+.edit-panel.collapsed .edit-panel-title {
+    writing-mode: vertical-rl;
+    flex: none;
+}
+
+.edit-left.collapsed .edit-panel-title {
+    transform: rotate(180deg);
+}
+
+.edit-panel.collapsed .edit-panel-body {
+    display: none;
+}
+
+.edit-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 .7rem .8rem;
+}
+
+/* Überschriften der Gruppen im linken Panel: wie die Beschriftung der Felder (.efield) */
+.edit-panel h4 {
+    margin: .6rem 0 .2rem;
+    font-size: .8rem;
+    font-weight: 400;
+    line-height: inherit;
+    color: var(--ink-soft);
+}
+
+/* Knopfreihen im linken Panel: acht Spalten über die ganze Breite, rechts bündig mit den Feldern darunter */
+.etools, .effect-grid {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 2px;
+}
+
+.etools {
+    margin-bottom: .3rem;
+}
+
+.effect-grid {
+    margin-bottom: .6rem;
+}
+
+.etools .ebtn, .effect-grid .ebtn {
+    width: 100%;
+    height: 34px;
+    min-width: 0;
+    padding: 0;
+}
+
+/* Quadratische Knöpfe in der Werkzeugleiste (Text-Knöpfe ausgenommen) */
+.edit-toolbar .ebtn:not(.ebtn-text) {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+}
+
+.edit-toolbar .ebtn.ebtn-shuffle {
+    width: 64px;
+    min-width: 64px;
+}
+
+.etakt .ebtn {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+}
+
+/* Knöpfe neben einem Feld (Liedtext-Silbe): untereinander so dicht wie in den Knopfreihen */
+.ebtn-group {
+    display: flex;
+    gap: 2px;
+}
+
+/* Der Haltebogen (zwei Noten mit Bogen) steht kleiner im gleichen Quadrat */
+.etools .ebtn-wide .smufl {
+    font-size: 13px;
+    top: 3px;
+}
+
+/* Pfeil zum Einklappen zeigt zur Seite, in die das Panel geht */
+.ebtn-collapse {
+    min-width: 26px;
+    height: 26px;
+    padding: 0;
+    border-color: transparent;
+    background: none;
+}
+
+.ebtn-collapse::before {
+    content: '\2039';
+    font-size: 1.2rem;
+}
+
+.edit-left.collapsed .ebtn-collapse::before {
+    content: '\203A';
+}
+
+.edit-right .ebtn-collapse::before {
+    content: '\203A';
+}
+
+.edit-right.collapsed .ebtn-collapse::before {
+    content: '\2039';
+}
+
+.edit-bottom .ebtn-collapse::before {
+    content: '\25BE';
+    font-size: .9rem;
+}
+
+.edit-bottom.collapsed .ebtn-collapse::before {
+    content: '\25B4';
+}
+
+/* Reiter (rechtes und unteres Panel) */
+.efield {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    margin-bottom: .6rem;
+    font-size: .8rem;
+    color: var(--ink-soft);
+}
+
+.efield input, .efield select {
+    font: inherit;
+    font-size: .9rem;
+    color: var(--ink);
+    padding: .35rem .45rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    width: 100%;
+}
+
+/* Feld mit "×" am rechten Rand, das den Inhalt entfernt; ohne Inhalt (Platzhalter sichtbar) ist es ausgeblendet */
+.eclearable {
+    position: relative;
+    display: block;
+}
+
+.eclearable input {
+    width: 100%;
+    padding-right: 1.8rem;
+}
+
+.eclear {
+    position: absolute;
+    right: .2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 0;
+    background: none;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.eclear:hover {
+    color: var(--ink);
+    background: var(--paper);
+}
+
+.eclearable input:placeholder-shown + .eclear {
+    display: none;
+}
+
+/* Akkord im linken Panel: Auswahlliste (Name und Griff in Spalten) mit "+" bzw. "✎" */
+.echord-row {
+    display: flex;
+    gap: .35rem;
+    align-items: center;
+}
+
+.echord-row input {
+    flex: 1;
+    min-width: 0;
+}
+
+.echord-row select {
+    flex: 1;
+    min-width: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Dialog "Akkord": die Griffe zum Namen */
+.chord-edit {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.chord-fields {
+    flex: 1;
+    min-width: 0;
+}
+
+.chord-name-pick {
+    padding: .05rem .4rem;
+    font: inherit;
+    color: var(--danger);
+    background: var(--card);
+    border: 1px solid var(--danger);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.chord-name-pick:hover {
+    background: var(--accent-soft);
+}
+
+.chord-live {
+    flex: none;
+    min-width: 90px;
+    min-height: 116px;
+    padding-top: 1.35rem;
+}
+
+.chord-live svg {
+    display: block;
+    width: auto;
+    height: 116px;
+    color: var(--ink);
+}
+
+.chord-grips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.chord-pick {
+    padding: .25rem;
+    color: var(--ink);
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.chord-pick:hover {
+    border-color: var(--accent);
+}
+
+.chord-pick[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.chord-pick svg {
+    display: block;
+    width: auto;
+    height: 104px;
+}
+
+.efield-row {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    color: var(--ink);
+}
+
+.efield-row input {
+    width: 4.5rem;
+}
+
+.efield-check {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-bottom: .6rem;
+    font-size: .85rem;
+    cursor: pointer;
+}
+
+.efield-hint {
+    font-size: .8rem;
+    color: var(--ink-soft);
+    margin: -.3rem 0 .2rem;
+}
+
+.ebtn-help {
+    font-weight: 700;
+    border-radius: 50%;
+}
+
+/* Korrektur-Dialog vor dem Bearbeiten: die Abweichungen über dem Formular */
+/* Übersicht der Tastenkürzel */
+/* Tastenkürzel: auf breiten Bildschirmen zwei Spalten (die Gruppen bleiben zusammen), das Fenster wird dafür breiter */
+.dialog:has(.shortcut-groups) {
+    max-width: 1000px;
+}
+
+.shortcut-groups {
+    columns: 2;
+    column-gap: 2.2rem;
+}
+
+.shortcut-groups section {
+    break-inside: avoid;
+}
+
+.shortcut-groups .shortcut-table td:first-child {
+    width: 13rem;
+    white-space: normal;
+}
+
+/* eng gesetzt, damit die Übersicht ohne Scrollen ins Fenster passt */
+.shortcut-groups .shortcut-table td {
+    padding-top: .08rem;
+    padding-bottom: .08rem;
+    font-size: .84rem;
+    line-height: 1.3;
+}
+
+/* Abstand unter den Gruppen statt über den Überschriften: Am Anfang einer Spalte fiele der obere Rand sonst weg */
+.shortcut-groups section h3 {
+    margin: 0 0 .2rem;
+}
+
+.shortcut-groups section {
+    padding-bottom: .9rem;
+}
+
+.dialog:has(.shortcut-groups) h2 {
+    margin-bottom: .6rem;
+}
+
+@media (max-width: 820px) {
+    .shortcut-groups {
+        columns: 1;
+    }
+}
+
+/* Dialog "Uploads" (uploads.js) */
+.upl-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+}
+
+.upl-item {
+    padding: .6rem .75rem;
+    border-bottom: 1px solid var(--rule);
+}
+
+.upl-item:last-child {
+    border-bottom: 0;
+}
+
+.upl-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem .6rem;
+}
+
+.upl-name {
+    flex: 1 1 12rem;
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.upl-meta {
+    font-size: .78rem;
+    color: var(--ink-soft);
+}
+
+.upl-info {
+    margin-top: .25rem;
+    font-size: .85rem;
+    word-break: break-word;
+}
+
+.upl-label {
+    color: var(--ink-soft);
+}
+
+.upl-none {
+    padding: .6rem .75rem;
+    font-size: .85rem;
+    color: var(--ink-soft);
+}
+
+.upl-item .upl-none {
+    padding: 0;
+}
+
+.upl-warn {
+    color: var(--danger);
+}
+
+.upl-card {
+    padding: .8rem .9rem .1rem;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    background: var(--card);
+}
+
+.upl-card .btn-row {
+    margin: .2rem 0 .7rem;
+}
+
+.upl-input {
+    display: block;
+    width: 100%;
+    margin-bottom: .4rem;
+    font: inherit;
+    font-size: .9rem;
+    padding: .35rem .45rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+}
+
+.shortcut-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: .88rem;
+    table-layout: fixed;
+}
+
+.shortcut-table td {
+    padding: .2rem .5rem .2rem 0;
+    vertical-align: top;
+}
+
+.shortcut-table td:first-child {
+    white-space: nowrap;
+    width: 15rem;
+}
+
+@media (max-width: 599px) {
+    .shortcut-table {
+        table-layout: auto;
+    }
+
+    .shortcut-table td:first-child {
+        width: auto;
+        white-space: normal;
+    }
+}
+
+/* Unteres Panel: über der Abspielleiste, eingeklappt nur die Kopfzeile (Reiter und Statuszeile) */
+.edit-bottom {
+    position: fixed;
+    left: 0;
+    right: 0;
+    z-index: 26;
+    bottom: calc(var(--bar-h) + env(safe-area-inset-bottom));
+    background: var(--card);
+    border-top: 1px solid var(--rule);
+    box-shadow: 0 -4px 16px rgba(39, 43, 52, .08);
+}
+
+/* Oberer Rand zum Ziehen der Höhe (--edit-bottom-body-h setzt editor.js) */
+.edit-bottom-resize {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -4px;
+    height: 8px;
+    cursor: ns-resize;
+    z-index: 1;
+    touch-action: none;
+}
+
+.edit-bottom-resize:hover {
+    background: linear-gradient(transparent 3px, var(--accent) 3px, var(--accent) 5px,
+    transparent 5px);
+}
+
+.edit-bottom-head {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    padding: .2rem .6rem .2rem .8rem;
+}
+
+.edit-status {
+    flex: 1;
+    text-align: right;
+    font-size: .8rem;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.edit-bottom-body {
+    height: var(--edit-bottom-body-h);
+    overflow-y: auto;
+    padding: .5rem .8rem .7rem;
+    border-top: 1px solid var(--rule);
+}
+
+.edit-bottom.collapsed .edit-bottom-body {
+    display: none;
+}
+
+.elyrics textarea {
+    width: 100%;
+    height: 100%;
+    resize: none;
+    font: inherit;
+    font-size: .95rem;
+    padding: .5rem .6rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+/* Panel "Liedtext" rechts: oben das Textfeld (Höhe --elyrics-h, setzt editor.js), darunter die Vorschau "Text &
+   Akkorde", dazwischen die Linie zum Ziehen */
+.edit-panel-body.elyrics {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: .5rem .7rem .6rem;
+}
+
+.elyrics-edit {
+    flex: 0 0 var(--elyrics-h);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.elyrics-split {
+    flex: none;
+    height: 10px;
+    margin: .1rem 0;
+    cursor: ns-resize;
+    touch-action: none;
+    background: linear-gradient(var(--rule), var(--rule)) center / 100% 2px no-repeat;
+}
+
+.elyrics-split:hover {
+    background-image: linear-gradient(var(--accent), var(--accent));
+}
+
+.elyrics-tools {
+    flex: none;
+}
+
+.elyrics-wrap {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    background: var(--card);
+}
+
+/* Markierungen hinter dem Liedtext: dieselbe Schrift und derselbe Umbruch wie im Feld, nur die Hintergründe */
+.elyrics-marks {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    color: transparent;
+    pointer-events: none;
+    scrollbar-gutter: stable;
+    font: inherit;
+    font-size: .95rem;
+    padding: .5rem .6rem;
+    border: 1px solid transparent;
+    line-height: normal;
+}
+
+.elyrics-marks mark {
+    color: transparent;
+    background: rgba(211, 47, 47, .18);
+    border-radius: 2px;
+}
+
+/* Silbe am Cursor der Noten (wie die aktuelle Silbe beim Abspielen) */
+.elyrics-marks mark.elyrics-cur {
+    background: rgba(255, 154, 82, .45);
+}
+
+.elyrics textarea {
+    position: relative;
+    display: block;
+    background: transparent;
+    line-height: normal;
+    scrollbar-gutter: stable;
+}
+
+.elyrics-view {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0 .7rem .5rem;
+}
+
+.elyrics-view .tv-section {
+    margin-top: .5rem;
+}
+
+.elyrics-view .tv-section h3 {
+    font-size: .75rem;
+    margin-bottom: .1rem;
+}
+
+.elyrics-view .tv-line {
+    font-size: .9rem;
+    margin-bottom: .15rem;
+}
+
+.elyrics-view .tv-chord {
+    font-size: .8rem;
+}
+
+/* Dialog "Spuren": je Spur Zeigen, Name (mit Auswahlliste), Akkorde und Text (Radiobuttons), Tuning, Instrument,
+   Knöpfe */
+.etrack-list {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+/* Dialoge "Spuren" und "Leadsheet" der Bearbeitungsseite (editor.js) */
+.dialog:has(.edit-dialog) {
+    max-width: 1100px;
+}
+
+.dialog:has(.etab-leadsheet) {
+    max-width: 1300px;
+}
+
+.dialog:has(.etracks-dialog) {
+    width: fit-content;
+    max-width: min(1100px, 100%);
+}
+
+/* Dialog "Leadsheet" (dialogs/leadsheet.js): links Patterns und Tab-Stellen, rechts die Vorschau der Seite */
+.etab-leadsheet {
+    display: flex;
+    gap: .6rem;
+    height: min(72vh, 760px);
+}
+
+.els-list {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    padding-right: .3rem;
+}
+
+.els-list h4 {
+    margin: .15rem 0 .3rem;
+}
+
+.els-list h4 ~ h4 {
+    margin-top: .8rem;
+}
+
+.els-list > .efield-hint {
+    margin: 0 0 .4rem;
+}
+
+.els-layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem 1.1rem;
+    align-items: center;
+    font-size: .85rem;
+}
+
+.els-layout select {
+    margin-left: .3rem;
+}
+
+.els-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: .4rem .7rem;
+    padding: .45rem 0;
+    border-bottom: 1px solid var(--rule);
+}
+
+.els-meta {
+    flex: 1;
+    min-width: 10rem;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    font-size: .9rem;
+}
+
+.els-meta .efield-hint {
+    margin: 0;
+}
+
+.els-meta input, .els-tab input[type=text], .els-tab select, .els-list select {
+    font: inherit;
+    font-size: .85rem;
+    padding: .25rem .4rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+}
+
+.els-btns {
+    display: flex;
+    gap: .2rem;
+}
+
+.els-tab {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem;
+    padding: .3rem 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: .85rem;
+}
+
+.els-tab input[type=text] {
+    flex: 1;
+    min-width: 9rem;
+}
+
+.els-num {
+    width: 4.2rem;
+}
+
+.els-list .ebar-actions {
+    margin-top: .5rem;
+}
+
+.els-side {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+}
+
+.els-foot {
+    flex: none;
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+}
+
+.els-fit {
+    flex: 1;
+    margin: 0;
+}
+
+.els-foot .ebtn {
+    flex: none;
+    height: auto;
+    padding: .2rem .6rem;
+}
+
+.els-fit .ebtn {
+    height: auto;
+    padding: 0 .3rem;
+    font-size: inherit;
+}
+
+/* Dialog "Abschnitte vergleichen" (compareDialog() in dialogs/leadsheet.js): breiter als andere Dialoge; oben die beiden
+   Abschnitte mit den Pfeilen für alle Takte dazwischen, darunter die Taktpaare wie in einem Diff-Editor. */
+.dialog:has(.cmp) {
+    max-width: 1100px;
+}
+
+.cmp-picks {
+    display: grid;
+    grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: .6rem;
+    align-items: center;
+}
+
+.cmp-picks select {
+    width: 100%;
+    min-width: 0;
+}
+
+.cmp-same {
+    margin: .8rem 0 0;
+    color: var(--accent-dark);
+    font-weight: 600;
+}
+
+/* Taktpaare: links | Pfeile | rechts. Die Tabs bleiben auf weißem Grund wie auf dem Blatt (ihre Farben sind für
+   Papier). */
+.cmp-bars {
+    margin-top: .8rem;
+    max-height: 75vh;
+    overflow: auto;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 0 .6rem .4rem;
+}
+
+.cmp-bar-head, .cmp-bar-row {
+    display: grid;
+    grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: .6rem;
+    align-items: center;
+}
+
+.cmp-bar-head {
+    border-top: 1px solid var(--rule);
+    padding: .4rem 0 .2rem;
+    font-weight: 600;
+    font-size: .85rem;
+}
+
+.cmp-bar-head:first-child {
+    border-top: 0;
+}
+
+.cmp-bar-head > :last-child {
+    text-align: left;
+}
+
+.cmp-bar-row {
+    padding: .15rem 0 .35rem;
+}
+
+.cmp-arrows {
+    display: flex;
+    gap: .25rem;
+    justify-content: center;
+    min-width: 4.6rem;
+}
+
+.cmp-arrows .ebtn {
+    min-width: 2rem;
+    font-size: 1rem;
+    padding: 0 .4rem;
+}
+
+.cmp-bar-cell {
+    background: rgba(255, 190, 40, .12);
+    border-radius: 4px;
+    padding: .2rem .4rem;
+    min-width: 0;
+}
+
+.cmp-bar-track {
+    font-size: .72rem;
+    color: var(--ink-soft);
+}
+
+.cmp-tab {
+    background: #fff;
+    border-radius: 3px;
+    min-height: 3.5rem;
+}
+
+.cmp-bar-diff {
+    color: var(--danger);
+}
+
+.cmp-foot {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .8rem;
+}
+
+/* Die Vorschau ist ein Container: Die Seite rechnet ihre Größen in cqw, so ist sie verkleinert wie gedruckt. */
+.els-preview {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--rule);
+    border-radius: 6px;
+    padding: .6rem;
+    container-type: inline-size;
+}
+
+/* Griffbrett (Dialog "Griffbrett"): Auswahl der Töne und die Zeichnung bis zum 15. Bund */
+.history-hint {
+    margin: 0 0 .8rem;
+    font-size: .85rem;
+    color: var(--ink-soft);
+}
+
+.history-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.history-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem .8rem;
+    padding: .4rem 0;
+    border-top: 1px solid var(--rule);
+}
+
+.history-note {
+    flex-basis: 100%;
+    font-size: .85rem;
+    color: var(--ink-soft);
+}
+
+.history-list li:first-child {
+    border-top: 0;
+}
+
+.history-list li > span:first-child {
+    flex: 1;
+}
+
+.history-list .ebtn {
+    flex: none;
+}
+
+.history-size {
+    font-size: .8rem;
+    color: var(--ink-soft);
+}
+
+/* So hoch wie die Knöpfe der früheren Fassungen. */
+.history-current {
+    font-size: .85rem;
+    font-weight: 600;
+    line-height: 34px;
+}
+
+/* Dialog "Abschnitte vergleichen": unter der Liste der Takte. */
+.cmp-credit {
+    font-size: .75rem;
+    margin-top: .6rem;
+    color: var(--ink-soft);
+}
+
+/* Druck des Leadsheets (printLeadsheet()): nur die Seiten, in Papierbreite, je Seite ein Blatt ohne Rand (die Seite
+   hat ihren Rand selbst). Eigene Seitenvorlage, damit andere Ausdrucke ihre Ränder behalten. */
+#lsPrint {
+    display: none;
+}
+
+@media print {
+    body.ls-printing > :not(#lsPrint) {
+        display: none !important;
+    }
+
+    body.ls-printing #lsPrint {
+        display: block;
+        width: 210mm;
+        container-type: inline-size;
+    }
+
+    #lsPrint .ls-page {
+        page: leadsheet;
+        height: 141.43cqw;
+        min-height: 0;
+        overflow: hidden;
+        box-shadow: none;
+        break-after: page;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    #lsPrint .ls-page:last-child {
+        break-after: auto;
+    }
+
+    #lsPrint .ls-page::after {
+        display: none;
+    }
+}
+
+/* Rechtes Panel: Wechsel von Taktart und Tempo unter dem Feld */
+/* Dialoge zu den Patterns (Vorschlag, Katalog): Tabellen */
+.ebar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem .6rem;
+    margin-bottom: .5rem;
+}
+
+.ebar-table {
+    border-collapse: collapse;
+    font-size: .85rem;
+}
+
+.ebar-table th {
+    font-weight: 600;
+    font-size: .72rem;
+    color: var(--ink-soft);
+    text-align: left;
+    padding: .15rem .3rem;
+}
+
+.ebar-table td {
+    padding: .1rem .3rem;
+    vertical-align: middle;
+}
+
+.ebar-table input[type=text], .ebar-table input[type=number], .ebar-table select {
+    width: 100%;
+    min-width: 7rem;
+}
+
+.ebar-table input::placeholder {
+    color: var(--ink-soft);
+    opacity: .7;
+}
+
+.ebar-table tr.ebar-cursor td {
+    background: var(--accent-soft);
+}
+
+/* "Griffe prüfen": Abstand zu den Knöpfen; Taktnummern als Links, die den Cursor dorthin setzen. */
+.check-table {
+    margin-bottom: 1rem;
+}
+
+.check-bars button {
+    border: 0;
+    padding: 0;
+    background: none;
+    color: var(--accent);
+    font: inherit;
+    cursor: pointer;
+}
+
+.check-bars button:hover {
+    text-decoration: underline;
+}
+
+.els-chords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem .8rem;
+}
+
+.els-chord {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .1rem;
+    font-size: .8rem;
+    cursor: pointer;
+}
+
+.els-chord .chord-diagram {
+    width: 64px;
+    height: auto;
+    color: var(--ink);
+}
+
+.els-chord.els-off .chord-diagram {
+    opacity: .35;
+}
+
+.els-link {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem .5rem;
+    padding: .3rem 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: .85rem;
+}
+
+.els-link input[type=text], .els-link input[type=url], .els-list textarea {
+    font: inherit;
+    font-size: .85rem;
+    padding: .25rem .4rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+}
+
+.els-link .efield-check {
+    margin: 0;
+}
+
+.els-link-label {
+    width: 9rem;
+}
+
+.els-link-url {
+    flex: 1;
+    min-width: 12rem;
+}
+
+.etab-leadsheet .els-list textarea {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 6.5rem;
+    box-sizing: border-box;
+    resize: vertical;
+}
+
+.els-roll {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: .4rem .6rem;
+    margin: 0 0 .6rem;
+}
+
+.els-roll .check-field {
+    margin: .15rem 0;
+}
+
+.ebar-suggest code {
+    display: block;
+    margin-bottom: .15rem;
+    font-size: .85rem;
+    white-space: pre;
+}
+
+.ebar-suggest .efield-hint {
+    display: block;
+    line-height: 1.3;
+}
+
+.ebar-suggest td {
+    padding: .3rem;
+}
+
+.etrack {
+    display: grid;
+    grid-template-columns:4.1rem 14rem 3.6rem 2.6rem 12rem auto;
+    gap: .4rem;
+    align-items: center;
+}
+
+.etrack input[type=radio], .etrack .switch {
+    justify-self: center;
+    margin: 0;
+}
+
+.etrack-vis {
+    display: flex;
+    gap: .25rem;
+}
+
+.etrack .mix-icon {
+    width: 34px;
+    height: 34px;
+}
+
+.etrack-head span:nth-child(3), .etrack-head span:nth-child(4), .etrack-head span:nth-child(5) {
+    text-align: center;
+}
+
+.etrack input[type=text], .etrack select {
+    font: inherit;
+    font-size: .85rem;
+    padding: .25rem .4rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+    min-width: 0;
+}
+
+.etrack input:disabled {
+    background: var(--paper);
+    color: var(--ink-soft);
+}
+
+.etrack-head {
+    font-size: .75rem;
+    color: var(--ink-soft);
+}
+
+.etrack-buttons {
+    display: flex;
+    gap: .2rem;
+}
+
+.etrack-buttons .ebtn {
+    min-width: 34px;
+    height: 34px;
+    font-size: 1.05rem;
+}
+
+/* Pfeile und × sitzen in der Schrift etwas tief: angehoben, damit sie mittig stehen (die Icons sind es schon) */
+.etrack-buttons .ebtn:not(:has(svg)) {
+    padding-bottom: 3px;
+}
+
+.etrack-buttons .ebtn-danger:not(:has(svg)) {
+    padding-bottom: 5px;
+}
+
+.etrack-foot {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+    margin-top: .4rem;
+    flex-wrap: wrap;
+}
+
+.etrack-close {
+    margin-top: 1.4rem;
+}
+
+.edit-panel-body {
+    overflow-x: hidden;
+}
+
+/* Einheitliche Höhe von Feldern, Auswahllisten und Knöpfen in den Panels (links, rechts) */
+.edit-panel input:not([type=checkbox]):not([type=radio]), .edit-panel select, .edit-panel .ebtn:not(.ebtn-collapse) {
+    height: 34px;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Hinweis "Noch nicht umgesetzt" unter der Werkzeugleiste */
+.edit-toast {
+    position: fixed;
+    z-index: 40;
+    left: 50%;
+    top: calc(var(--edit-top) + .5rem);
+    transform: translateX(-50%);
+    padding: .45rem .9rem;
+    border-radius: 6px;
+    background: var(--dark);
+    color: #fff;
+    font-size: .85rem;
+    /* lange Meldungen (z. B. nach "Chord-Datei importieren") brechen um statt über den Rand zu laufen */
+    width: max-content;
+    max-width: min(40rem, calc(100vw - 2rem));
+    white-space: pre-line;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+}
+
+/* Sichtbar lässt er sich mit der Maus festhalten und mit einem Klick schließen (toast() in editor.js) */
+.edit-toast.show {
+    opacity: .92;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* Warnung: rötlich, bleibt bis zum Klick auf ×; jede Meldung eine Zeile */
+.edit-toast.edit-toast-warn {
+    display: flex;
+    align-items: flex-start;
+    gap: .8rem;
+    background: #8f1d1d;
+    cursor: default;
+}
+
+.edit-toast.edit-toast-warn.show {
+    opacity: .97;
+}
+
+.edit-toast-close {
+    flex: none;
+    margin: -.2rem -.4rem 0 auto;
+    padding: 0 .3rem;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+/* Schmale Bildschirme: Seiten-Panels legen sich ausgeklappt über die Noten, die Noten behalten ihre Breite */
+@media (max-width: 899px) {
+    #songView.editing.edit-left-open .score-wrap, #songView.editing.edit-left-open .score-status {
+        margin-left: var(--edit-closed-w);
+    }
+
+    #songView.editing.edit-right-open .score-wrap, #songView.editing.edit-right-open .score-status {
+        margin-right: var(--edit-closed-w);
+    }
+
+    .edit-right {
+        max-width: calc(100vw - var(--edit-closed-w));
+    }
+
+    .edit-panel:not(.collapsed) {
+        box-shadow: 0 0 24px rgba(39, 43, 52, .25);
+        z-index: 27;
+    }
+
+    .egroup + .egroup {
+        padding-left: 0;
+        border-left: 0;
+    }
+
+    .edit-status {
+        display: none;
+    }
+}
+
+/* Cursor der Bearbeitungsseite: Spalte über den Schlag, Kästchen um die Saite (Lage setzt editor.js) */
+#songView.editing .score-wrap > div {
+    position: relative;
+}
+
+.edit-cursor {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.edit-cursor-beat, .edit-cursor-string {
+    position: absolute;
+    border-radius: 4px;
+}
+
+.edit-cursor-beat {
+    background: var(--accent-soft);
+}
+
+.edit-problem {
+    position: absolute;
+    background: rgba(255, 76, 76, .16);
+    border: 1px solid var(--danger);
+    border-radius: 3px;
+}
+
+.edit-problem-flag {
+    position: absolute;
+    left: -1px;
+    top: -1px;
+    width: 18px;
+    height: 18px;
+    border-radius: 3px 0 6px 0;
+    background: var(--danger);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    pointer-events: auto;
+    cursor: help;
+}
+
+.edit-selection > div {
+    position: absolute;
+    background: rgba(255, 154, 82, .18);
+    border: 1px solid var(--mark);
+    border-radius: 3px;
+}
+
+.edit-cursor-string {
+    border: 2px solid var(--accent);
+    background: rgba(86, 159, 255, .12);
+}
+
+/* Taktstrich ziehen: Zeiger über dem Strich, Linie beim Ziehen; Note ziehen */
+/* Klicken und Umschalt+Klick in den Noten darf keinen Text markieren (blaue Fläche) */
+#songView.editing [data-ref="at"], #songView.editing [data-ref="at"] * {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.edit-warn {
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.ebtn:disabled {
+    opacity: .4;
+    cursor: default;
+}
+
+.ebtn:disabled:hover {
+    border-color: var(--rule);
+    color: var(--ink);
+}
+
+/* Speichern hervorheben, solange es ungespeicherte Änderungen gibt */
+.ebtn.ebtn-dirty {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.ebar-suggest .pgrid {
+    margin-bottom: .2rem;
+}
+
+/* Quelle der Audiodatei über dem Sync-Editor im unteren Panel: Feld, Knöpfe und Längen in einer Zeile, Hinweise darunter */
+/* Die Wellenform nimmt die Höhe, die nach Quelle und Bedienelementen bleibt. */
+.eaudio {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.eaudio-sync {
+    flex: 1;
+    min-height: 0;
+}
+
+.eaudio-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    font-size: .85rem;
+}
+
+.eaudio-head .eaudio-source {
+    flex: 1;
+}
+
+/* Im Sync-Editor: Quelle am Ende der Werkzeugleiste (nimmt den Rest der Zeile), Längen rechts in der Statuszeile */
+.sync-slot:empty {
+    display: none;
+}
+
+.sync-toolbar .sync-slot {
+    flex: 1 1 22rem;
+    margin-left: .8rem;
+}
+
+.sync-toolbar .eaudio-source {
+    padding: 0;
+}
+
+.sync-status .sync-slot {
+    margin-left: auto;
+}
+
+.sync-status .sync-slot:not(:empty) + .sync-zoom {
+    margin-left: 0;
+}
+
+.sync-status .sync-slot:not(:empty) + .sync-zoom::before {
+    content: '· ';
+}
+
+.eaudio-source {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .3rem .7rem;
+    padding: .2rem 0 .6rem;
+    font-size: .85rem;
+}
+
+.eaudio-source input {
+    flex: 1 1 18rem;
+    min-width: 10rem;
+    font: inherit;
+    padding: .3rem .5rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--ink);
+}
+
+/* Einheitliche Höhe von Feldern, Auswahllisten und Knöpfen im unteren Panel (wie in den seitlichen Panels) */
+.edit-bottom input:not([type=checkbox]):not([type=radio]):not([type=range]), .edit-bottom select, .edit-bottom .btn,
+.edit-bottom .ebtn:not(.ebtn-collapse) {
+    height: 34px;
+    min-height: 0;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.eaudio-source .field-link {
+    color: var(--accent-dark);
+}
+
+.eaudio .lengths {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.eaudio .lengths span:not(:empty) + span:not(:empty)::before {
+    content: ' · ';
+}
+
+.eaudio-source .hint {
+    flex: 0 0 100%;
+    margin: 0;
+    color: var(--danger);
+}
+
+/* Befehl in derselben Zeile wie der Hinweis */
+.eaudio-source .command-box {
+    display: inline-flex;
+    align-items: center;
+    margin-left: .4rem;
+    vertical-align: middle;
+}
+
+.eaudio-source .command-box code {
+    padding: .15rem .4rem;
+    color: var(--ink);
+}
+
+/* Links: Reiter, Auswahl und die Varianten, die gleich klingen (Zeile anklicken) */
+.tm .tabs {
+    margin: 0 0 .8rem;
+}
+
+.tm-rhythm-bar .tabs {
+    flex: 1;
+    margin: 0;
+}
+
+.tabs + .upl-card {
+    border-top: 0;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}

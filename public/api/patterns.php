@@ -2,8 +2,8 @@
 
 /**
  * Pattern-Katalog (data/patterns.json): Strumming und Picking Patterns, auf die die Songs verweisen (score.json
- * der Songs). Aufbau und Schreibweise der Patterns siehe js/sheet.js. Fehlt data/patterns.json (data/ gehört nicht
- * ins Repo), legt der erste Zugriff sie mit DEFAULT_PATTERNS an.
+ * der Songs). Aufbau und Schreibweise der Patterns siehe js/lib/patterns.js. Fehlt data/patterns.json (data/ gehört
+ * nicht ins Repo), legt der erste Zugriff sie mit DEFAULT_PATTERNS an.
  *
  * GET /api/patterns.php   -> {"patterns": [...], "usage": {"folk": 3, ...}}. usage: in wie vielen Songs ein Pattern
  *                            vorkommt (aus score.json aller Songs), damit der Editor vor dem Ändern warnen kann.
@@ -17,14 +17,12 @@ require_once __DIR__ . '/lib/crud.php';
 
 /**
  * Pfad des Katalogs.
- *
  * @var string
  */
 const PATTERNS_FILE = DATA_DIR . '/patterns.json';
 
 /**
  * Erstbefüllung des Katalogs (Felder wie in validate_patterns()).
- *
  * @var array<int, array>
  */
 const DEFAULT_PATTERNS = [
@@ -44,14 +42,12 @@ const DEFAULT_PATTERNS = [
 
 /**
  * Höchstzahl der Patterns (Schutz vor versehentlich riesigen Requests).
- *
  * @var int
  */
 const PATTERNS_MAX = 500;
 
 /**
  * Liest den Katalog; fehlt die Datei, wird sie mit DEFAULT_PATTERNS angelegt.
- *
  * @return array<int, array> Patterns
  */
 function read_patterns(): array
@@ -66,7 +62,6 @@ function read_patterns(): array
 
 /**
  * Schreibt den Katalog (erst daneben, dann umbenannt, damit nie eine halbe Datei entsteht).
- *
  * @param array<int, array> $patterns Patterns
  * @return void
  */
@@ -83,7 +78,6 @@ function write_patterns(array $patterns): void
 /**
  * Zählt, in wie vielen Songs ein Pattern vorkommt (Patterns des Songs, siehe read_leadsheet()), und sammelt dazu die
  * Genres dieser Songs.
- *
  * @return array{usage: array<string, int>, genres: array<string, string[]>} Zahl der Songs und Genres je Pattern-id
  */
 function pattern_stats(): array
@@ -114,8 +108,7 @@ function pattern_stats(): array
 }
 
 /**
- * Prüft die Patterns grob (Felder und Typen); die Schreibweise prüft der Editor (patternError() in js/sheet.js).
- *
+ * Prüft die Patterns grob (Felder und Typen); die Schreibweise prüft der Editor (patternError() in js/lib/patterns.js).
  * @param mixed $patterns Patterns aus dem Request
  * @return array<int, array> bereinigte Patterns
  */

@@ -2,7 +2,6 @@
 
 /**
  * Sendet $data als JSON mit dem angegebenen HTTP-Status und beendet die Ausführung.
- *
  * @param int $status HTTP-Statuscode
  * @param array $data Antwort-Body
  * @return never
@@ -17,7 +16,6 @@ function json_response(int $status, array $data): never
 
 /**
  * Kurzform für json_response() mit einem einzelnen {"error": $message}-Body.
- *
  * @param int $status HTTP-Statuscode
  * @param string $message Fehlermeldung
  * @return never
@@ -29,7 +27,6 @@ function json_error(int $status, string $message): never
 
 /**
  * Liest den JSON-Body der Request. Bricht mit 400 ab, wenn kein gültiges JSON-Objekt vorliegt.
- *
  * @return array der dekodierte Body
  */
 function read_json_body(): array
@@ -44,7 +41,6 @@ function read_json_body(): array
 
 /**
  * Bricht mit 401 ab, wenn der X-API-Token Header fehlt oder falsch ist.
- *
  * @return void
  */
 function require_token(): void

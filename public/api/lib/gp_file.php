@@ -5,7 +5,6 @@
  * - GP3–GP5: Längenbyte + "FICHIER GUITAR PRO v…"
  * - GP6 (.gpx): komprimiertes Containerformat mit "BCFZ"/"BCFS"
  * - GP7/GP8 (.gp): ZIP-Archiv
- *
  * @param string $path Pfad der zu prüfenden Datei
  * @return string|null Dateiendung ("gp3", "gp4", "gp5", "gpx", "gp") oder null, wenn es keine GP-Datei ist
  */
@@ -33,7 +32,6 @@ function detect_gp_format(string $path): ?string
  * (auf dem Server gibt es kein ffmpeg zum Umwandeln). Die Sync-Punkte übernimmt der Browser beim Umwandeln der
  * Noten nach alphaTex, die Datei selbst bleibt unverändert. Ohne eingeschaltete, lokal eingebettete MP3, in anderen
  * Formaten oder wenn audio.mp3 schon existiert, passiert nichts.
- *
  * @param string $path GP-Datei, wird nur gelesen
  * @param string $dir Ordner, in den audio.mp3 geschrieben wird
  * @return bool true, wenn eine Audiospur herausgelöst wurde
@@ -49,7 +47,7 @@ function extract_gp_audio(string $path, string $dir): bool
         throw new RuntimeException('GP-Datei konnte nicht als ZIP geöffnet werden');
     }
     $xml = $zip->getFromName('Content/score.gpif');
-    // Inhalt des ersten Elements $name in $in (mit oder ohne CDATA), null wenn es fehlt.
+    // Inhalt des ersten Elements $name in $in (mit oder ohne CDATA), null, wenn es fehlt.
     $tag = fn(string $name, string $in): ?string => preg_match("#<$name>(?:<!\[CDATA\[)?(.*?)(?:]]>)?</$name>#s", $in, $m) ? $m[1] : null;
 
     $backing = $xml !== false && preg_match('#<BackingTrack>.*?</BackingTrack>#s', $xml, $b) ? $b[0] : '';

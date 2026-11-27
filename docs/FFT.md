@@ -2,7 +2,7 @@
 
 Die **FFT** (Fast Fourier Transform, schnelle Fourier-Transformation) zerlegt ein kurzes Stück Audio in die
 Frequenzen, aus denen es besteht, und zeigt, wie stark jede vorkommt. Das Ergebnis heißt **Spektrum**. Das Gitarrenbuch
-braucht sie für "Akkorde mit Hilfe der Audiospur korrigieren" und "Tonhöhe mit Hilfe der Audiospur korrigieren" (siehe
+braucht sie für "Akkorde mithilfe der Audiospur korrigieren" und "Tonhöhe mithilfe der Audiospur korrigieren" (siehe
 README).
 
 ## Die Idee
@@ -24,7 +24,7 @@ rund 100 000 statt 67 Millionen Schritte. Erst damit lässt sich ein ganzer Song
 
 ## So nutzt das Gitarrenbuch sie
 
-`spectrum()` in `public/js/pitchdetect.js`, reines JavaScript ohne Bibliothek:
+`spectrum()` in `public/js/lib/pitchdetect.js`, reines JavaScript ohne Bibliothek:
 
 1. Die Audiospur wird in Mono mit 16 kHz dekodiert; das reicht für Gesang und Obertöne und spart Rechenzeit.
 2. Der Zeitbereich (eine Silbe bzw. eine Zählzeit) wird in kurze, überlappende Fenster geschnitten: 2048 Samples

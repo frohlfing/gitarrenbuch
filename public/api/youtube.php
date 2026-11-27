@@ -2,7 +2,7 @@
 
 /**
  * Titel und Länge eines YouTube-Videos, damit man im Formular sieht, ob der Clip zu den Noten passt.
- * Die Logik steckt in api/lib/youtube.php.
+ * Die Logik steckt in api/lib/youtubeinfo.php.
  *
  * `GET /api/youtube.php?url=…`
  * Antwort: {"id": "…", "title": "…", "seconds": 213}. 400, wenn die URL kein YouTube-Video ist, 502, wenn YouTube
@@ -11,7 +11,7 @@
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/lib/http.php';
-require_once __DIR__ . '/lib/youtube.php';
+require_once __DIR__ . '/lib/youtubeinfo.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error(405, 'Nur GET erlaubt');

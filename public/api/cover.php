@@ -1,10 +1,10 @@
 <?php
 
 /**
- * Cover eines Lieds: ausliefern, bei Deezer/iTunes suchen, übernehmen, hochladen, entfernen.
- * Die Logik steckt in api/lib/cover.php.
+ * Cover eines Songs: ausliefern, bei Deezer/iTunes suchen, übernehmen, hochladen, entfernen.
+ * Die Logik steckt in api/lib/coverstore.php.
  *
- * GET    /api/cover.php?slug=xyz                 -> cover.jpg als image/jpeg. 404, falls Lied oder Cover fehlt.
+ * GET    /api/cover.php?slug=xyz                 -> cover.jpg als image/jpeg. 404, falls Song oder Cover fehlt.
  * GET    /api/cover.php?artist=…&title=…         -> {"results": [...]}, Treffer von Deezer und iTunes (siehe
  *                                                   search_covers()). Kein Token nötig.
  * PUT    /api/cover.php?slug=xyz                 -> übernimmt ein Cover aus der Suche. Body: {"url": "…"}.
@@ -12,13 +12,13 @@
  *                                                   verkleinert und wandelt vorher um).
  * DELETE /api/cover.php?slug=xyz                 -> entfernt das Cover.
  *
- * PUT, POST und DELETE brauchen das Token (Header X-API-Token) und antworten mit dem aktualisierten Lied.
+ * PUT, POST und DELETE brauchen das Token (Header X-API-Token) und antworten mit dem aktualisierten Song.
  */
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/lib/http.php';
 require_once __DIR__ . '/lib/file_store.php';
-require_once __DIR__ . '/lib/cover.php';
+require_once __DIR__ . '/lib/coverstore.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 $slug = isset($_GET['slug']) ? (string)$_GET['slug'] : null;

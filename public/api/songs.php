@@ -1,25 +1,14 @@
 <?php
 
 /**
- * JSON-API für Lieder: Listen/Lesen, Bearbeiten (inkl. Rename bei Titeländerung) und Löschen.
- * Angelegt wird ein Lied nur über import.php, weil jedes Lied Noten hat (beim manuellen Anlegen erzeugt der
- * Browser ein Gerüst, siehe createScore() in js/notation.js).
+ * Songs lesen, bearbeiten und löschen (Logik: api/lib/crud.php). Angelegt wird ein Song nur über import.php, weil
+ * jeder Song Noten hat. Jeder Song enthält dazu die berechneten Felder files (SONG_FILES) und tracks (Spurnamen).
  *
- * GET    /api/songs.php            -> {"songs": [...]}, alle Lieder, alphabetisch nach Titel sortiert. Kein Token nötig.
- * GET    /api/songs.php?slug=xyz   -> einzelnes Lied. Kein Token nötig. 404, falls unbekannt.
- * PUT    /api/songs.php?slug=xyz   -> aktualisiert ein Lied. Body: JSON-Objekt mit title (Pflicht), artist,
- *                                     tags, subtitle, album, words, music, copyright, tab, instructions,
- *                                     notes, sources, youtubeSeconds. Fehlen subtitle bis instructions, bleiben die
- *                                     gespeicherten; fehlt youtubeSeconds, bleibt die gespeicherte Länge, solange
- *                                     die YouTube-URL gleich ist.
- *                                     Ändert sich durch Interpret oder Titel der Slug, wird der Ordner umbenannt.
- *                                     Token nötig.
- * DELETE /api/songs.php?slug=xyz   -> löscht das Lied samt Ordner (Rohmaterial inklusive). Token nötig.
- *
- * Jedes Lied enthält zusätzlich die berechneten Felder files (welche Dateien vorhanden sind, siehe SONG_FILES) und
- * tracks (Spurnamen aus score.atex, siehe read_track_names()).
- * Token wird per Header X-API-Token erwartet (siehe api/lib/http.php: require_token()).
- * Die eigentliche Lese-/Schreib-/Rename-/Delete-Logik steckt in api/lib/crud.php.
+ * GET    /api/songs.php            -> {"songs": [...]}, nach Titel sortiert
+ * GET    /api/songs.php?slug=xyz   -> ein Song, 404, falls unbekannt
+ * PUT    /api/songs.php?slug=xyz   -> Stammdaten (JSON, title Pflicht); fehlende optionale Felder bleiben.
+ *                                     Ändert sich der Slug, wird der Ordner umbenannt. Token nötig.
+ * DELETE /api/songs.php?slug=xyz   -> löscht den Song samt Ordner. Token nötig.
  */
 
 require_once __DIR__ . '/../../config.php';

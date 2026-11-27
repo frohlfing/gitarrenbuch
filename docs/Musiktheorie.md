@@ -1,7 +1,7 @@
 # Musiktheorie
 
-Grundlagen für die Akkorde im Gitarrenbuch. Die Tabellen sind die Vorlage dafür, wie `parseChord()` (`js/chordtheory.js`)
-einen Akkordnamen in Töne zerlegt; `findGrips()` (`js/chordgrips.js`) sucht dafür Griffe, `nameGrip()` und `nameChord()`
+Grundlagen für die Akkorde im Gitarrenbuch. Die Tabellen sind die Vorlage dafür, wie `parseChord()` (`js/lib/chordtheory.js`)
+einen Akkordnamen in Töne zerlegt; `findGrips()` (`js/lib/chordgrips.js`) sucht dafür Griffe, `nameGrip()` und `nameChord()`
 benennen die Töne eines Griffs, `suggestChordNames()` schlägt beim Tippen Namen vor. 
 
 Alle Beispiele stehen mit dem Grundton C.
@@ -138,7 +138,7 @@ Hinter dem Schrägstrich steht der **tiefste Ton** (Basston). Der Akkord davor b
 | `C/G`               | C-Dur, Quinte im Bass (2. Umkehrung)  | G, dann C E G              | Umkehrung                   |
 | `Cmaj7/E`, `C7/Bb`  | Vierklang, Terz bzw. Septime im Bass  | E bzw. Bb, dann der Akkord | Umkehrung                   |
 | `C/D`, `C/A`, `C/B` | Basston, der nicht im Dreiklang steht | D, A bzw. B, dann C E G    | Akkord mit fremdem Bass     |
-| `Am/G`              | Absteigende Basslinie                 | G, dann A C E              | typisch in Liedbegleitungen |
+| `Am/G`              | Absteigende Basslinie                 | G, dann A C E              | typisch in Songbegleitungen |
 
 - Steht der Basston im Akkord (E oder G bei C-Dur), ist es eine **Umkehrung**: dieselben Töne, anderer tiefster Ton.
 - Steht er nicht im Akkord (D, A, B bei C-Dur), kommt er als zusätzlicher Bass dazu.
@@ -229,7 +229,7 @@ allem bei Dominantseptakkorden vor (Blues, Jazz):
 | 7 + b13  | 1, 3, 5, b7, b13 | C E G Bb Ab | C7b13            |
 
 Für das Gitarrenbuch genügt es, Namen mit Erweiterung zu **vereinfachen**: `C9` → `C7`, `Cmaj9` → `Cmaj7`, `Cm9` → `Cm7`,
-`C11` und `C13` → `C7`. `simplifyChord()` (`js/chordfile.js`) macht das bisher nur zum Teil (Namen ohne "7" wie `C9`
+`C11` und `C13` → `C7`. `simplifyChord()` (`js/lib/chordfile.js`) macht das nur zum Teil (Namen ohne "7" wie `C9`
 fallen auf `C` zurück); diese Regel ist die Vorlage dafür.
 
 ## Variante mit Stern (*)

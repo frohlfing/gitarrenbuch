@@ -1,32 +1,21 @@
 <?php
 
 /**
- * Hochgeladenes Rohmaterial eines Lieds (data/songs/<slug>/upload/): GP-Dateien, ChordPro- und Textdateien, PDFs, Bilder.
- * Jede Datei hat eine Quelle und eine Beschreibung (Feld uploads in song.json). Dateien werden nie überschrieben
- * oder geändert; nur Quelle und Beschreibung lassen sich später ändern, und eine Datei lässt sich löschen (zum Aufräumen). Die Logik steckt in
- * api/lib/uploads.php.
+ * Rohmaterial eines Songs (data/songs/<slug>/upload/), je mit Quelle und Beschreibung (Feld uploads in song.json).
+ * Dateien werden nie überschrieben; gleicher Inhalt ergibt keine neue Datei. Logik: api/lib/uploadstore.php.
  *
- * GET  /api/uploads.php?slug=xyz             -> {"uploads": [{file, size, source, description, added}, …]}, die ältesten
- *                                               zuerst; auch Dateien ohne Angaben. Kein Token nötig.
- * GET  /api/uploads.php?slug=xyz&file=name   -> die Datei selbst (zum Öffnen und für "Spur aus GP-Datei"/"Text aus
- *                                               ChordPro-Datei"). Kein Token nötig.
- * POST /api/uploads.php?slug=xyz             -> legt eine Datei ab, entweder als Upload (multipart, Feld file) oder von
- *                                               einem Direktlink (Feld url, lädt der Server herunter); dazu die
- *                                               optionalen Felder source und description. Gleicher Inhalt wie eine
- *                                               vorhandene Datei: nichts Neues; angegebene Quelle und Beschreibung
- *                                               ersetzen die vorhandenen.
+ * GET    /api/uploads.php?slug=xyz            -> {"uploads": [{file, size, source, description, added}, …]}
+ * GET    /api/uploads.php?slug=xyz&file=name  -> die Datei selbst
+ * POST   /api/uploads.php?slug=xyz            -> Datei (multipart file) oder Direktlink (url), dazu source und
+ *                                               description;
  *                                               Antwort: 201 mit dem Upload. Token nötig.
- * PUT  /api/uploads.php?slug=xyz&file=name   -> ändert Quelle und Beschreibung (JSON: source, description).
- *                                               Antwort: der Upload. Token nötig.
- * DELETE /api/uploads.php?slug=xyz&file=name -> löscht die Datei samt ihren Angaben. Antwort: {"uploads": [...]} wie
- *                                               beim Lesen der Liste. Token nötig.
- *
- * Token wird per Header X-API-Token erwartet (siehe api/lib/http.php: require_token()).
+ * PUT    /api/uploads.php?slug=xyz&file=name  -> ändert source und description (JSON). Token nötig.
+ * DELETE /api/uploads.php?slug=xyz&file=name  -> löscht die Datei; Antwort wie die Liste. Token nötig.
  */
 
 require_once __DIR__ . '/../../config.php';
 require_once __DIR__ . '/lib/http.php';
-require_once __DIR__ . '/lib/uploads.php';
+require_once __DIR__ . '/lib/uploadstore.php';
 
 /** Content-Type je Endung, wenn die Datei im Browser geöffnet wird; alles andere kommt als Download. */
 const UPLOAD_MIME = [
@@ -47,8 +36,7 @@ $file = (string)($_GET['file'] ?? '');
 
 /**
  * Der Upload mit dem Namen aus list_uploads().
- *
- * @param string $slug Slug des Lieds
+ * @param string $slug Slug des Songs
  * @param string $file Dateiname
  * @return array Upload
  * @throws NotFoundException wenn es die Datei nicht gibt

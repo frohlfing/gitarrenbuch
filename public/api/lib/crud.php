@@ -1,9 +1,9 @@
 <?php
 
 require_once __DIR__ . '/slug.php';
-require_once __DIR__ . '/youtube.php';
+require_once __DIR__ . '/youtubeinfo.php';
 
-/** Eingaben eines Lieds sind ungültig; $errors enthält die einzelnen Meldungen. */
+/** Eingaben eines Songs sind ungültig; $errors enthält die einzelnen Meldungen. */
 class ValidationException extends RuntimeException
 {
     /**
@@ -15,7 +15,7 @@ class ValidationException extends RuntimeException
     }
 }
 
-/** Lied-Slug existiert nicht. */
+/** Song-Slug existiert nicht. */
 class NotFoundException extends RuntimeException
 {
 }
@@ -27,7 +27,6 @@ class ConflictException extends RuntimeException
 
 /**
  * Erlaubte Schlüssel in sources (Herkunft des Rohmaterials).
- *
  * @var string[]
  */
 const SONG_SOURCES = ['youtube'];
@@ -36,7 +35,6 @@ const SONG_SOURCES = ['youtube'];
  * Weitere Angaben aus der GP-Datei, beim Import 1:1 übernommen und in song.json als eigene Felder vor notes
  * gespeichert (die Noten enthalten keine Angaben; beim GP-Export werden sie wieder eingesetzt). Das Gitarrenbuch nutzt
  * sie vorerst nicht, das Formular "Song bearbeiten" lässt sie unverändert.
- *
  * @var array<string, string> Feld in song.json => Bezeichnung in Guitar Pro
  */
 const SONG_INFO_FIELDS = [
@@ -52,15 +50,13 @@ const SONG_INFO_FIELDS = [
 /**
  * Einstufungen eines Songs (Feld level in song.json): kann ich, übe ich gerade, kann ich nicht. Ohne Einstufung
  * fehlt das Feld. Gesetzt wird sie wie der Favorit (Feld favorite) im Formular "Stammdaten" (update_song()); die
- * Bezeichnungen stehen in js/base.js.
- *
+ * Bezeichnungen stehen in js/lib/api.js.
  * @var string[]
  */
 const SONG_LEVELS = ['can', 'practice', 'cannot'];
 
 /**
  * Höchstlänge des Grunds einer Baustelle (Feld wip.reason in song.json).
- *
  * @var int
  */
 const SONG_WIP_REASON_MAX = 500;
@@ -68,16 +64,14 @@ const SONG_WIP_REASON_MAX = 500;
 
 /**
  * Höchstlänge der Hinweise zur Spielweise auf dem Leadsheet (leadsheet.instructions, siehe api/leadsheet.php).
- *
  * @var int
  */
 const LEADSHEET_TEXT_MAX = 5000;
 
 /**
- * Dateien im Liedordner, deren Vorhandensein die API als "files" mitliefert (Liste der Schlüssel der vorhandenen
+ * Dateien im Songordner, deren Vorhandensein die API als "files" mitliefert (Liste der Schlüssel der vorhandenen
  * Dateien). Wird bei jedem Lesen aus dem Dateisystem bestimmt und nicht in song.json gespeichert, damit es nicht
  * veralten kann.
- *
  * @var array<string, string> Schlüssel in files => Dateiname
  */
 const SONG_FILES = [
@@ -87,9 +81,8 @@ const SONG_FILES = [
 ];
 
 /**
- * Absoluter Pfad zum Ordner eines Lieds (existiert nicht zwingend).
- *
- * @param string $slug Slug des Lieds
+ * Absoluter Pfad zum Ordner eines Songs (existiert nicht zwingend).
+ * @param string $slug Slug des Songs
  * @return string Ordnerpfad ohne "/" am Ende
  */
 function song_dir(string $slug): string
@@ -98,10 +91,9 @@ function song_dir(string $slug): string
 }
 
 /**
- * Absoluter Pfad zum Ordner mit dem hochgeladenen Rohmaterial eines Lieds (data/songs/<slug>/upload, existiert nicht
- * zwingend). Quelle und Beschreibung der Dateien stehen im Feld uploads von song.json (siehe api/lib/uploads.php).
- *
- * @param string $slug Slug des Lieds
+ * Absoluter Pfad zum Ordner mit dem hochgeladenen Rohmaterial eines Songs (data/songs/<slug>/upload, existiert nicht
+ * zwingend). Quelle und Beschreibung der Dateien stehen im Feld uploads von song.json (siehe api/lib/uploadstore.php).
+ * @param string $slug Slug des Songs
  * @return string Ordnerpfad ohne "/" am Ende
  */
 function upload_dir(string $slug): string
@@ -110,9 +102,8 @@ function upload_dir(string $slug): string
 }
 
 /**
- * Liest und dekodiert song.json eines Lieds.
- *
- * @param string $slug Slug des Lieds
+ * Liest und dekodiert song.json eines Songs.
+ * @param string $slug Slug des Songs
  * @return array|null Inhalt von song.json; null, fals Slug ungültig, Ordner/Datei fehlt oder JSON ungültig ist
  */
 function read_song_json(string $slug): ?array
@@ -131,8 +122,7 @@ function read_song_json(string $slug): ?array
 /**
  * Schreibt $song als song.json (überschreibt eine vorhandene Datei vollständig). Die berechneten Felder files und
  * tracks werden nicht gespeichert, die Angaben für das Leadsheet stehen in score.json (write_leadsheet()).
- *
- * @param string $slug Slug des Lieds, der Ordner muss existieren
+ * @param string $slug Slug des Songs, der Ordner muss existieren
  * @param array $song zu speichernde Felder
  * @return void
  */
@@ -148,9 +138,8 @@ function write_song_json(string $slug, array $song): void
 }
 
 /**
- * Pfad der Angaben für das Leadsheet eines Lieds (score.json neben score.atex, Aufbau siehe api/leadsheet.php).
- *
- * @param string $slug Slug des Lieds
+ * Pfad der Angaben für das Leadsheet eines Songs (score.json neben score.atex, Aufbau siehe api/leadsheet.php).
+ * @param string $slug Slug des Songs
  * @return string Pfad der Datei (existiert nicht zwingend)
  */
 function leadsheet_path(string $slug): string
@@ -159,9 +148,8 @@ function leadsheet_path(string $slug): string
 }
 
 /**
- * Angaben für das Leadsheet eines Lieds (score.json).
- *
- * @param string $slug Slug des Lieds
+ * Angaben für das Leadsheet eines Songs (score.json).
+ * @param string $slug Slug des Songs
  * @return array Angaben; leer ohne
  */
 function read_leadsheet(string $slug): array
@@ -172,9 +160,8 @@ function read_leadsheet(string $slug): array
 }
 
 /**
- * Schreibt die Angaben für das Leadsheet eines Lieds (score.json); ohne Angaben fällt die Datei weg.
- *
- * @param string $slug Slug des Lieds, der Ordner muss existieren
+ * Schreibt die Angaben für das Leadsheet eines Songs (score.json); ohne Angaben fällt die Datei weg.
+ * @param string $slug Slug des Songs, der Ordner muss existieren
  * @param array $data Angaben
  * @return void
  * @throws RuntimeException wenn die Datei nicht geschrieben werden kann
@@ -198,9 +185,8 @@ function write_leadsheet(string $slug, array $data): void
 
 /**
  * Alle Unterordner von SONGS_DIR (= alle Slugs), unsortiert.
- *
  * @return string[] Slugs; leer, falls SONGS_DIR noch gar nicht existiert (frische Installation, bevor das erste
- *                  Lied angelegt wurde)
+ *                  Song angelegt wurde)
  */
 function list_song_slugs(): array
 {
@@ -219,8 +205,7 @@ function list_song_slugs(): array
 /**
  * Namen der Spuren aus score.atex, in der Reihenfolge der Partitur (z. B. aus `\track ("Guitar" "Guitar")` der
  * erste Name).
- *
- * @param string $slug Slug des Lieds
+ * @param string $slug Slug des Songs
  * @return string[] Spurnamen; leer, wenn es keine Partitur gibt
  */
 function read_track_names(string $slug): array
@@ -234,9 +219,8 @@ function read_track_names(string $slug): array
 }
 
 /**
- * Ergänzt $song um die berechneten Felder files (welche Dateien im Liedordner vorhanden sind) und tracks.
- *
- * @param string $slug Slug des Lieds
+ * Ergänzt $song um die berechneten Felder files (welche Dateien im Songordner vorhanden sind) und tracks.
+ * @param string $slug Slug des Songs
  * @param array $song Inhalt von song.json
  * @return array $song mit files (Liste der Schlüssel aus SONG_FILES, deren Datei vorhanden ist, z. B.
  *               ["score", "audio", "cover"]), tracks (Spurnamen, siehe read_track_names()) und sources als Objekt
@@ -260,10 +244,9 @@ function with_file_flags(string $slug, array $song): array
 }
 
 /**
- * Liest ein einzelnes Lied inkl. files.
- *
- * @param string $slug Slug des Lieds
- * @return array|null das Lied; null, wenn nicht gefunden
+ * Liest einen einzelnen Song inkl. files.
+ * @param string $slug Slug des Songs
+ * @return array|null der Song; null, wenn nicht gefunden
  */
 function get_song(string $slug): ?array
 {
@@ -272,8 +255,7 @@ function get_song(string $slug): ?array
 }
 
 /**
- * Liest alle Lieder inkl. files.
- *
+ * Liest alle Songs inkl. files.
  * @return array[] alphabetisch nach Titel sortiert (das Frontend sortiert clientseitig ggf. um)
  */
 function list_songs(): array
@@ -291,7 +273,6 @@ function list_songs(): array
 
 /**
  * Vergleichsschlüssel für Interpret + Titel (case-insensitiv, Leerraum am Rand ignoriert).
- *
  * @param string $artist Interpret
  * @param string $title Titel
  * @return string Schlüssel für den Vergleich
@@ -303,11 +284,10 @@ function song_identity(string $artist, string $title): string
 
 /**
  * Prüft, ob es Interpret + Titel schon gibt.
- *
  * @param string $artist Interpret
  * @param string $title Titel
- * @param string|null $excludeSlug schließt das eigene Lied beim Update aus
- * @return bool true, wenn ein anderes Lied mit Interpret + Titel existiert
+ * @param string|null $excludeSlug schließt den eigenen Song beim Update aus
+ * @return bool true, wenn ein anderer Song mit Interpret + Titel existiert
  */
 function song_exists(string $artist, string $title, ?string $excludeSlug = null): bool
 {
@@ -325,8 +305,7 @@ function song_exists(string $artist, string $title, ?string $excludeSlug = null)
 }
 
 /**
- * Prüft die rohen Request-Daten eines Lieds.
- *
+ * Prüft die rohen Request-Daten eines Songs.
  * @param array $data Request-Daten (siehe PUT api/songs.php bzw. meta von api/import.php)
  * @return string[] Fehlermeldungen, leer wenn valide
  */
@@ -379,7 +358,6 @@ function validate_song_input(array $data): array
  * "https://www.youtube.com/watch?v=<ID>" gekürzt (siehe youtube_watch_url()). youtubeSeconds ist die Länge dieses
  * Clips; das Formular ermittelt sie nur, wenn sich die URL ändert, und speichert sie hier, damit YouTube nicht bei
  * jedem Öffnen abgefragt wird. Ohne YouTube-Quelle ist sie null.
- *
  * @param array $data bereits validierte Request-Daten (siehe validate_song_input())
  * @return array title, artist, tags, die Felder aus SONG_INFO_FIELDS, notes, sources, youtubeSeconds
  */
@@ -420,7 +398,6 @@ function normalize_song_fields(array $data): array
 
 /**
  * Bildet den Slug aus Interpret + Titel.
- *
  * @param array $fields normalisierte Felder (siehe normalize_song_fields())
  * @return string Slug, z. B. "cat-stevens-father-and-son"
  * @throws ValidationException wenn sich daraus kein gültiger Ordnername ergibt
@@ -435,10 +412,9 @@ function song_base_slug(array $fields): string
 }
 
 /**
- * Legt ein neues Lied an: validiert, vergibt Slug/created, erstellt den Ordner und schreibt song.json.
- *
+ * Legt einen neuen Song an: validiert, vergibt Slug/created, erstellt den Ordner und schreibt song.json.
  * @param array $data Request-Daten (siehe PUT api/songs.php bzw. meta von api/import.php)
- * @return array das neue Lied inkl. files
+ * @return array der neue Song inkl. files
  * @throws ValidationException|RuntimeException
  */
 function create_song(array $data): array
@@ -476,13 +452,12 @@ function create_song(array $data): array
 }
 
 /**
- * Aktualisiert ein Lied. Ändern sich Interpret oder Titel so, dass der Slug wechselt, wird der
+ * Aktualisiert einen Song. Ändern sich Interpret oder Titel so, dass der Slug wechselt, wird der
  * Ordner umbenannt – bei Fehlschlag bleibt der alte Zustand vollständig erhalten.
  * Ändert sich die YouTube-URL, wird die bisherige audio.mp3 entfernt (siehe delete_audio()).
- *
- * @param string $slug bisheriger Slug des Lieds
+ * @param string $slug bisheriger Slug des Songs
  * @param array $data Request-Daten (siehe PUT api/songs.php)
- * @return array das aktualisierte Lied inkl. files (ggf. mit neuem Slug)
+ * @return array der aktualisierte Song inkl. files (ggf. mit neuem Slug)
  * @throws NotFoundException|ValidationException|ConflictException|RuntimeException
  */
 function update_song(string $slug, array $data): array
@@ -550,8 +525,8 @@ function update_song(string $slug, array $data): array
             unset($song['level']);
         }
     }
-    // Vorgaben je Spur für Anzeigen und Hören (Reiter "Spuren" im Editor): je Spur show und mute, in der Reihenfolge der
-    // Spuren. Fehlt das Feld im Request, bleiben die gespeicherten; eine leere Liste löscht sie.
+    // Vorgaben je Spur für Anzeigen und Hören (Reiter "Spuren" im Editor): je Spur show und mute, in der Reihenfolge
+    // der Spuren. Fehlt das Feld im Request, bleiben die gespeicherten; eine leere Liste löscht sie.
     if (array_key_exists('trackDefaults', $data)) {
         $defaults = array_map(
             fn($t) => ['show' => (bool)($t['show'] ?? true), 'mute' => (bool)($t['mute'] ?? false)],
@@ -563,8 +538,8 @@ function update_song(string $slug, array $data): array
             unset($song['trackDefaults']);
         }
     }
-    // Baustelle: Grund, betroffene Spuren (Namen) und ob die Audiospur dazugehört (nur gespeichert, wenn ja); null löscht
-    // sie, fehlt das Feld, bleibt die gespeicherte.
+    // Baustelle: Grund, betroffene Spuren (Namen) und ob die Audiospur dazugehört (nur gespeichert, wenn ja); null
+    // löscht sie, fehlt das Feld, bleibt die gespeicherte.
     if (array_key_exists('wip', $data)) {
         if (is_array($data['wip'])) {
             $song['wip'] = [
@@ -583,11 +558,10 @@ function update_song(string $slug, array $data): array
 }
 
 /**
- * Entfernt audio.mp3 eines Lieds, z. B. weil ein anderer YouTube-Clip eingetragen wurde. Danach hat das Lied keine
- * Audiospur mehr, und bin/audio.php holt die neue. Ein Backup auf dem Server gibt es nicht: Das YouTube-Original
- * liegt bei bin/audio.php (data/backup/<slug>/youtube-<Video-ID>.<ext>). Ohne audio.mp3 passiert nichts.
- *
- * @param string $slug Slug des Lieds
+ * Entfernt audio.mp3 eines Songs, z. B. weil ein anderer YouTube-Clip eingetragen wurde. Danach hat der Song keine
+ * Audiospur mehr, und bin/fetchaudio.php holt die neue. Ein Backup auf dem Server gibt es nicht: Das YouTube-Original
+ * liegt bei bin/fetchaudio.php (data/backup/<slug>/youtube-<Video-ID>.<ext>). Ohne audio.mp3 passiert nichts.
+ * @param string $slug Slug des Songs
  * @return void
  * @throws RuntimeException wenn die Datei nicht gelöscht werden kann
  */
@@ -601,9 +575,8 @@ function delete_audio(string $slug): void
 
 /**
  * Setzt nur das Änderungsdatum (z. B. nach einem Datei-Upload).
- *
- * @param string $slug Slug des Lieds
- * @return array das aktualisierte Lied inkl. files
+ * @param string $slug Slug des Songs
+ * @return array der aktualisierte Song inkl. files
  * @throws NotFoundException
  */
 function touch_song(string $slug): array
@@ -618,9 +591,8 @@ function touch_song(string $slug): array
 }
 
 /**
- * Entfernt den kompletten Liedordner samt hochgeladenem Rohmaterial (upload/).
- *
- * @param string $slug Slug des Lieds
+ * Entfernt den kompletten Songordner samt hochgeladenem Rohmaterial (upload/).
+ * @param string $slug Slug des Songs
  * @return void
  * @throws NotFoundException|RuntimeException
  */
@@ -636,7 +608,6 @@ function delete_song(string $slug): void
  * Löscht einen Ordner samt Inhalt rekursiv (PHP hat dafür keine eingebaute Funktion).
  * Prüft die Rückgabewerte von unlink()/rmdir() bewusst: Unter Windows kann ein kurzzeitiger Datei-Lock
  * (z. B. Windows Search/Virenscanner) das Löschen verhindern, die API darf dann keinen Erfolg melden.
- *
  * @param string $dir zu löschender Ordner
  * @return void
  * @throws RuntimeException wenn eine Datei oder der Ordner selbst nicht gelöscht werden konnte

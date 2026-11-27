@@ -1,0 +1,744 @@
+/* Grundlagen für alle Seiten: Farben und Variablen, Schrift, Knöpfe, Formulare, Overlay und Dialoge, Menüs, Hinweise. */
+
+/* Farben angelehnt an guitar-pro.com: Blau als Hauptfarbe, Anthrazit für Kopf und Abspielleiste, Orange für Markierungen beim Abspielen. */
+:root {
+    --paper: #f6f7f8;
+    --paper-deep: #e5e5e5;
+    --ink: #272b34;
+    --ink-soft: #5e637a;
+    --rule: #dbdbdb;
+    --accent: #569fff;
+    --accent-dark: #3c82ef;
+    --accent-soft: rgba(86, 159, 255, .14);
+    /* Dunkelblau: Fahnen der Sync-Punkte ohne Tempoangabe (pages/player.js) */
+    --accent-deep: #1d4fa8;
+    --mark: #ff9a52;
+    --mark-soft: rgba(255, 154, 82, .2);
+    --danger: #ff4c4c;
+    --caution: #c98a00;
+    --dark: #272b34;
+    --dark-soft: #363a42;
+    --card: #ffffff;
+    --bar-h: 50px;
+    /* Von JavaScript gesetzt, hier mit Vorgabe: Größe der Noten (pages/player.js) */
+    --scale: 1;
+    /* Von JavaScript gesetzt (pages/editor.js, ui/sheetview.js) bzw. im Stil des Elements, hier mit Vorgabe */
+    --edit-top: 0px;
+    --edit-bottom-h: 0px;
+    --edit-bottom-body-h: 200px;
+    --ls-pt: 10.5;
+    --at-glyph: 34px;
+    --fb-color: var(--accent);
+    --elyrics-h: 50%;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+}
+
+a {
+    color: var(--accent-dark);
+}
+
+[hidden] {
+    display: none !important;
+}
+
+.controls input[type=search], .controls select, .form-field input, .form-field select, .form-field textarea {
+    padding: .6rem .8rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background: var(--card);
+    font-family: inherit;
+    font-size: 1rem;
+    color: var(--ink);
+}
+
+/* Vorhandene Genres im Formular zum An- und Abwählen */
+.genre-picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-top: .45rem;
+}
+
+.tag-pick {
+    font: inherit;
+    font-size: .8rem;
+    padding: .2rem .65rem;
+    border-radius: 999px;
+    cursor: pointer;
+    border: 1px solid var(--rule);
+    background: var(--paper-deep);
+    color: var(--ink-soft);
+}
+
+.tag-pick.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.empty {
+    text-align: center;
+    color: var(--ink-soft);
+    padding: 3rem 1rem;
+    font-style: italic;
+}
+
+/* Buttons */
+.btn {
+    font-family: inherit;
+    font-size: .95rem;
+    padding: .5rem .95rem;
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+    background: var(--card);
+    color: var(--ink);
+    cursor: pointer;
+    min-height: 40px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn:hover {
+    border-color: var(--accent);
+    color: var(--accent-dark);
+}
+
+.btn:disabled {
+    opacity: .6;
+    cursor: default;
+}
+
+.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: var(--accent-dark);
+    border-color: var(--accent-dark);
+    color: #fff;
+}
+
+.btn-danger {
+    color: var(--danger);
+}
+
+.btn-danger:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.btn-sm {
+    min-height: 32px;
+    padding: .25rem .6rem;
+    font-size: .82rem;
+}
+
+.btn-row {
+    display: flex;
+    gap: .6rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+}
+
+.btn-row-end {
+    margin-left: auto;
+}
+
+/* Overlay mit Formular */
+.overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(39, 43, 52, 0.6);
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 3vh 1rem;
+    overflow-y: auto;
+    z-index: 50;
+}
+
+.overlay.open {
+    display: flex;
+}
+
+/* Fläche über allem, solange etwas dauert (showBusy() in ui/overlay.js) */
+.busy {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(39, 43, 52, 0.35);
+    cursor: progress;
+}
+
+.busy-box {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    padding: 1rem 1.4rem;
+    background: var(--card);
+    color: var(--ink);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(39, 43, 52, .25);
+    font-size: 1rem;
+}
+
+.busy-spinner {
+    width: 1.2rem;
+    height: 1.2rem;
+    border: 3px solid var(--rule);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: busy-turn .8s linear infinite;
+}
+
+@keyframes busy-turn {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.dialog {
+    background: var(--card);
+    max-width: 640px;
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--rule);
+    padding: 1.6rem 1.7rem 1.8rem;
+    position: relative;
+}
+
+.dialog h2 {
+    margin: .1rem 0 1rem;
+    font-size: 1.5rem;
+}
+
+.dialog.dialog-small {
+    max-width: 342px;
+}
+
+/* Akkorde, Patterns, Griffbrett (Menü der Übersichtsseite): breiter Dialog mit Werkzeugzeile */
+.dialog.dialog-wide {
+    max-width: 1240px;
+}
+
+.dialog-wide .ov-meta {
+    margin: -.7rem 0 .8rem;
+    font-size: .85rem;
+    color: var(--ink-soft);
+}
+
+.dialog-wide .ov-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    margin-bottom: .6rem;
+}
+
+.dialog-wide .ov-tools {
+    align-items: center;
+}
+
+/* Knöpfe in Dialogen, die keine Aktionsknöpfe unten sind: so hoch wie die Felder (34 px) */
+.btn.btn-34 {
+    height: 34px;
+    min-height: 34px;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.check-field {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: 1rem;
+    cursor: pointer;
+}
+
+.dialog .close {
+    position: absolute;
+    top: .8rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    font-size: 1.6rem;
+    color: var(--ink-soft);
+    cursor: pointer;
+    line-height: 1;
+}
+
+.dialog .close:hover {
+    color: var(--accent-dark);
+}
+
+.form-field {
+    margin-bottom: 1rem;
+}
+
+/* Fokus in der Farbe der App statt des schwarzen Rahmens des Browsers */
+.controls input[type=search]:focus-visible, .controls select:focus-visible, .form-field input:focus-visible,
+.form-field select:focus-visible, .form-field textarea:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.form-field label, .form-field .label {
+    display: block;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--ink-soft);
+    margin-bottom: .3rem;
+}
+
+.form-field input[type=text], .form-field select {
+    width: 100%;
+}
+
+.form-field textarea {
+    width: 100%;
+    resize: vertical;
+    line-height: 1.4;
+}
+
+.form-field.busy {
+    opacity: .6;
+    pointer-events: none;
+}
+
+.form-field input[type=file] {
+    width: 100%;
+    font-family: inherit;
+}
+
+.form-field .field-link {
+    display: inline-block;
+    margin-top: .35rem;
+    font-size: .85rem;
+    color: var(--accent-dark);
+}
+
+/* Während eine Änderung gespeichert wird, ist der Dialog gesperrt. */
+.dialog.busy {
+    opacity: .6;
+    pointer-events: none;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0 .8rem;
+}
+
+.error-box {
+    background: #fbeaea;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    border-radius: 6px;
+    padding: .6rem .8rem;
+    font-size: .85rem;
+    margin-bottom: 1rem;
+}
+
+.tempo-warn {
+    color: #d32f2f;
+    font-weight: 500;
+    margin-left: 8px
+}
+
+.menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + .3rem);
+    min-width: 130px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(39, 43, 52, .16);
+    padding: .3rem 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.menu button {
+    font: inherit;
+    text-align: left;
+    background: none;
+    border: none;
+    padding: .7rem 1rem;
+    cursor: pointer;
+    color: var(--ink);
+    white-space: nowrap;
+}
+
+.menu button:hover {
+    background: var(--paper);
+}
+
+/* Druck: alles auf weißem Grund, ohne Bedienelemente; gedruckt wird nur der Dialog (Akkorde, Patterns, Griffbrett) */
+@media print {
+    body:has(.dialog-wide) > :not(#overlay) {
+        display: none !important;
+    }
+
+    body:has(.dialog-wide) .overlay {
+        position: static;
+        display: block;
+        padding: 0;
+        background: none;
+        overflow: visible;
+    }
+
+    .dialog-wide {
+        max-width: none;
+        border: 0;
+        padding: 0;
+        background: #fff;
+    }
+
+    .dialog-wide .close, .dialog-wide .ov-tools {
+        display: none !important;
+    }
+
+    /* Die Saitenlinien der Picking Patterns sind Hintergründe; ohne diese Angabe druckt der Browser sie nicht. */
+    .pgrid-string td:not(.pgrid-label) {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+        background: linear-gradient(#666, #666) center / 100% 1px no-repeat !important;
+    }
+
+    .pgrid-string span {
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+        background: #fff !important;
+    }
+
+    .pgrid col.pgrid-beat {
+        border-left-color: #999;
+    }
+}
+
+@media (max-width: 520px) {
+    .dialog {
+        padding: 1.3rem 1.1rem 1.5rem;
+    }
+}
+
+/* Bearbeitungsseite (js/editor.js): Werkzeugleiste als dritte Zeile der festen Leiste, links Effekte, rechts
+   Eigenschaften, unten Text/Akkorde/Spuren über der Abspielleiste. --edit-top (Unterkante der Leiste) und
+   --edit-bottom-h (Höhe des unteren Panels) setzt editor.js. */
+@font-face {
+    font-family: 'GbBravura';
+    src: url('../vendor/alphatab/font/Bravura.woff2') format('woff2');
+    font-display: block;
+}
+
+.command-box {
+    display: flex;
+    gap: .4rem;
+    align-items: flex-start;
+}
+
+.command-box code {
+    flex: 1;
+    min-width: 0;
+    padding: .55rem .6rem;
+    background: var(--paper);
+    border-radius: 6px;
+    font-size: .8rem;
+    word-break: break-all;
+}
+
+/* Notenwerte aus Bravura: die Zeichen sitzen auf der Grundlinie und ragen weit nach oben; smufl-c: Zeichen um die
+   Mitte (Vorzeichen, Anschlag, Schlüssel) */
+.smufl {
+    font-family: 'GbBravura', sans-serif;
+    font-size: 19px;
+    line-height: 1;
+    position: relative;
+    top: 5px;
+}
+
+.smufl.smufl-c {
+    top: 0;
+    font-size: 18px;
+    line-height: 0;
+}
+
+/* Plektrum-Zeichen: Das Abwärtszeichen (Dach) ist nur zwei Drittel so hoch wie das Aufwärtszeichen (V). Im Raster der
+   Patterns hängen beide wie in alphaTab oben an einer Linie, auf den Knöpfen stehen sie um die Mitte, etwas größer. */
+.pgrid .smufl-pickdown {
+    top: -.167em;
+}
+
+.form-field .hint.hint-warn {
+    color: var(--danger);
+}
+
+.dialog h3 {
+    margin: .9rem 0 .4rem;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--ink-soft);
+}
+
+kbd {
+    display: inline-block;
+    min-width: 1.4em;
+    padding: .05rem .35rem;
+    font: inherit;
+    font-size: .8rem;
+    text-align: center;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+}
+
+/* Einheitliche Höhe der Eingabefelder und Auswahllisten in allen Dialogen, wie die Knöpfe (.ebtn) und die Panels */
+/* Suche und Filter der Übersichtsseite: so hoch wie die Knöpfe daneben (vor der Dialog-Regel, die sie in Dialogen
+   wieder auf 34 px setzt). */
+/* Einheitliche Höhe von Feldern, Auswahllisten und Knöpfen auf der Übersichtsseite (Dialoge: 40px, siehe .dialog) */
+.controls input[type=search], .controls select, .controls button {
+    height: 43px;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.dialog input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]), .dialog select {
+    height: 34px;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+@page leadsheet {
+    size: A4;
+    margin: 0;
+}
+
+/* Schalter (Checkbox mit role="switch"), z. B. "Baustelle" im Dialog "Spuren" */
+.switch {
+    appearance: none;
+    position: relative;
+    width: 34px;
+    height: 20px;
+    flex: none;
+    border-radius: 10px;
+    cursor: pointer;
+    background: var(--rule);
+    transition: background .15s;
+}
+
+.switch::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--card);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    transition: transform .15s;
+}
+
+.switch:checked {
+    background: var(--accent);
+}
+
+.switch:checked::before {
+    transform: translateX(14px);
+}
+
+.switch:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Patterns als Raster (patternGridHtml() in ui/sheetview.js): Zählzeiten, Betonung, Anschläge bzw. Schritte, Finger */
+.pgrid {
+    border-collapse: collapse;
+    font-size: .8rem;
+    line-height: 1.15;
+}
+
+.pgrid td {
+    min-width: 1.45rem;
+    padding: .05rem .15rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* Akkorde über dem Raster ("Rhythmus ableiten"): ab dem Rasterplatz, ohne die Spalte zu verbreitern. */
+.pgrid-chord td {
+    position: relative;
+    height: 1.25em;
+}
+
+.pgrid-chord span {
+    position: absolute;
+    left: .15rem;
+    bottom: 0;
+    font-weight: 600;
+}
+
+.pgrid col.pgrid-beat {
+    border-left: 1px solid var(--rule);
+}
+
+.pgrid-count td {
+    color: var(--ink-soft);
+    font-size: .72rem;
+    padding-top: .15rem;
+}
+
+.pgrid-strum .pgrid-token td {
+    height: 1.7rem;
+    vertical-align: middle;
+}
+
+.pgrid-accent td {
+    font-weight: 700;
+    color: var(--accent-dark);
+    height: 1rem;
+}
+
+.pgrid .smufl {
+    font-size: 30px;
+    pointer-events: none;
+}
+
+.pgrid-token td {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Picking Patterns wie eine kleine Tab: Saitenlinie durch die Zelle, der Finger darauf */
+.pgrid-pick .pgrid-label {
+    min-width: 0;
+    padding-right: .35rem;
+    text-align: right;
+    color: var(--ink-soft);
+    font-size: .72rem;
+}
+
+.pgrid-string td:not(.pgrid-label) {
+    height: 1.05rem;
+    padding: 0 .15rem;
+    background: linear-gradient(var(--rule), var(--rule)) center / 100% 1px no-repeat;
+}
+
+.pgrid-string span {
+    display: inline-block;
+    min-width: .9rem;
+    padding: 0 .1rem;
+    background: var(--card);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 600;
+    line-height: 1;
+}
+
+/* Raster im Katalog-Formular: Zellen anklickbar (editPattern() in dialogs/leadsheet.js) */
+.pgrid-edit td[data-cell] {
+    cursor: pointer;
+}
+
+.pgrid-edit td[data-cell]:hover {
+    background-color: var(--accent-soft);
+}
+
+.pgrid-edit.pgrid-strum .pgrid-token td {
+    height: 2rem;
+}
+
+.pgrid-x span {
+    font-weight: 400;
+    color: var(--ink-soft);
+}
+
+.pgrid-count td.pgrid-strong {
+    font-weight: 700;
+    color: var(--ink);
+    font-size: .8rem;
+}
+
+.pgrid-preview {
+    min-height: 3.2rem;
+    padding: .3rem .4rem;
+    border: 1px dashed var(--rule);
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+.pgrid-mute {
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+/* Gedämpft (×) oben bündig mit den Plektrumzeichen daneben */
+.pgrid-token .pgrid-mute {
+    position: relative;
+    top: -.35em;
+}
+
+.mark-levels {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: .2rem;
+}
+
+/* Reiter (Dialoge Uploads und Metrum, Griffbrett) */
+.tabs {
+    display: flex;
+    gap: .15rem;
+    margin-top: 1rem;
+    border-bottom: 1px solid var(--rule);
+}
+
+.tabs button {
+    font: inherit;
+    font-size: .9rem;
+    padding: .4rem .8rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    background: none;
+    color: var(--ink-soft);
+    cursor: pointer;
+}
+
+.tabs button[aria-selected="true"] {
+    color: var(--accent-dark);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+}
+
+.struct-actions {
+    display: flex;
+    gap: .6rem;
+    margin-top: 1.3rem;
+}

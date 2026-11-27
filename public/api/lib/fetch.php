@@ -2,29 +2,14 @@
 
 /**
  * User-Agent, den http_get() mitschickt (Browser-ähnlich, da manche Seiten Standard-Agents blocken).
- *
  * @var string
  */
 const HTTP_FETCH_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 /**
- * Lädt $url per GET und gibt den Response-Body zurück. Nutzt die curl-Extension, falls
- * verfügbar (realistischerer Browser-Fingerprint, manche Seiten blocken PHPs file_get_contents()-
- * Stream-Wrapper sonst als Bot), sonst file_get_contents() mit Stream-Context als Fallback
- * (allow_url_fopen ist praktisch überall aktiviert, curl dagegen nicht garantiert vorhanden).
- * Folgt Redirects. $headers sind zusätzliche Request-Header ("Name: Wert"), z. B. ein API-Schlüssel.
- *
- * Bekanntes lokales Problem (dieses XAMPP, nicht der Code hier): Unter Apache (nicht CLI!) schlägt
- * das Laden von php_curl.dll fehl, extension_loaded('curl') liefert dort false, der Fallback auf
- * file_get_contents() greift automatisch. Sichtbar in C:\xampp\php\logs\php_error_log als
- * "PHP Startup: Unable to load dynamic library 'php_curl.dll' (Das angegebene Modul/die angegebene
- * Prozedur wurde nicht gefunden)" – ein DLL-Versionskonflikt einer curl-Abhängigkeit (vermutlich
- * OpenSSL/libssh2) speziell im apache2handler-SAPI dieser XAMPP-Installation. php -m (CLI) zeigt
- * curl fälschlich als geladen an, das täuscht leicht. Auswirkung: file_get_contents() wird von
- * manchen Seiten mit aggressiver Bot-Erkennung blockiert (typisch: HTTP 401/402/403). Auf dem
- * Ziel-Webspace (Linux) ist curl mit hoher Wahrscheinlichkeit intakt; vor dem Verlassen auf den
- * Fallback dort prüfen, z. B. mit einer kurzen Testdatei <?php var_dump(extension_loaded('curl'));.
- *
+ * Lädt $url per GET (folgt Redirects) und gibt den Body zurück. Mit curl, falls vorhanden, sonst file_get_contents():
+ * Manche Seiten blocken file_get_contents() als Bot (HTTP 401–403). Unter dem lokalen XAMPP-Apache fehlt curl oft
+ * (php_error_log: "Unable to load dynamic library 'php_curl.dll'"), obwohl php -m es zeigt.
  * @param string $url Absolute http(s)-URL
  * @param int $timeoutSeconds Timeout für Verbindungsaufbau und Gesamtdauer in Sekunden
  * @param int $maxBytes Maximal gelesene Antwortgröße in Bytes
@@ -46,7 +31,6 @@ function http_get(string $url, int $timeoutSeconds = 10, int $maxBytes = 8 * 102
 
 /**
  * Variante von http_get() auf Basis der curl-Extension.
- *
  * @param string $url Absolute http(s)-URL
  * @param int $timeoutSeconds Timeout in Sekunden
  * @param int $maxBytes Maximal gelesene Antwortgröße in Bytes
@@ -91,7 +75,6 @@ function http_get_curl(string $url, int $timeoutSeconds, int $maxBytes, array $h
 
 /**
  * Variante von http_get() auf Basis von file_get_contents() (Fallback ohne curl-Extension).
- *
  * @param string $url Absolute http(s)-URL
  * @param int $timeoutSeconds Timeout in Sekunden
  * @param int $maxBytes Maximal gelesene Antwortgröße in Bytes

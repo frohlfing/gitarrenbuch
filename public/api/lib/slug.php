@@ -2,7 +2,6 @@
 
 /**
  * Transliteriert Umlaute/Akzente, kleinschreibt und ersetzt alles Nicht-a-z0-9 durch Bindestriche.
- *
  * @param string $title beliebiger Text, z. B. "Cat Stevens Father and Son"
  * @return string Slug, z. B. "cat-stevens-father-and-son" (leer, wenn nichts Verwertbares übrig bleibt)
  */
@@ -20,7 +19,6 @@ function slugify(string $title): string
 
 /**
  * Liefert einen im SONGS_DIR eindeutigen Slug. Hängt bei Kollision -2, -3, ... an.
- *
  * @param string $baseSlug gewünschter Slug
  * @param string|null $excludeSlug wird ignoriert (nötig beim Rename, wenn der alte Ordner noch existiert)
  * @return string freier Slug
@@ -38,7 +36,6 @@ function unique_slug(string $baseSlug, ?string $excludeSlug = null): string
 
 /**
  * Prüft, ob $slug als Ordnername taugt (verhindert Pfad-Tricks wie "../" in Query-Parametern).
- *
  * @param string $slug zu prüfender Slug
  * @return bool true, wenn gültig
  */
